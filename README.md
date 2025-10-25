@@ -46,6 +46,23 @@
 
 ## Complete Feature List
 
+### 🚀 Multi-Project Support
+
+**One Canvas, Multiple Projects**: Manage multiple independent task hierarchies on the same canvas
+
+- **Root Tasks as Projects**: Each root task (task with no parent) is its own project
+- **Independent Working States**: One task can be "working" per project simultaneously
+  - Project A working on Task 1
+  - Project B working on Task 2
+  - Both highlighted and tracked independently
+- **Unified Visual Workspace**: See all projects at once with clear visual separation
+- **Shared Dependencies**: Can create dependencies across projects if needed
+- **Ideal For**:
+  - Personal kanban with multiple projects
+  - Team dashboard showing multiple initiatives
+  - Context switching between parallel work streams
+  - Managing both long-term goals and immediate tasks
+
 ### ✅ Core Task Management
 
 #### Adding Tasks
@@ -55,7 +72,16 @@
 
 #### Editing Tasks
 - **Rename**: Double-click task text to edit inline
-- **Toggle Children Visibility**: Shift+Double-click to hide/show children (quick shortcut)
+  - **Inline Editor**: Full-width input box matches the rectangle exactly
+  - **Text Alignment**: Text starts at left edge (left-aligned) for natural editing
+  - **Text Selection**: Text auto-selected on open for immediate replacement
+  - **Save**: Press Enter or click outside the box to save
+  - **Cancel**: Press Escape to discard changes
+  - **Keyboard Shortcuts**: Built-in support for standard text editing
+- **Hide Node**: Shift+Double-click to hide the node within its parent (quick shortcut)
+  - Only works for child tasks (can't hide root tasks)
+  - Hidden nodes don't render but preserve their state
+  - Click the parent's hidden count badge to reveal hidden children
 - **Delete**: Left-click to select, press Backspace (or Alt+Click)
 
 #### Text Truncation & Expansion
@@ -91,15 +117,42 @@
 - **Smart Sizing**: Node width adjusts dynamically based on displayed text
 - **Smooth Animation**: Width changes animate with 0.2s CSS transitions
 
+#### Multi-Select
+- **Shift+Click to Toggle**: Select/deselect multiple tasks
+  - Click a task to select only that task (clears others)
+  - Shift+Click to add/remove task from selection
+  - Multiple selected tasks highlight in blue
+- **Box Selection (Shift+Drag)**: Click+drag on empty canvas with Shift held
+  - Draws a semi-transparent blue rectangle as you drag
+  - Selects all tasks whose centers fall within the box
+  - Additive: adds to existing selection instead of clearing
+- **Clear Selection**: Press Escape key
+- **Move Multiple**: Drag any selected task to move all selected together
+  - Maintains relative positions between selected tasks
+  - Snap distance: 5px (less = click, more = drag)
+- **Delete Multiple**: Select tasks, press Backspace or use right-click menu
+  - Shows confirmation with count: "Delete 3 tasks?"
+  - Deletes all selected tasks and their descendants
+- **Right-Click Multi-Select Menu**:
+  - Automatic menu showing multi-select aware options
+  - "Mark Done (3)", "Mark Pending (3)", "Hide Child (3)", "Delete (3)" - operates on all selected
+  - Right-clicking on unselected task auto-selects just that task
+  - Right-clicking on selected task operates on entire selection
+
 #### Task Status
 - **Pending** (default): White background, grey border
-- **Working**: Yellow background, orange border (only ONE task can be working)
+- **Working**: Yellow background, orange border
+  - **Multi-Project Support**: One task can be working PER ROOT GRAPH (not globally)
+  - Enables managing multiple independent projects simultaneously
+  - Each root task has its own "currently working" task
+  - Example: Project A's Task 1 working + Project B's Task 2 working simultaneously ✓
 - **Done**: Green background, green border with ✅ emoji
 - **Cycle Status**: Middle-click task → Pending → Working → Done → Pending...
 - **Flow State**: When marking a working task as done, automatically starts working on parent task
   - Maintains momentum - finish subtask, immediately continue on parent goal
   - Only applies if parent exists and isn't already done
   - Shows toast notification: "⬆️ Now working on parent: [Parent Name]"
+  - Works within each root graph (doesn't affect other projects)
 
 #### Status Indicators
 - **✅ Emoji**: Shows on completed tasks
@@ -124,6 +177,9 @@
   - Shows **green line** from source to target matching final arrow
   - Arrow direction: A → B (parent → child)
   - Release over target node to complete reparenting
+  - **Multi-Source Reparenting**: If multiple tasks selected + Ctrl+Drag one of them
+    - All selected tasks become children of the drop target
+    - Example: Select B, C, D → Ctrl+Drag to A → B, C, D all become children of A
 - **Create Child at Position**: Ctrl+Drag parent to empty space
   - Shows **blue line** from source to cursor + preview node
   - Preview node intelligently positioned in drag direction (avoids blocking cursor)
@@ -140,6 +196,9 @@
   - Uses `elementFromPoint` to correctly detect drop target during drag
   - Works correctly even when dragging far from source node
   - Visual: Dashed lines with arrowheads pointing from prerequisite to dependent
+  - **Multi-Target Dependencies**: If dropping on a selected task with others also selected
+    - All selected tasks depend on the source
+    - Example: Alt+Drag A → (select B, C, D) → A must be done before B, C, and D
 - **Delete Dependency**: Click dependency line, press Backspace
 - **Cycle Prevention**: App prevents creating circular dependencies
 
@@ -158,7 +217,8 @@
   - Add Child
   - Mark Done/Pending
   - Start/Stop Working
-  - Show/Hide Children (if task has children)
+  - Show/Hide (if task has a parent - hides the node itself)
+  - Show/Hide Children (if task has children - hides all children)
   - Copy Text (copies task title to clipboard)
   - Delete
 - **Hover Effect**: Nodes get thicker border on hover
@@ -174,6 +234,7 @@
   - Root tasks (no parent) are NEVER auto-hidden, even if completed
   - Only processes the clicked task and its relationships
   - Only applies after marking a task complete/incomplete
+  - **Configurable**: Toggle "Auto-Hide Completed Nodes" in ⚙️ Settings
 - **Manual Toggle**: Click red +N badge to show/hide children
 - **Hidden Badge**: Shows count of hidden children
 - **Smart Logic**:
@@ -615,6 +676,7 @@ The Settings modal provides a user-friendly interface to customize all configura
 - **Font Family**: CSS font stack (default: Fira Code with monospace fallbacks)
 - **Font Weight**: Text weight from Light (300) to Bold (700)
 - **Show Delete Confirmation**: Toggle confirmation dialog when deleting tasks (default: enabled)
+- **Auto-Hide Completed Nodes**: Automatically hide child nodes when they and their parent are marked done (default: enabled)
 
 **Features**:
 - ✨ **Live Preview**: Changes apply immediately when you click "Apply"
@@ -1934,6 +1996,160 @@ Real-time collaborative editing (like Google Docs) requires:
 
 **Line Count**: ~4620 lines total in task-tree.html after animation refactor and fixes
 
+### Session 7: Multi-Select System
+
+**Core Feature**: Shift+Click to select multiple tasks, Shift+Drag to box select
+
+**Implementation Overview**:
+- **State Change**: Replaced `selectedTaskId` (single) with `selectedTaskIds` (Set)
+- **Selection Modes**:
+  - Click: Select single (clears others)
+  - Shift+Click: Toggle in/out of selection
+  - Shift+Drag on empty: Box select (additive)
+  - Escape: Clear all selection
+- **Operations on Multi-Select**:
+  - Drag to move all selected together (maintains relative positions)
+  - Delete multiple with confirmation dialog
+  - Right-click shows multi-select aware menu ("Delete (3)", "Mark Done (3)", etc.)
+- **Relationship Operations**:
+  - Alt+Drag to selected task creates dependencies from source to all selected
+  - Ctrl+Drag multiple selected to parent makes all children of that parent
+  - Reparenting happens when dragging one of the selected nodes
+
+**Technical Implementation**:
+- **Selection State** (lines 1111-1116):
+  - `selectedTaskIds: new Set()` - Multiple IDs instead of single
+  - `lastClickedTaskId` - For future range selection support
+  - `boxSelectStart`, `isBoxSelecting` - For box drag detection
+
+- **Selection Logic** (lines 1223-1241):
+  - Shift+Click toggles in Set: `has()` check, then `add()`/`delete()`
+  - Normal click: `clear()` then `add()` for single selection
+
+- **Box Selection** (lines 2652-2658, 2676-2701, 2945-2966):
+  - MouseDown: If Shift+Click on empty, set `dragMode = 'box-select'`
+  - MouseMove: Draw semi-transparent blue rectangle preview
+  - MouseUp: Find nodes in box bounds, add to selection (additive)
+
+- **Multi-Node Operations**:
+  - Movement (lines 2709-2730): Check if dragged node is selected, move all if yes
+  - Delete (lines 1754-1794): New `deleteMultipleTasks()` function
+  - Right-click menu (lines 3189-3192): Toggle selection, show multi-aware options
+
+- **Relationship Ops**:
+  - Dependencies (lines 2923-2930): Check if target is in selection, create to all
+  - Reparenting (lines 2906-2912): Check if source is selected with multiple, reparent all
+
+**Polish Features**:
+- Escape key to clear selection (lines 1320-1326)
+- Undo snapshot naming: "Moved 3 tasks" instead of single task name
+- Multi-select context menu shows count: "Delete (3 selected)"
+- Maintains selection across operations (don't auto-clear after action)
+
+**Line Count**: ~4720 lines total in task-tree.html after multi-select implementation
+
+### Session 7 Continued: Multi-Project Support & Bug Fixes
+
+**Multi-Project Feature**: One working task per root graph instead of globally
+
+**Implementation**:
+- **New Function** `getRootTask()` (lines 1817-1828):
+  - Traverse up the parent chain to find root task
+  - Returns null if task not found
+  - Used to identify which project a task belongs to
+
+- **Updated toggleWorking()** (lines 1574-1607):
+  - Find root task of current task
+  - Only clear working status for tasks in SAME root graph
+  - Tasks in different projects keep their working state
+  - Each project can have one task actively being worked on
+
+- **Updated render()** (lines 3575-3602):
+  - Find ALL working tasks (not just one)
+  - Build ancestor/children lists for each working task
+  - Apply visual indicators to all working paths simultaneously
+  - Golden path shows all active working contexts
+
+**Benefits**:
+- Multi-project workflows: manage A and B simultaneously
+- Team dashboards: see multiple initiatives at once
+- Better context switching: pause project A, resume project B without losing state
+
+**Bug Fixes**:
+1. **Canvas drag no longer deselects** (lines 2673, 3041-3054):
+   - Track `dragStartOriginal` position
+   - Calculate pan distance in mouseUp
+   - Only clear selection if distance < 5px (actual click)
+   - Pan movements preserve selection ✓
+
+2. **Box selection visual glitch fixed** (line 3027):
+   - Added missing `this.render()` after completing box selection
+   - Nodes now highlight immediately ✓
+
+3. **Reparenting with selected targets** (lines 2915-2928):
+   - Check if TARGET is selected (not just source)
+   - Ctrl+Drag unselected→selected makes all selected children of source ✓
+
+4. **Dependencies with selected sources** (lines 2944-2960):
+   - Check if SOURCE is selected (multi-source mode)
+   - Also check if TARGET is selected (multi-target mode)
+   - Alt+Drag unselected→selected creates arrows from source to all selected ✓
+
+**Line Count**: ~4800 lines total in task-tree.html after multi-project implementation
+
+### Session 7 Final: Working Task Log Optimization
+
+**Problem**: The previous multi-project implementation used `getRootTask()` traversal for every render operation to find which task was working in each project. This was inefficient (O(n) per task in worst case).
+
+**Solution**: Implemented working task log pattern - a simple dictionary maintaining one working task ID per root, enabling O(1) lookup.
+
+**Data Structure**:
+```javascript
+workingTasksByRoot: {
+    [rootTaskId]: workingTaskId,  // e.g., { 1: 5, 3: 7 } = "working on task 5 in project 1, task 7 in project 3"
+    // ...
+}
+```
+
+**Implementation Details**:
+
+1. **New State Variable** (line 1147):
+   - Added `workingTasksByRoot: {}` to app object
+   - Single source of truth for working tasks across all projects
+
+2. **Updated toggleWorking()** (lines 1576-1612):
+   - Get root task ONCE when toggling
+   - Only update the log for that specific root
+   - O(1) performance compared to previous traversal
+
+3. **Added Cleanup Logic**:
+   - **deleteTask()** (lines 1760-1765): Remove entry from log if deleted task was working
+   - **reparentTask()** (lines 3113-3140): When task changes roots, update log entries
+     - Save old root entry for working task
+     - Update new root entry after reparenting
+
+4. **Updated Persistence**:
+   - **saveToStorage()** (lines 4405-4430): Persist `workingTasksByRoot` dictionary
+   - **loadFromStorage()** (lines 4472): Restore `workingTasksByRoot` with empty object default
+
+5. **Optimized render()** (lines 3605-3635):
+   - Changed from: `this.tasks.filter(t => t.currentlyWorking)` (O(n) filter)
+   - Changed to: `Object.values(this.workingTasksByRoot).forEach(...)` (O(# of roots))
+   - Much faster for large task graphs with few projects
+
+**Benefits**:
+- **Performance**: O(1) lookup instead of O(n) traversal
+- **Correctness**: Single source of truth prevents synchronization bugs
+- **Memory**: Minimal overhead - just object with number of roots entries
+- **Clarity**: Explicit data structure makes intent clear
+
+**Testing**:
+- Multiple projects can each have independent working tasks
+- Working states survive page reload (persisted to localStorage)
+- Deleting working task cleans up log entry
+- Reparenting working task updates log correctly
+- No stale log entries after operations
+
 ### Key Learnings & Patterns
 
 **SVG Event Handling**:
@@ -2033,8 +2249,236 @@ After each work session, ask:
 ### Option 3: Git Commit Hook (Future)
 If you add git to this project, create a pre-commit hook that checks if README.md was modified when other files changed.
 
+### Session 8: Bug Fixes and Hide Node Feature
+
+**New Feature: Hide Node Within Parent**
+- **Shift+Double-Click**: Now hides the node itself within its parent (instead of hiding children)
+- Only works for child tasks (root tasks cannot be hidden)
+- Hidden nodes preserve their state and can be revealed by clicking parent's hidden children badge
+- Implementation:
+  - Added `toggleHiddenSelf()` function (line 1739)
+  - Updated both shift+double-click handlers (lines 1174 and 4012)
+  - Still supports hiding children via right-click context menu and hidden badge
+
+**Multi-Project Bug Fixes**:
+1. **Fixed cycleStatus() clearing other projects' working tasks** (lines 1507-1567):
+   - Was calling `this.tasks.forEach(t => t.currentlyWorking = false)` which cleared ALL projects
+   - Now respects per-project boundaries using working log
+   - Only clears working in same root tree
+   - Properly maintains `workingTasksByRoot` log
+
+2. **Fixed toggleDone() clearing other projects' working tasks** (lines 1575-1618):
+   - Added proper root task detection
+   - Updates working log correctly on mark done
+   - Respects per-project boundaries
+
+3. **Fixed Golden Path Visualization for Multi-Project** (lines 3682-3714):
+   - Was only finding ONE working task with `this.tasks.find(t => t.currentlyWorking)`
+   - Now collects paths from ALL working tasks in log
+   - Combines ancestor paths into unified Set
+   - Correctly checks if parent is ANY working task (not just one)
+   - Golden paths now show for all active projects simultaneously
+
+**Testing**:
+- Multiple projects each have independent working states ✓
+- Shift+double-click hides child nodes ✓
+- Other projects unaffected when changing working state ✓
+- Golden paths glow for all working tasks ✓
+- Flow state (auto-parent) works per-project ✓
+
+### Session 8 Continued: Auto-Hide Settings Feature
+
+**New Configurable Feature: Auto-Hide Completed Nodes**
+- **Problem**: Some users may not want automatic hiding of completed nodes - different workflows have different preferences
+- **Solution**: Added toggle setting in ⚙️ Settings to enable/disable auto-hide behavior
+- **Default**: Enabled (maintains current behavior for existing users)
+
+**Implementation**:
+1. **New Configuration Option** (line 1146):
+   - Added `autoHideCompletedNodes: true` to app state
+   - Defaults to true to maintain existing behavior
+
+2. **Updated autoCollapseCompleted()** (lines 1936-1940):
+   - Added early return if `this.autoHideCompletedNodes` is false
+   - Setting respected on every mark-done operation
+   - Doesn't affect manual hiding via right-click menu or shift+double-click
+
+3. **Settings UI Integration** (lines 2288-2293):
+   - Added to configDefs with checkbox type
+   - Label: "Auto-Hide Completed Nodes"
+   - Description: "Automatically hide child nodes when they and their parent are marked done"
+   - Appears in ⚙️ Settings modal alongside other configuration options
+
+4. **Persistence** (lines 4538, 4565, 4618):
+   - Saved to localStorage in both primary and fallback save paths
+   - Loaded with proper default (true) if missing from saved data
+
+5. **Documentation** (README updated):
+   - Updated Visibility Management section to mention setting
+   - Added to Settings UI available options list
+
+**Testing**:
+- Toggle setting ON: Completed nodes auto-hide as before ✓
+- Toggle setting OFF: Completed nodes stay visible when done ✓
+- Setting persists across page reloads ✓
+- Manual hiding still works when setting is OFF ✓
+- Works correctly with multi-project setup ✓
+
+### Session 8 Final: Hide Child Context Menu Options
+
+**New Feature: Hide Child Menu Options**
+- Added "Hide Child" to multi-select context menu (formatted like other batch operations)
+  - Shows count: "Hide Child (3)" when multiple tasks selected
+  - Hides all selected child tasks (toggles visibility of each)
+  - Root tasks are skipped (cannot be hidden - requires parent)
+
+- Added "Show/Hide" to single-select context menu (appears conditionally)
+  - Only shows when task has a parent (is not a root task)
+  - Label toggles: "Hide" when visible, "Show" when hidden
+  - Positioned before "Show/Hide Children" in menu order
+  - Distinguishes from "Show/Hide Children" which affects children, not the node itself
+
+**Implementation** (lines 3441-3464):
+1. Multi-select: Added `Hide Child (${count})` button after Mark Pending (line 3441-3447)
+2. Single-select: Added conditional "Show/Hide" button for non-root tasks (line 3461-3464)
+3. Both use existing `toggleHiddenSelf()` function
+4. Smart button labels based on hidden state
+
+**Menu Structure** (for clarity):
+- **Multi-Select Options**: Mark Done → Mark Pending → Hide Child → Delete
+- **Single-Select Options**: Add Child → Mark Done/Pending → Start/Stop Working → Show/Hide (if parent) → Show/Hide Children (if children) → Copy Text → Delete
+
+**Documentation Updated**:
+- Multi-select menu updated to show all options
+- Single-task context menu section now clarifies two hide options
+- Shows "Show/Hide" for node vs "Show/Hide Children" for children
+
+**Testing**:
+- Multi-select: "Hide Child (3)" hides all 3 selected tasks ✓
+- Single-select: "Hide"/"Show" option only appears for child tasks ✓
+- Root tasks don't show hide option ✓
+- Menu order is consistent and logical ✓
+
+### Session 9: Text Editing Experience Improvements
+
+**Problem**: Inline text editor had two UX issues:
+1. Editing box didn't cover the full width of the rectangle (gaps on sides)
+2. Text displayed starting at end/center instead of beginning (awkward for editing)
+
+**Solution**: Improved the SVG foreignObject and input styling
+
+**Implementation** (lines 3987-3996):
+1. **Expanded foreignObject to full rectangle width**:
+   - Changed x from `-rectWidth / 2 + 5` → `-rectWidth / 2` (remove left inset)
+   - Changed width from `rectWidth - 10` → `rectWidth` (full rectangle width)
+   - ForeignObject now matches rectangle exactly with no gaps
+
+2. **Changed Text Alignment to Left**:
+   - Changed `text-align: center` → `text-align: left`
+   - Text cursor and content now starts at left edge
+   - Matches typical input field behavior
+
+3. **Improved Padding and Box Sizing**:
+   - Changed `padding: 4px` → `padding: 4px 8px` (more breathing room left/right)
+   - Added `box-sizing: border-box` to prevent border from expanding width
+   - Input internal padding now properly respects rectangle boundaries
+
+**Benefits**:
+- ✅ Input box visually fills the entire rectangle
+- ✅ Text starts at left edge, intuitive for editing long titles
+- ✅ More professional appearance
+- ✅ Consistent with standard HTML input behavior
+- ✅ Better spacing with 8px horizontal padding
+
+**Testing**:
+- Double-click to edit: Input covers full rectangle ✓
+- Long text (50+ chars): Displays from left, not center ✓
+- Text selection: Select-all works correctly ✓
+- Save (Enter) and cancel (Escape): Still work as before ✓
+- Click outside to save: Still works ✓
+- Border radius: Properly rounded with new dimensions ✓
+
+### Session 9 Continued: Fix Rectangle Size During Editing
+
+**Problem**: After initial improvements, discovered rectangle wasn't expanding for long text:
+- Small nodes worked fine, but larger nodes had editing area that didn't match rectangle size
+- Issue occurred even with non-truncated text, suggesting a size cap
+
+**Root Cause Analysis**:
+1. **Rectangle sizing bug**: `rectWidth` was calculated from `displayTitle` (potentially truncated), but input received full `task.title`
+   - Truncated: "This is a very long task title that n..." → small rectangle
+   - Input gets: "This is a very long task title that needs editing" → overflows small box
+2. **Potential CSS limitation**: Input elements might have default max-width constraints
+
+**Solution** (lines 3971, 3997):
+1. **Dynamic rectangle sizing for edit mode**:
+   - Changed: `const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2)`
+   - To: `const textForSizing = this.editingTaskId === task.id ? task.title : displayTitle;`
+   - Then: `const rectWidth = Math.max(minWidth, textForSizing.length * charWidth + padding * 2)`
+   - Rectangle now expands to fit **full title** when editing starts
+
+2. **Override CSS width constraints**:
+   - Added `max-width: none` to input CSS
+   - Prevents any default or inherited max-width from limiting input expansion
+   - Ensures input can fill the entire foreignObject width
+
+**How It Works**:
+1. User double-clicks truncated text: "This is a very lon..."
+2. System calculates `textForSizing = task.title` (full text, not truncated)
+3. Rectangle expands to fit full text: `rectWidth` increases
+4. ForeignObject expands to match: `width={rectWidth}`
+5. Input fills foreignObject with `width: 100%; max-width: none`
+6. Result: Editing box perfectly matches the expanded rectangle
+
+**Testing**:
+- Truncated text (80+ chars): Rectangle expands on edit ✓
+- Non-truncated long text: No size cap, full width ✓
+- Very long text (150+ chars): Properly displays and edits ✓
+- Small text: Still works as before ✓
+- Text that fits exactly: No issues ✓
+
+### Session 9 Final: Fix Cursor Positioning During Edit
+
+**Problem**: When in editing mode, clicking inside the input box to reposition the cursor would immediately save/exit edit mode instead of allowing cursor movement.
+
+**Root Cause**: Event bubbling issue
+- Clicks on the input were bubbling up to canvas/SVG mousedown handlers
+- Canvas handlers or blur events were triggering `finishEditing()`
+- User couldn't click inside the input to reposition cursor
+
+**Solution** (lines 3993-3994, 4007-4008):
+1. **Added stopPropagation to foreignObject**:
+   - `foreignObject.onmousedown = (e) => e.stopPropagation();`
+   - `foreignObject.onclick = (e) => e.stopPropagation();`
+   - Prevents clicks on the editing container from reaching canvas handlers
+
+2. **Added stopPropagation to input**:
+   - `input.onmousedown = (e) => e.stopPropagation();`
+   - `input.onclick = (e) => e.stopPropagation();`
+   - Prevents clicks inside the input from reaching canvas handlers
+
+**How It Works Now**:
+- **Click inside input**: Event stops at input level, cursor repositions, editing continues
+- **Click outside input**: Event reaches canvas, blur triggers, editing finishes and saves
+- **Enter key**: Still immediately saves
+- **Escape key**: Still cancels without saving
+
+**Benefits**:
+- ✅ Can click anywhere inside the input box to move cursor
+- ✅ Can select text by clicking and dragging
+- ✅ Can reposition cursor without accidentally exiting edit mode
+- ✅ Still exits edit mode when clicking outside (as expected)
+- ✅ Natural text editing experience
+
+**Testing**:
+- Click inside input to reposition cursor: Works, stays in edit mode ✓
+- Click and drag to select text: Works, stays in edit mode ✓
+- Click at start/middle/end of text: Cursor moves correctly ✓
+- Click outside input box: Exits edit mode and saves ✓
+- Enter/Escape keys: Still work as before ✓
+
 ---
 
-**Last Updated**: 2025-01-25 (Session 6 Continued: Cinematic 3-Phase Animation)
-**Current Line Count**: ~4620 lines in task-tree.html
-**Version**: 1.2.0 (Homes with Cinematic Navigation)
+**Last Updated**: 2025-10-25 (Session 9 Final: Fix Cursor Positioning During Edit)
+**Current Line Count**: ~4875 lines in task-tree.html
+**Version**: 1.4.7 (Fixed Cursor Positioning During Edit)

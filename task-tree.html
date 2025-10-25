@@ -1108,8 +1108,12 @@
             maxZoom: 4,
             zoomSpeed: 0.1,
             selectedNode: null,
-            selectedTaskId: null,  // For UI selection (left-click)
+            selectedTaskIds: new Set(),  // For multi-select (Set of task IDs)
+            lastClickedTaskId: null,     // For Shift+Click range selection
             selectedLine: null,    // For line selection {type: 'parent'|'dependency', taskId, parentId/depId}
+            // Box selection state
+            boxSelectStart: null,  // {x, y} when Shift+Click+Drag starts
+            isBoxSelecting: false,
             dragMode: null,
             dragStart: { x: 0, y: 0 },
             dragOriginalPos: { x: 0, y: 0 },
@@ -1139,6 +1143,9 @@
             lastSnapshotTaskId: null, // For grouping edits to same task
             // User preferences
             showDeleteConfirmation: true,  // Show confirmation dialog when deleting tasks
+            autoHideCompletedNodes: true,  // Auto-hide nodes when task and parent are done
+            // Multi-project working task tracking
+            workingTasksByRoot: {},  // { [rootTaskId]: workingTaskId } - one working task per project/root
 
             init() {
                 this.loadFromStorage();
@@ -1165,8 +1172,8 @@
                             const taskId = parseInt(element.dataset.id);
 
                             if (e.shiftKey) {
-                                // Shift+double click: toggle hide/show children
-                                this.toggleHidden(taskId);
+                                // Shift+double click: hide/show the node itself within its parent
+                                this.toggleHiddenSelf(taskId);
                             } else {
                                 // Normal double click: edit task name
                                 this.startEditing(taskId);
@@ -1216,10 +1223,24 @@
                             return;
                         }
 
-                        // Plain left-click: Select node
+                        // Left-click: Select node (with Shift for multi-select)
                         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-                            this.selectNode(taskId);
-                            // Don't prevent default or stop propagation - let dblclick work
+                            if (e.shiftKey) {
+                                // Shift+Click: Toggle selection (multi-select mode)
+                                if (this.selectedTaskIds.has(taskId)) {
+                                    this.selectedTaskIds.delete(taskId);
+                                } else {
+                                    this.selectedTaskIds.add(taskId);
+                                }
+                                this.lastClickedTaskId = taskId;
+                                // TODO: Support Shift+Click range selection between lastClickedTaskId and current
+                            } else {
+                                // Plain click: Select only this node (clear others)
+                                this.selectedTaskIds.clear();
+                                this.selectedTaskIds.add(taskId);
+                                this.lastClickedTaskId = taskId;
+                            }
+                            requestAnimationFrame(() => this.render());
                             return;
                         }
                     }
@@ -1244,7 +1265,7 @@
                                     to: parseInt(line.dataset.to)
                                 };
                             }
-                            this.selectedTaskId = null; // Clear node selection
+                            this.selectedTaskIds.clear(); // Clear node selection
                             this.render();
                             e.preventDefault();
                             e.stopPropagation();
@@ -1280,15 +1301,30 @@
                     }
                 });
 
-                // Backspace to delete selected node or line
+                // Backspace to delete selected node(s) or line
                 document.addEventListener('keydown', (e) => {
                     if (e.key === 'Backspace' && this.editingTaskId === null) {
-                        if (this.selectedTaskId !== null) {
+                        if (this.selectedTaskIds.size > 0) {
                             e.preventDefault();
-                            this.deleteTask(this.selectedTaskId);
+                            // Delete all selected tasks
+                            const selectedArray = Array.from(this.selectedTaskIds);
+                            if (selectedArray.length === 1) {
+                                this.deleteTask(selectedArray[0]);
+                            } else {
+                                this.deleteMultipleTasks(selectedArray);
+                            }
                         } else if (this.selectedLine) {
                             e.preventDefault();
                             this.deleteLine(this.selectedLine);
+                        }
+                    }
+
+                    // Escape to clear selection
+                    if (e.key === 'Escape' && this.editingTaskId === null) {
+                        if (this.selectedTaskIds.size > 0 || this.selectedLine) {
+                            this.selectedTaskIds.clear();
+                            this.selectedLine = null;
+                            this.render();
                         }
                     }
                 });
@@ -1472,13 +1508,41 @@
                 if (task.status === 'pending' && !task.currentlyWorking) {
                     // Pending → Working
                     this.saveSnapshot(`Started working on '${truncatedTitle}'`);
-                    this.tasks.forEach(t => t.currentlyWorking = false);
+
+                    // Multi-project: Only clear working in SAME root tree
+                    const root = this.getRootTask(taskId);
+                    const rootId = root ? root.id : null;
+
+                    const previousWorkingId = this.workingTasksByRoot[rootId];
+                    if (previousWorkingId) {
+                        const prevTask = this.tasks.find(t => t.id === previousWorkingId);
+                        if (prevTask) {
+                            prevTask.currentlyWorking = false;
+                            if (!prevTask.textLocked) {
+                                prevTask.textExpanded = false;
+                            }
+                        }
+                    }
+
                     task.currentlyWorking = true;
+                    if (rootId) {
+                        this.workingTasksByRoot[rootId] = taskId;
+                    }
                 } else if (task.currentlyWorking) {
                     // Working → Done
                     this.saveSnapshot(`Marked '${truncatedTitle}' as done`);
+
+                    const root = this.getRootTask(taskId);
+                    const rootId = root ? root.id : null;
+
                     task.currentlyWorking = false;
                     task.status = 'done';
+
+                    // Update working log
+                    if (rootId) {
+                        delete this.workingTasksByRoot[rootId];
+                    }
+
                     // Collapse text if unlocked
                     if (!task.textLocked) {
                         task.textExpanded = false;
@@ -1489,6 +1553,10 @@
                         const parent = this.tasks.find(t => t.id === task.mainParent);
                         if (parent && parent.status !== 'done') {
                             parent.currentlyWorking = true;
+                            // Update working log for parent
+                            if (rootId) {
+                                this.workingTasksByRoot[rootId] = parent.id;
+                            }
                             const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
                             this.showToast(`⬆️ Now working on parent: ${parentTitle}`, 'info', 3000);
                         }
@@ -1517,14 +1585,27 @@
                 } else {
                     // Pending/Working → Done
                     this.saveSnapshot(`Marked '${truncatedTitle}' as done`);
+
+                    const root = this.getRootTask(taskId);
+                    const rootId = root ? root.id : null;
+
                     task.currentlyWorking = false;  // Stop working when marking done
                     task.status = 'done';
+
+                    // Update working log
+                    if (rootId && wasWorking) {
+                        delete this.workingTasksByRoot[rootId];
+                    }
 
                     // Flow state: Auto-start working on parent task to maintain momentum
                     if (wasWorking && task.mainParent !== null) {
                         const parent = this.tasks.find(t => t.id === task.mainParent);
                         if (parent && parent.status !== 'done') {
                             parent.currentlyWorking = true;
+                            // Update working log for parent
+                            if (rootId) {
+                                this.workingTasksByRoot[rootId] = parent.id;
+                            }
                             const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
                             this.showToast(`⬆️ Now working on parent: ${parentTitle}`, 'info', 3000);
                         }
@@ -1540,25 +1621,36 @@
 
             toggleWorking(taskId) {
                 const task = this.tasks.find(t => t.id === taskId);
+                const root = this.getRootTask(taskId);
+                const rootId = root ? root.id : null;
+
                 if (task.currentlyWorking) {
                     // Stop working on this task
                     task.currentlyWorking = false;
+                    if (rootId) {
+                        delete this.workingTasksByRoot[rootId];
+                    }
                     // Collapse text if unlocked
                     if (!task.textLocked) {
                         task.textExpanded = false;
                     }
                 } else {
-                    // Only one task can be "working" at a time
-                    this.tasks.forEach(t => {
-                        if (t.currentlyWorking) {
-                            // Collapse previously working task if unlocked
-                            if (!t.textLocked) {
-                                t.textExpanded = false;
+                    // Start working - unwork previous in same root only
+                    const previousWorkingId = this.workingTasksByRoot[rootId];
+                    if (previousWorkingId) {
+                        const prevTask = this.tasks.find(t => t.id === previousWorkingId);
+                        if (prevTask) {
+                            prevTask.currentlyWorking = false;
+                            if (!prevTask.textLocked) {
+                                prevTask.textExpanded = false;
                             }
                         }
-                        t.currentlyWorking = false;
-                    });
+                    }
+
                     task.currentlyWorking = true;
+                    if (rootId) {
+                        this.workingTasksByRoot[rootId] = taskId;
+                    }
                 }
                 this.saveToStorage();
                 this.updateStatusBar();
@@ -1566,7 +1658,10 @@
             },
 
             selectNode(taskId) {
-                this.selectedTaskId = taskId;
+                // Single-node selection (clears others)
+                this.selectedTaskIds.clear();
+                this.selectedTaskIds.add(taskId);
+                this.lastClickedTaskId = taskId;
                 // Defer render to next frame to avoid breaking double-click
                 requestAnimationFrame(() => this.render());
             },
@@ -1642,6 +1737,23 @@
                 }
             },
 
+            toggleHiddenSelf(taskId) {
+                // Hide/show the node itself (not its children)
+                const task = this.tasks.find(t => t.id === taskId);
+                if (!task || task.mainParent === null) {
+                    // Can't hide root tasks - they have no parent
+                    return;
+                }
+
+                const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+                this.saveSnapshot(task.hidden ? `Showed '${truncatedTitle}'` : `Hid '${truncatedTitle}'`);
+
+                task.hidden = !task.hidden;
+
+                this.saveToStorage();
+                this.render();
+            },
+
             toggleHidden(taskId) {
                 // Toggle all descendants (children stay hidden as a group)
                 const descendants = this.getDescendants(taskId);
@@ -1708,6 +1820,13 @@
                     // Remove tasks
                     this.tasks = this.tasks.filter(t => !toDelete.includes(t.id));
 
+                    // Clean up working log if deleted task was working
+                    Object.keys(this.workingTasksByRoot).forEach(rootId => {
+                        if (toDelete.includes(this.workingTasksByRoot[rootId])) {
+                            delete this.workingTasksByRoot[rootId];
+                        }
+                    });
+
                     this.saveToStorage();
                     this.updateStatusBar();
                     this.render();
@@ -1724,16 +1843,71 @@
                 }
             },
 
+            deleteMultipleTasks(taskIds) {
+                // Delete multiple selected tasks with confirmation
+                const performDelete = () => {
+                    this.saveSnapshot(`Deleted ${taskIds.length} tasks`);
+
+                    // Collect all tasks to delete (including descendants of each selected task)
+                    let toDelete = new Set();
+                    taskIds.forEach(taskId => {
+                        toDelete.add(taskId);
+                        this.getDescendants(taskId).forEach(descendantId => {
+                            toDelete.add(descendantId);
+                        });
+                    });
+                    const toDeleteArray = Array.from(toDelete);
+
+                    // Remove from parents' children arrays
+                    this.tasks.forEach(task => {
+                        task.children = task.children.filter(id => !toDeleteArray.includes(id));
+                        task.dependencies = task.dependencies.filter(id => !toDeleteArray.includes(id));
+                        task.otherParents = task.otherParents.filter(id => !toDeleteArray.includes(id));
+                    });
+
+                    // Remove tasks
+                    this.tasks = this.tasks.filter(t => !toDeleteArray.includes(t.id));
+                    this.selectedTaskIds.clear();
+
+                    this.saveToStorage();
+                    this.updateStatusBar();
+                    this.render();
+                };
+
+                if (this.showDeleteConfirmation) {
+                    this.showConfirm(
+                        `Delete ${taskIds.length} Tasks`,
+                        `Delete ${taskIds.length} selected tasks and all their children? This can be undone with Ctrl+Z.`,
+                        performDelete
+                    );
+                } else {
+                    performDelete();
+                }
+            },
+
             getDescendants(taskId) {
                 const task = this.tasks.find(t => t.id === taskId);
                 if (!task) return [];
-                
+
                 let descendants = [];
                 task.children.forEach(childId => {
                     descendants.push(childId);
                     descendants = descendants.concat(this.getDescendants(childId));
                 });
                 return descendants;
+            },
+
+            getRootTask(taskId) {
+                // Find the root task of the tree containing this task
+                let task = this.tasks.find(t => t.id === taskId);
+                if (!task) return null;
+
+                // Traverse up the parent chain to find root
+                while (task.mainParent !== null) {
+                    task = this.tasks.find(t => t.id === task.mainParent);
+                    if (!task) return null;
+                }
+                return task;
             },
 
             getAncestors(taskId) {
@@ -1760,6 +1934,11 @@
             },
 
             autoCollapseCompleted(clickedTaskId) {
+                // Skip if auto-hide is disabled
+                if (!this.autoHideCompletedNodes) {
+                    return;
+                }
+
                 // Only process the clicked task and its affected relatives, not all tasks
                 const task = clickedTaskId ? this.tasks.find(t => t.id === clickedTaskId) : null;
                 if (!task) return;
@@ -2105,6 +2284,12 @@
                         type: 'checkbox',
                         default: true,
                         description: 'Show confirmation dialog when deleting tasks (can still undo with Ctrl+Z)'
+                    },
+                    autoHideCompletedNodes: {
+                        label: 'Auto-Hide Completed Nodes',
+                        type: 'checkbox',
+                        default: true,
+                        description: 'Automatically hide child nodes when they and their parent are marked done'
                     }
                 };
 
@@ -2580,11 +2765,19 @@
                         this.saveToStorage();
                         this.render();
                         e.preventDefault();
+                    } else if (e.button === 0 && e.shiftKey) {
+                        // Shift+Drag on empty space: prepare for box selection
+                        const pt = this.getSVGPoint(e);
+                        this.dragMode = 'box-select';
+                        this.boxSelectStart = { x: pt.x, y: pt.y };
+                        this.isBoxSelecting = true;
+                        e.preventDefault();
                     } else {
                         // Pan canvas
                         this.dragMode = 'canvas';
                         const pt = this.getSVGPoint(e);
                         this.dragStart = { x: pt.x, y: pt.y };
+                        this.dragStartOriginal = { x: pt.x, y: pt.y }; // Track original for click detection
                         document.getElementById('canvas-container').classList.add('dragging');
                         e.preventDefault();
                     }
@@ -2597,13 +2790,60 @@
                 e.preventDefault();
                 const pt = this.getSVGPoint(e);
 
-                if (this.dragMode === 'node' && this.selectedNode !== null) {
+                if (this.dragMode === 'box-select' && this.boxSelectStart) {
+                    // Draw visual feedback for box selection
+                    const minX = Math.min(this.boxSelectStart.x, pt.x);
+                    const minY = Math.min(this.boxSelectStart.y, pt.y);
+                    const maxX = Math.max(this.boxSelectStart.x, pt.x);
+                    const maxY = Math.max(this.boxSelectStart.y, pt.y);
+
+                    // Remove existing selection box
+                    const existingBox = document.querySelector('#box-selection-rect');
+                    if (existingBox) existingBox.remove();
+
+                    // Create new selection box
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.id = 'box-selection-rect';
+                    rect.setAttribute('x', minX);
+                    rect.setAttribute('y', minY);
+                    rect.setAttribute('width', maxX - minX);
+                    rect.setAttribute('height', maxY - minY);
+                    rect.setAttribute('fill', 'rgba(33, 150, 243, 0.1)');
+                    rect.setAttribute('stroke', '#2196f3');
+                    rect.setAttribute('stroke-width', '2');
+                    rect.setAttribute('stroke-dasharray', '5,5');
+                    rect.setAttribute('pointer-events', 'none');
+                    document.getElementById('canvas').appendChild(rect);
+
+                    return;
+                } else if (this.dragMode === 'node' && this.selectedNode !== null) {
                     const task = this.tasks.find(t => t.id === this.selectedNode);
                     if (task) {
-                        task.x = pt.x - this.dragStart.x;
-                        task.y = pt.y - this.dragStart.y;
-                        task.vx = 0;
-                        task.vy = 0;
+                        const newX = pt.x - this.dragStart.x;
+                        const newY = pt.y - this.dragStart.y;
+
+                        // Check if we're dragging a selected node
+                        if (this.selectedTaskIds.has(this.selectedNode)) {
+                            // Move all selected nodes together, maintaining relative positions
+                            const dx = newX - task.x;
+                            const dy = newY - task.y;
+
+                            this.selectedTaskIds.forEach(selectedId => {
+                                const selectedTask = this.tasks.find(t => t.id === selectedId);
+                                if (selectedTask) {
+                                    selectedTask.x += dx;
+                                    selectedTask.y += dy;
+                                    selectedTask.vx = 0;
+                                    selectedTask.vy = 0;
+                                }
+                            });
+                        } else {
+                            // Dragging an unselected node - move just this one
+                            task.x = newX;
+                            task.y = newY;
+                            task.vx = 0;
+                            task.vy = 0;
+                        }
                         this.render();
                     }
                 } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
@@ -2778,8 +3018,20 @@
                     if (targetNode) {
                         // Dropped on a node - make target a child of source (drag direction = arrow direction)
                         const targetId = parseInt(targetNode.dataset.id);
-                        if (targetId !== this.selectedNode) {
-                            this.reparentTask({ taskId: targetId, newParentId: this.selectedNode });
+
+                        // Check if dropping ON a selected node (multi-target reparenting)
+                        if (this.selectedTaskIds.has(targetId)) {
+                            // Dropping ON a selected node: make source the parent of ALL selected
+                            this.selectedTaskIds.forEach(taskId => {
+                                if (taskId !== this.selectedNode) {
+                                    this.reparentTask({ taskId: taskId, newParentId: this.selectedNode });
+                                }
+                            });
+                        } else {
+                            // Normal case: make target a child of source
+                            if (targetId !== this.selectedNode) {
+                                this.reparentTask({ taskId: targetId, newParentId: this.selectedNode });
+                            }
                         }
                     } else {
                         // Dropped on empty space - create new child at that position
@@ -2795,9 +3047,29 @@
                     const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
                     if (targetNode && this.tempLine) {
                         const targetId = parseInt(targetNode.dataset.id);
-                        if (targetId !== this.selectedNode) {
-                            // targetId depends on selectedNode (arrow shows selectedNode → targetId)
-                            this.addDependency({ dependentId: targetId, prerequisiteId: this.selectedNode });
+
+                        // Check if dragging FROM a selected node (multi-source mode)
+                        if (this.selectedTaskIds.has(this.selectedNode)) {
+                            // Source is selected (with others): all selected → target
+                            // target depends on each selected node
+                            this.selectedTaskIds.forEach(sourceId => {
+                                if (sourceId !== targetId) {
+                                    this.addDependency({ dependentId: targetId, prerequisiteId: sourceId });
+                                }
+                            });
+                        } else if (this.selectedTaskIds.has(targetId)) {
+                            // Target is selected (with others): source → all selected
+                            // each selected depends on source
+                            this.selectedTaskIds.forEach(depId => {
+                                if (depId !== this.selectedNode) {
+                                    this.addDependency({ dependentId: depId, prerequisiteId: this.selectedNode });
+                                }
+                            });
+                        } else {
+                            // Single source/target mode: source → target
+                            if (targetId !== this.selectedNode) {
+                                this.addDependency({ dependentId: targetId, prerequisiteId: this.selectedNode });
+                            }
                         }
                     }
                     this.removeTempLine();
@@ -2830,8 +3102,12 @@
 
                         // Save if we actually moved
                         if (movedDistance >= 5) {
-                            const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
-                            this.saveSnapshot(`Moved task '${truncatedTitle}'`);
+                            if (this.selectedTaskIds.size > 1) {
+                                this.saveSnapshot(`Moved ${this.selectedTaskIds.size} tasks`);
+                            } else {
+                                const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+                                this.saveSnapshot(`Moved task '${truncatedTitle}'`);
+                            }
                             this.saveToStorage();
                         }
                     }
@@ -2840,9 +3116,33 @@
                     // action, not a content modification. Creating a snapshot would clear the
                     // redo stack, preventing users from redoing after panning to look around.
                     this.saveToStorage();
+                } else if (this.dragMode === 'box-select' && this.boxSelectStart) {
+                    // Complete box selection
+                    const pt = this.getSVGPoint(e);
+                    const minX = Math.min(this.boxSelectStart.x, pt.x);
+                    const minY = Math.min(this.boxSelectStart.y, pt.y);
+                    const maxX = Math.max(this.boxSelectStart.x, pt.x);
+                    const maxY = Math.max(this.boxSelectStart.y, pt.y);
+
+                    // Find all nodes whose centers fall within the box
+                    const selectedInBox = this.tasks.filter(task => {
+                        return !task.hidden && task.x >= minX && task.x <= maxX && task.y >= minY && task.y <= maxY;
+                    });
+
+                    // Add to selection (additive - Shift+drag means add to existing selection)
+                    selectedInBox.forEach(task => {
+                        this.selectedTaskIds.add(task.id);
+                    });
+
+                    // Remove the selection box visual
+                    const boxElement = document.querySelector('#box-selection-rect');
+                    if (boxElement) boxElement.remove();
+
+                    // Render to show highlights on selected nodes
+                    this.render();
                 }
 
-                // Clear selection when dragging canvas (click elsewhere)
+                // Clear selection when clicking canvas (not when panning)
                 const wasCanvasDrag = this.dragMode === 'canvas';
 
                 // Remove custom cursor arrow if it exists
@@ -2850,11 +3150,23 @@
 
                 this.dragMode = null;
                 this.selectedNode = null;
+                this.isBoxSelecting = false;
+                this.boxSelectStart = null;
 
                 if (wasCanvasDrag) {
-                    this.selectedTaskId = null;
-                    this.selectedLine = null;
-                    this.render();
+                    // Only clear selection if we didn't actually pan (click without movement)
+                    const pt = this.getSVGPoint(e);
+                    const panDistance = Math.sqrt(
+                        Math.pow(pt.x - this.dragStartOriginal.x, 2) +
+                        Math.pow(pt.y - this.dragStartOriginal.y, 2)
+                    );
+
+                    // If pan distance < 5px, treat as a click on canvas and clear selection
+                    if (panDistance < 5) {
+                        this.selectedTaskIds.clear();
+                        this.selectedLine = null;
+                        this.render();
+                    }
                 }
                 document.getElementById('canvas-container').classList.remove('dragging');
             },
@@ -2871,6 +3183,16 @@
                     return;
                 }
 
+                // Handle working task log if task is currently working
+                if (task.currentlyWorking) {
+                    const oldRoot = this.getRootTask(taskId);
+
+                    // Will get new root after reparenting below, so we just remove from old root now
+                    if (oldRoot) {
+                        delete this.workingTasksByRoot[oldRoot.id];
+                    }
+                }
+
                 // Remove from old parent's children
                 if (task.mainParent !== null) {
                     const oldParent = this.tasks.find(t => t.id === task.mainParent);
@@ -2882,6 +3204,14 @@
                 // Set new parent
                 task.mainParent = newParentId;
                 newParent.children.push(taskId);
+
+                // Update working log if task is still working (after reparenting)
+                if (task.currentlyWorking) {
+                    const newRoot = this.getRootTask(taskId);
+                    if (newRoot) {
+                        this.workingTasksByRoot[newRoot.id] = taskId;
+                    }
+                }
 
                 // Clean up redundant dependencies
                 // Remove newParent from task's dependencies (task depending on its parent is redundant)
@@ -3024,13 +3354,23 @@
 
             showNodeMenu(e, taskId) {
                 this.closeMenu();
-                
+
                 const task = this.tasks.find(t => t.id === taskId);
                 if (!task) {
                     console.error('Task not found:', taskId);
                     return;
                 }
-                
+
+                // If right-clicking on a task that's not in selection, select just it
+                // If it's in the selection, operate on the entire selection
+                const isInSelection = this.selectedTaskIds.has(taskId);
+                const isMultiSelect = this.selectedTaskIds.size > 1;
+
+                if (!isInSelection) {
+                    this.selectedTaskIds.clear();
+                    this.selectedTaskIds.add(taskId);
+                }
+
                 const menu = document.createElement('div');
                 menu.className = 'node-menu';
                 menu.style.left = e.pageX + 'px';
@@ -3077,19 +3417,60 @@
                     ? (hasHiddenChildren ? 'Show Children' : 'Hide Children')
                     : null;
 
-                const buttons = [
-                    { label: 'Add Child', action: () => this.addChildTask(taskId) },
-                    { label: task.status === 'done' ? 'Mark Pending' : 'Mark Done', action: () => this.toggleDone(taskId) },
-                    { label: task.currentlyWorking ? 'Stop Working' : 'Start Working', action: () => this.toggleWorking(taskId) }
-                ];
+                const buttons = [];
 
-                // Only add hide/show button if task has children
-                if (hideButtonLabel) {
-                    buttons.push({ label: hideButtonLabel, action: () => this.toggleHidden(taskId) });
+                // Multi-select specific options
+                if (isMultiSelect) {
+                    buttons.push({
+                        label: `Mark Done (${this.selectedTaskIds.size})`,
+                        action: () => {
+                            const selectedArray = Array.from(this.selectedTaskIds);
+                            selectedArray.forEach(id => this.toggleDone(id));
+                        }
+                    });
+                    buttons.push({
+                        label: `Mark Pending (${this.selectedTaskIds.size})`,
+                        action: () => {
+                            const selectedArray = Array.from(this.selectedTaskIds);
+                            selectedArray.forEach(id => {
+                                const t = this.tasks.find(t => t.id === id);
+                                if (t && t.status !== 'pending') this.toggleDone(id);
+                            });
+                        }
+                    });
+                    buttons.push({
+                        label: `Hide Child (${this.selectedTaskIds.size})`,
+                        action: () => {
+                            const selectedArray = Array.from(this.selectedTaskIds);
+                            selectedArray.forEach(id => this.toggleHiddenSelf(id));
+                        }
+                    });
+                    buttons.push({
+                        label: `Delete (${this.selectedTaskIds.size})`,
+                        action: () => {
+                            const selectedArray = Array.from(this.selectedTaskIds);
+                            this.deleteMultipleTasks(selectedArray);
+                        }
+                    });
+                } else {
+                    // Single select options
+                    buttons.push({ label: 'Add Child', action: () => this.addChildTask(taskId) });
+                    buttons.push({ label: task.status === 'done' ? 'Mark Pending' : 'Mark Done', action: () => this.toggleDone(taskId) });
+                    buttons.push({ label: task.currentlyWorking ? 'Stop Working' : 'Start Working', action: () => this.toggleWorking(taskId) });
+
+                    // Add hide option if task has a parent (not a root task)
+                    if (task.mainParent !== null) {
+                        buttons.push({ label: task.hidden ? 'Show' : 'Hide', action: () => this.toggleHiddenSelf(taskId) });
+                    }
+
+                    // Only add hide/show children button if task has children
+                    if (hideButtonLabel) {
+                        buttons.push({ label: hideButtonLabel, action: () => this.toggleHidden(taskId) });
+                    }
+
+                    buttons.push({ label: 'Copy Text', action: () => this.copyTaskText(task.title) });
+                    buttons.push({ label: 'Delete', action: () => this.deleteTask(taskId) });
                 }
-
-                buttons.push({ label: 'Copy Text', action: () => this.copyTaskText(task.title) });
-                buttons.push({ label: 'Delete', action: () => this.deleteTask(taskId) });
 
                 buttons.forEach(({ label, action }) => {
                     const btn = document.createElement('button');
@@ -3307,18 +3688,71 @@
                     `${viewBoxWidth} ${viewBoxHeight}`
                 );
 
-                // Find working task and its ancestors for highlighting
-                const workingTask = this.tasks.find(t => t.currentlyWorking);
-                const workingAncestors = workingTask ? this.getAncestors(workingTask.id) : [];
+                // Find ALL working tasks (one per root graph) using the log for O(1) lookup
+                const workingTasks = [];
+                Object.values(this.workingTasksByRoot).forEach(taskId => {
+                    const task = this.tasks.find(t => t.id === taskId);
+                    if (task) {
+                        workingTasks.push(task);
+                    }
+                });
+                const workingTask = workingTasks[0]; // For status bar display, use first working task
 
-                // Find incomplete children of working task
-                const incompleteChildren = workingTask ? workingTask.children.filter(childId => {
-                    const child = this.tasks.find(t => t.id === childId);
-                    return child && child.status !== 'done';
-                }) : [];
+                // Build combined lists for all working tasks
+                const workingAncestors = [];
+                const incompleteChildren = [];
 
-                // Get golden path for working task visualization
-                const goldenPath = this.getWorkingTaskPath();
+                workingTasks.forEach(wt => {
+                    // Add ancestors of this working task
+                    const ancestors = this.getAncestors(wt.id);
+                    ancestors.forEach(id => {
+                        if (!workingAncestors.includes(id)) {
+                            workingAncestors.push(id);
+                        }
+                    });
+
+                    // Add incomplete children of this working task
+                    wt.children.forEach(childId => {
+                        const child = this.tasks.find(t => t.id === childId);
+                        if (child && child.status !== 'done' && !incompleteChildren.includes(childId)) {
+                            incompleteChildren.push(childId);
+                        }
+                    });
+                });
+
+                // Get golden paths for ALL working tasks (multi-project support)
+                const allAncestorPaths = new Set();
+                const allDirectChildren = [];
+                const workingTaskIds = new Set();
+
+                workingTasks.forEach(wt => {
+                    workingTaskIds.add(wt.id);
+
+                    // Build ancestor path for this working task
+                    allAncestorPaths.add(wt.id);  // Include working task itself
+                    let current = wt.mainParent;
+                    while (current !== null) {
+                        allAncestorPaths.add(current);
+                        const parent = this.tasks.find(t => t.id === current);
+                        current = parent ? parent.mainParent : null;
+                    }
+
+                    // Collect direct children with completion status
+                    wt.children.forEach(childId => {
+                        const child = this.tasks.find(t => t.id === childId);
+                        allDirectChildren.push({
+                            id: childId,
+                            isDone: child ? child.status === 'done' : false,
+                            parentWorkingId: wt.id
+                        });
+                    });
+                });
+
+                const goldenPath = {
+                    workingTaskIds,
+                    ancestorPath: allAncestorPaths,
+                    directChildren: allDirectChildren
+                };
 
                 // Render links
                 this.tasks.forEach(task => {
@@ -3349,7 +3783,7 @@
                             // Calculate display title (same logic as in node rendering)
                             const charsOverLimit = task.title.length - this.textLengthThreshold;
                             const shouldTruncate = charsOverLimit > 5;
-                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && task.id === this.selectedTaskId);
+                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
                             const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
                             const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
                             const rectHeight = 40;
@@ -3368,9 +3802,9 @@
                                 goldenPath.ancestorPath.has(task.id) &&
                                 goldenPath.ancestorPath.has(task.mainParent);
 
-                            // Check if this is a link to a direct child of working task
+                            // Check if this is a link to a direct child of ANY working task
                             const childInfo = goldenPath.directChildren.find(c => c.id === task.id);
-                            const isDirectChild = childInfo && task.mainParent === goldenPath.workingTaskId;
+                            const isDirectChild = childInfo && goldenPath.workingTaskIds.has(task.mainParent);
 
                             // Apply path styling
                             if (isAncestorPath) {
@@ -3429,7 +3863,7 @@
                             // Calculate display title (same logic as in node rendering)
                             const charsOverLimit = task.title.length - this.textLengthThreshold;
                             const shouldTruncate = charsOverLimit > 5;
-                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && task.id === this.selectedTaskId);
+                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
                             const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
                             const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
                             const rectHeight = 40;
@@ -3475,7 +3909,7 @@
                             // Calculate display title (same logic as in node rendering)
                             const charsOverLimit = task.title.length - this.textLengthThreshold;
                             const shouldTruncate = charsOverLimit > 5;
-                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && task.id === this.selectedTaskId);
+                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
                             const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
                             const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
                             const rectHeight = 40;
@@ -3513,14 +3947,14 @@
                     if (workingAncestors.includes(task.id)) g.classList.add('parent-of-working');
                     if (incompleteChildren.includes(task.id)) g.classList.add('incomplete-child-of-working');
                     if (task.hidden) g.classList.add('hidden');
-                    if (task.id === this.selectedTaskId) g.classList.add('selected');
+                    if (this.selectedTaskIds.has(task.id)) g.classList.add('selected');
 
                     // Determine display text (truncated or full)
                     const isLongText = task.title.length > this.textLengthThreshold;
                     const charsOverLimit = task.title.length - this.textLengthThreshold;
                     // Only truncate if significantly over limit (5+ chars) and not expanded
                     const shouldTruncate = charsOverLimit > 5;
-                    const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && task.id === this.selectedTaskId);
+                    const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
                     let displayTitle = task.title;
                     let isTruncated = false;
 
@@ -3530,11 +3964,12 @@
                         isTruncated = true;
                     }
 
-                    // Calculate rect width based on display text length (not original title)
+                    // Calculate rect width - use full title when editing, otherwise use display text
                     const padding = this.nodePadding;
                     const charWidth = this.charWidth;
                     const minWidth = this.minNodeWidth;
-                    const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
+                    const textForSizing = this.editingTaskId === task.id ? task.title : displayTitle;
+                    const rectWidth = Math.max(minWidth, textForSizing.length * charWidth + padding * 2);
                     const rectHeight = 40;
 
                     // ⭐ NEW: Rect positioned RELATIVE to group (centered at 0,0)
@@ -3549,17 +3984,20 @@
                     // Show input if editing, otherwise show text
                     if (this.editingTaskId === task.id) {
                         const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-                        // ⭐ NEW: Relative to group center
-                        foreignObject.setAttribute('x', -rectWidth / 2 + 5);
+                        // Cover full rectangle width for better editing experience
+                        foreignObject.setAttribute('x', -rectWidth / 2);
                         foreignObject.setAttribute('y', -rectHeight / 2 + 5);
-                        foreignObject.setAttribute('width', rectWidth - 10);
+                        foreignObject.setAttribute('width', rectWidth);
                         foreignObject.setAttribute('height', rectHeight - 10);
+                        // Prevent clicks on editing container from bubbling
+                        foreignObject.onmousedown = (e) => e.stopPropagation();
+                        foreignObject.onclick = (e) => e.stopPropagation();
 
                         const input = document.createElement('input');
                         input.id = 'edit-input';
                         input.type = 'text';
                         input.value = task.title;
-                        input.style.cssText = `width: 100%; height: 100%; border: 2px solid #007bff; border-radius: 4px; padding: 4px; font-size: 14px; font-family: ${this.fontFamily}; text-align: center;`;
+                        input.style.cssText = `width: 100%; max-width: none; height: 100%; border: 2px solid #007bff; border-radius: 4px; padding: 4px 8px; font-size: 14px; font-family: ${this.fontFamily}; text-align: left; box-sizing: border-box;`;
                         input.onkeydown = (e) => {
                             if (e.key === 'Enter') {
                                 this.finishEditing(true);
@@ -3568,6 +4006,9 @@
                             }
                             e.stopPropagation();
                         };
+                        // Prevent clicks on input from bubbling to canvas handlers
+                        input.onmousedown = (e) => e.stopPropagation();
+                        input.onclick = (e) => e.stopPropagation();
                         input.onblur = () => this.finishEditing(true);
 
                         foreignObject.appendChild(input);
@@ -3598,8 +4039,8 @@
                         text.addEventListener('dblclick', (e) => {
                             if (this.editingTaskId === null) {
                                 if (e.shiftKey) {
-                                    // Shift+double click: toggle hide/show children
-                                    this.toggleHidden(task.id);
+                                    // Shift+double click: hide/show the node itself within its parent
+                                    this.toggleHiddenSelf(task.id);
                                 } else {
                                     // Normal double click: edit task name
                                     this.startEditing(task.id);
@@ -4097,6 +4538,8 @@
                         // Task data
                         tasks: this.tasks,
                         taskIdCounter: this.taskIdCounter,
+                        // Multi-project working state
+                        workingTasksByRoot: this.workingTasksByRoot,
                         // View state
                         darkMode: this.darkMode,
                         zoomLevel: this.zoomLevel,
@@ -4111,6 +4554,7 @@
                         fontFamily: this.fontFamily,
                         fontWeight: this.fontWeight,
                         showDeleteConfirmation: this.showDeleteConfirmation,
+                        autoHideCompletedNodes: this.autoHideCompletedNodes,
                         // Undo/redo history
                         undoStack: this.undoStack,
                         redoStack: this.redoStack
@@ -4125,6 +4569,7 @@
                             localStorage.setItem('taskTree', JSON.stringify({
                                 tasks: this.tasks,
                                 taskIdCounter: this.taskIdCounter,
+                                workingTasksByRoot: this.workingTasksByRoot,
                                 darkMode: this.darkMode,
                                 zoomLevel: this.zoomLevel,
                                 homes: this.homes,
@@ -4136,6 +4581,7 @@
                                 fontFamily: this.fontFamily,
                                 fontWeight: this.fontWeight,
                                 showDeleteConfirmation: this.showDeleteConfirmation,
+                                autoHideCompletedNodes: this.autoHideCompletedNodes,
                                 undoStack: this.undoStack,
                                 redoStack: this.redoStack
                             }));
@@ -4154,6 +4600,8 @@
                     // Task data
                     this.tasks = parsed.tasks || [];
                     this.taskIdCounter = parsed.taskIdCounter || 0;
+                    // Multi-project working state
+                    this.workingTasksByRoot = parsed.workingTasksByRoot || {};
                     // View state
                     this.darkMode = parsed.darkMode || false;
                     this.zoomLevel = parsed.zoomLevel || 1;
@@ -4186,6 +4634,7 @@
                     this.fontFamily = parsed.fontFamily ?? "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace";
                     this.fontWeight = parsed.fontWeight ?? 700;
                     this.showDeleteConfirmation = parsed.showDeleteConfirmation ?? true;
+                    this.autoHideCompletedNodes = parsed.autoHideCompletedNodes ?? true;
                     // Undo/redo history
                     this.undoStack = parsed.undoStack || [];
                     this.redoStack = parsed.redoStack || [];
@@ -4718,7 +5167,7 @@
                     task.textLocked = !task.textLocked;
 
                     // If unlocking and node is NOT selected, collapse immediately
-                    if (!task.textLocked && this.selectedTaskId !== taskId && !task.currentlyWorking) {
+                    if (!task.textLocked && !this.selectedTaskIds.has(taskId) && !task.currentlyWorking) {
                         task.textExpanded = false;
                     }
 
