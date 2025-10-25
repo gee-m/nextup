@@ -695,15 +695,17 @@ const charWidth = this.charWidth;
 The Settings modal provides a user-friendly interface to customize all configuration parameters without editing code:
 
 **Available Settings**:
-- **Text Truncation Length** (20-200): Characters before text is truncated with "..."
-- **Character Width** (4-15px): Pixels per character for node width calculation
-- **Node Padding** (0-20px): Left/right padding inside task rectangles
-- **Minimum Node Width** (40-200px): Minimum rectangle width regardless of text length
+- **Text Truncation Length** (20-200): Characters before text is truncated with "..." (default: 80)
+- **Character Width** (4-15px): Pixels per character for node width calculation (default: 8.5)
+- **Node Padding** (0-50px): Left/right padding inside task rectangles (default: 30)
+- **Minimum Node Width** (40-200px): Minimum rectangle width regardless of text length (default: 100)
 - **Enable Multiline Text**: Toggle multiline text support (default: enabled)
 - **Max Node Width** (100-2000px): Maximum node width before text wraps to next line (default: 600)
 - **Max Node Height** (0-1000px): Maximum node height in pixels, 0 = unlimited (default: 0)
 - **Line Height** (12-40px): Vertical spacing between lines in pixels (default: 20)
 - **Word Wrap Mode**: Wrap on word boundaries (enabled) vs character boundaries (disabled) (default: enabled)
+- **Arrow Style**: Choose between Straight (default) or Curved arrow paths
+- **Arrow Curvature** (0.05-0.5): Intensity of curve for curved arrows - 0.05 = subtle, 0.5 = dramatic (default: 0.25)
 - **Font Family**: CSS font stack (default: Fira Code with monospace fallbacks)
 - **Font Weight**: Text weight from Light (300) to Bold (700)
 - **Show Delete Confirmation**: Toggle confirmation dialog when deleting tasks (default: enabled)
@@ -2828,8 +2830,198 @@ const rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
 - Lock button accessible after selection ✓
 - Finish editing: Returns to truncated state ✓
 
+### Session 11: Curved Arrow Styling
+
+**Feature Request**: "How hard would it be to implement different arrow pathing styles? Like curvy, straight, rectangular if you catch my drift"
+
+**Implemented**: Curved arrow styling system with user-configurable options
+
+**What Was Added**:
+
+1. **Arrow Style Setting** (lines 1141-1142):
+   - New configuration: `arrowStyle: 'straight' | 'curved'` (default: 'straight')
+   - New configuration: `arrowCurvature: 0.05-0.5` (default: 0.25)
+   - Backward compatible - existing users keep straight arrows
+
+2. **Curved Path Renderer** (lines 4408-4440):
+   ```javascript
+   createCurvedPath(x1, y1, x2, y2, className) {
+       // Calculate curve control points
+       const dx = x2 - x1;
+       const dy = y2 - y1;
+       const distance = Math.sqrt(dx * dx + dy * dy);
+
+       // Curve intensity based on distance and user setting
+       const curveAmount = distance * this.arrowCurvature;
+
+       // Create perpendicular offset for smooth curve
+       const angle = Math.atan2(dy, dx);
+       const perpAngle = angle + Math.PI / 2;
+
+       // Control points offset perpendicular to the line
+       const offsetX = Math.cos(perpAngle) * curveAmount;
+       const offsetY = Math.sin(perpAngle) * curveAmount;
+
+       // Midpoint for control
+       const midX = (x1 + x2) / 2;
+       const midY = (y1 + y2) / 2;
+
+       // Quadratic bezier curve through offset midpoint
+       const d = `M ${x1} ${y1} Q ${midX + offsetX} ${midY + offsetY}, ${x2} ${y2}`;
+
+       return path; // SVG <path> element
+   }
+   ```
+
+3. **Smart Dispatch System** (lines 4392-4406):
+   - Refactored `createLine()` to dispatch based on `arrowStyle` setting
+   - Returns `<line>` for straight, `<path>` for curved
+   - No changes needed at call sites - all 7 arrow creation points work automatically:
+     - Main parent links (visible + hit detection)
+     - Other parent links (visible + hit detection)
+     - Dependency links (visible + hit detection)
+     - Temporary drag preview line
+
+4. **Settings UI** (lines 2397-2415):
+   - **Arrow Style**: Dropdown with "Straight" and "Curved" options
+   - **Arrow Curvature**: Slider from 0.05 (subtle) to 0.5 (dramatic)
+   - Live preview: Change setting, click Apply, see results immediately
+
+5. **Persistence** (lines 4788-4789, 4822-4823, 4882-4883):
+   - Arrow settings saved to localStorage
+   - Properly loaded with defaults using null-coalescing operator
+   - Survives page refresh
+
+**Technical Details**:
+
+**Quadratic Bezier Curves**:
+- Uses SVG `Q` command: `M x1 y1 Q controlX controlY, x2 y2`
+- Control point perpendicular to line direction for smooth, natural curves
+- Curve intensity scales with distance (longer arrows = more curve)
+
+**Why Perpendicular Offset**:
+- Curves sideways relative to line direction
+- Creates organic, flowing appearance
+- Avoids awkward curves that bend backward
+
+**Hit Detection**:
+- Curved paths use same class system as straight lines
+- Wide invisible paths for click detection
+- Thin visible paths for display
+
+**Benefits**:
+- ✅ Beautiful, organic visual style
+- ✅ Reduces visual clutter in complex graphs
+- ✅ Easier to trace relationships
+- ✅ User-configurable intensity
+- ✅ Zero performance impact (simple math)
+- ✅ Works with all existing features (golden paths, selection, etc.)
+
+**User Control**:
+- **Straight arrows** (default): Clean, minimal, direct
+- **Curved arrows** (0.05-0.5): Organic, flowing, less visual noise
+- **Curvature slider**: Fine-tune curve intensity to preference
+
+**Testing**:
+- Switch between straight and curved: Settings apply immediately ✓
+- Curvature slider 0.05: Subtle curves ✓
+- Curvature slider 0.5: Dramatic curves ✓
+- Golden path highlighting: Works with curved arrows ✓
+- Hit detection: Click curved arrows to select ✓
+- Dependency creation (Alt+drag): Works with curved style ✓
+- Persistence: Setting survives refresh ✓
+
+**Future Potential**:
+- Orthogonal/Manhattan routing (rectangular paths) - complex algorithm, better for auto-layout
+- Per-link styling (e.g., curved parents, straight dependencies)
+- Animation along curved paths
+
+### Session 11 Continued: Bug Fixes
+
+**Issue 1: Node Padding Affecting Height**
+
+**Problem**: The "Node Padding" setting (intended for left/right padding) was incorrectly affecting node height, causing height to change when adjusting horizontal padding.
+
+**Root Cause** (lines 4082, 4102, 4168, 4188, 4364):
+- `nodePadding` was being used for both horizontal AND vertical padding calculations
+- Changing horizontal padding slider affected rectangle height
+- Confusing UX - padding setting had unexpected effects
+
+**Solution**:
+- Introduced fixed `verticalPadding = 10` for all height calculations
+- `nodePadding` now only affects horizontal (left/right) spacing
+- Clear separation of concerns
+
+**Changes**:
+- Lines 4083-4104: Use `verticalPadding` for height calculations
+- Lines 4168, 4188: Use `verticalPadding` for text vertical positioning
+- Line 4364: Use `verticalPadding` in `calculateTaskDimensions()`
+
+**Issue 2: Curved Arrow Settings Not Applying**
+
+**Problem**: Changing "Arrow Style" from Straight to Curved and clicking "Apply" had no effect. Setting didn't persist or apply.
+
+**Root Cause** (line 2528):
+```javascript
+// BEFORE (broken):
+else if (def.type === 'select') {
+    this[key] = parseInt(input.value); // Forces to integer!
+}
+```
+- Code assumed ALL select inputs have numeric values
+- `arrowStyle` uses string values ('straight', 'curved')
+- `parseInt('straight')` → `NaN` → setting broken
+
+**Solution** (lines 2528-2535):
+```javascript
+// AFTER (fixed):
+else if (def.type === 'select') {
+    const firstOptionValue = def.options[0].value;
+    if (typeof firstOptionValue === 'number' || !isNaN(parseInt(firstOptionValue))) {
+        this[key] = parseInt(input.value); // Numeric selects (e.g., fontWeight)
+    } else {
+        this[key] = input.value; // String selects (e.g., arrowStyle)
+    }
+}
+```
+
+**Impact**:
+- ✅ Node padding now only affects horizontal spacing (as intended)
+- ✅ Arrow style setting applies immediately
+- ✅ Arrow curvature slider works correctly
+- ✅ Settings persist across refresh
+- ✅ Backward compatible with numeric select inputs (fontWeight)
+
+**Testing**:
+- Adjust node padding: Only width changes ✓
+- Change arrow style to curved: Applies immediately ✓
+- Adjust curvature slider: Curves change intensity ✓
+- Refresh page: Settings persist ✓
+
+### Session 11 Continued: Updated Default Settings
+
+**Changes**: Updated default settings for better visual appearance and usability.
+
+**New Defaults**:
+- **Character Width**: 8 → **8.5** (better spacing for modern fonts)
+- **Node Padding**: 15 → **30** (more breathing room inside rectangles)
+- **Minimum Node Width**: 80 → **100** (prevents overly narrow nodes)
+- **Node Padding Max**: 20 → **50** (allows for more padding customization)
+
+**Rationale**:
+- Wider padding creates cleaner, more readable nodes
+- Slightly increased character width accounts for font rendering variations
+- Higher minimum width prevents cramped appearance
+- Changes apply to new users; existing users keep their saved settings
+
+**Updated Files**:
+- Lines 1129-1131: App state initialization
+- Lines 2308, 2317, 2325: ConfigDefs defaults
+- Lines 4880-4882: LoadFromStorage defaults
+- README Settings UI section: Updated documentation
+
 ---
 
-**Last Updated**: 2025-10-25 (Session 10: Truncation & Height Fixes)
-**Current Line Count**: ~4980 lines in task-tree.html
-**Version**: 1.5.5 (Multiline Truncation & Height Fix)
+**Last Updated**: 2025-10-25 (Session 11: Updated Defaults)
+**Current Line Count**: ~4900 lines in task-tree.html
+**Version**: 1.6.2 (Updated Default Settings)

@@ -1126,9 +1126,9 @@
             cursorArrow: null,
             textLengthThreshold: 80,
             // Node sizing & typography configuration
-            charWidth: 8,      // Pixels per character for width calculation
-            nodePadding: 15,    // Left/right padding inside rectangles
-            minNodeWidth: 80,  // Minimum rectangle width
+            charWidth: 8.5,    // Pixels per character for width calculation
+            nodePadding: 30,   // Left/right padding inside rectangles
+            minNodeWidth: 100, // Minimum rectangle width
             fontFamily: "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace",  // Font stack for task text
             fontWeight: 700,   // Font weight: 400=normal, 500=medium, 600=semibold, 700=bold
             // Multiline text configuration
@@ -1137,6 +1137,9 @@
             maxNodeHeight: 0,        // Maximum node height in pixels (0 = unlimited)
             lineHeight: 20,          // Vertical spacing between lines in pixels
             wordWrap: true,          // Wrap on word boundaries (vs character boundaries)
+            // Arrow styling
+            arrowStyle: 'straight',  // Arrow path style: 'straight' or 'curved'
+            arrowCurvature: 0.25,    // Curve intensity for curved arrows (0.1 to 0.5)
             // Homes - named bookmarks for quick navigation
             homes: [],            // Array of {id, name, centerX, centerY, zoomLevel, timestamp}
             homeIdCounter: 1,     // For unique IDs
@@ -2302,7 +2305,7 @@
                     charWidth: {
                         label: 'Character Width (px)',
                         type: 'number',
-                        default: 8,
+                        default: 8.5,
                         min: 4,
                         max: 15,
                         step: 0.5,
@@ -2311,15 +2314,15 @@
                     nodePadding: {
                         label: 'Node Padding (px)',
                         type: 'number',
-                        default: 15,
+                        default: 30,
                         min: 0,
-                        max: 20,
+                        max: 50,
                         description: 'Left/right padding inside rectangles'
                     },
                     minNodeWidth: {
                         label: 'Minimum Node Width (px)',
                         type: 'number',
-                        default: 80,
+                        default: 100,
                         min: 40,
                         max: 200,
                         description: 'Minimum rectangle width'
@@ -2390,6 +2393,25 @@
                         type: 'checkbox',
                         default: true,
                         description: 'Wrap text on word boundaries (more readable) vs character boundaries'
+                    },
+                    arrowStyle: {
+                        label: 'Arrow Style',
+                        type: 'select',
+                        default: 'straight',
+                        options: [
+                            { value: 'straight', label: 'Straight' },
+                            { value: 'curved', label: 'Curved' }
+                        ],
+                        description: 'Visual style for arrows connecting tasks'
+                    },
+                    arrowCurvature: {
+                        label: 'Arrow Curvature',
+                        type: 'number',
+                        default: 0.25,
+                        min: 0.05,
+                        max: 0.5,
+                        step: 0.05,
+                        description: 'Intensity of curve for curved arrows (0.05 = subtle, 0.5 = dramatic)'
                     }
                 };
 
@@ -2503,7 +2525,14 @@
                     if (def.type === 'number') {
                         this[key] = parseFloat(input.value);
                     } else if (def.type === 'select') {
-                        this[key] = parseInt(input.value);
+                        // Check if select values are numeric or string
+                        // If first option value is a number, parse as int, otherwise keep as string
+                        const firstOptionValue = def.options[0].value;
+                        if (typeof firstOptionValue === 'number' || !isNaN(parseInt(firstOptionValue))) {
+                            this[key] = parseInt(input.value);
+                        } else {
+                            this[key] = input.value; // Keep as string for non-numeric selects
+                        }
                     } else if (def.type === 'checkbox') {
                         this[key] = input.checked;
                     } else {
@@ -4056,8 +4085,10 @@
                     const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
                     const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
 
-                    // Calculate height: lines * lineHeight + padding, respecting maxNodeHeight
-                    const calculatedHeight = lines.length * this.lineHeight + padding * 2;
+                    // Calculate height: lines * lineHeight + vertical padding
+                    // Use fixed vertical padding (not nodePadding which is for horizontal)
+                    const verticalPadding = 10;
+                    const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
 
                     // Determine if we should bypass maxNodeHeight and show full text
                     // - When editing: show all lines for easier editing
@@ -4071,13 +4102,13 @@
                     // Calculate how many lines will actually be rendered when overflowing
                     let actualRenderedLines = lines.length;
                     if (isOverflowing) {
-                        const availableHeightForOverflow = this.maxNodeHeight - padding * 2;
+                        const availableHeightForOverflow = this.maxNodeHeight - verticalPadding * 2;
                         actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
                     }
 
                     // Size rectangle based on actual rendered content (not blindly using maxNodeHeight)
                     const rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
-                        ? actualRenderedLines * this.lineHeight + padding * 2
+                        ? actualRenderedLines * this.lineHeight + verticalPadding * 2
                         : calculatedHeight;
 
                     // ⭐ NEW: Rect positioned RELATIVE to group (centered at 0,0)
@@ -4141,7 +4172,7 @@
                         }
 
                         // Calculate how many lines actually fit within rectHeight
-                        const availableHeight = rectHeight - padding * 2;
+                        const availableHeight = rectHeight - verticalPadding * 2;
                         const maxVisibleLines = Math.floor(availableHeight / this.lineHeight);
                         // Render all visible lines (truncate last line if overflowing)
                         const linesToRender = Math.min(lines.length, maxVisibleLines);
@@ -4159,9 +4190,9 @@
                             const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
                             // Add emoji to first line only
                             tspan.textContent = (index === 0 ? emoji : '') + lineText;
-                            tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding
-                            // Vertical position: start from top + padding, add lineHeight per line
-                            const yOffset = -rectHeight / 2 + padding + this.lineHeight * (index + 0.75);
+                            tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
+                            // Vertical position: start from top + verticalPadding, add lineHeight per line
+                            const yOffset = -rectHeight / 2 + verticalPadding + this.lineHeight * (index + 0.75);
                             tspan.setAttribute('y', yOffset);
                             text.appendChild(tspan);
                         }
@@ -4336,8 +4367,9 @@
                 const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
                 const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
 
-                // Calculate height
-                const calculatedHeight = lines.length * this.lineHeight + padding * 2;
+                // Calculate height (use fixed vertical padding, not nodePadding)
+                const verticalPadding = 10;
+                const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
                 const rectHeight = this.maxNodeHeight > 0
                     ? Math.min(this.maxNodeHeight, calculatedHeight)
                     : calculatedHeight;
@@ -4387,13 +4419,53 @@
             },
 
             createLine(x1, y1, x2, y2, className) {
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', x1);
-                line.setAttribute('y1', y1);
-                line.setAttribute('x2', x2);
-                line.setAttribute('y2', y2);
-                line.setAttribute('class', className);
-                return line;
+                // Dispatch to appropriate renderer based on arrow style
+                if (this.arrowStyle === 'curved') {
+                    return this.createCurvedPath(x1, y1, x2, y2, className);
+                } else {
+                    // Default: straight line
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', x2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('class', className);
+                    return line;
+                }
+            },
+
+            createCurvedPath(x1, y1, x2, y2, className) {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+                // Calculate curve control points
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Curve intensity based on distance and user setting
+                const curveAmount = distance * this.arrowCurvature;
+
+                // Create perpendicular offset for smooth curve
+                // Use perpendicular direction to curve sideways
+                const angle = Math.atan2(dy, dx);
+                const perpAngle = angle + Math.PI / 2;
+
+                // Control points offset perpendicular to the line
+                const offsetX = Math.cos(perpAngle) * curveAmount;
+                const offsetY = Math.sin(perpAngle) * curveAmount;
+
+                // Midpoint for control
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+
+                // Quadratic bezier curve through offset midpoint
+                const d = `M ${x1} ${y1} Q ${midX + offsetX} ${midY + offsetY}, ${x2} ${y2}`;
+
+                path.setAttribute('d', d);
+                path.setAttribute('class', className);
+                path.setAttribute('fill', 'none'); // Paths need fill=none to show stroke
+
+                return path;
             },
 
             createCursorArrow() {
@@ -4723,6 +4795,8 @@
                         maxNodeHeight: this.maxNodeHeight,
                         lineHeight: this.lineHeight,
                         wordWrap: this.wordWrap,
+                        arrowStyle: this.arrowStyle,
+                        arrowCurvature: this.arrowCurvature,
                         // Undo/redo history
                         undoStack: this.undoStack,
                         redoStack: this.redoStack
@@ -4755,6 +4829,8 @@
                                 maxNodeHeight: this.maxNodeHeight,
                                 lineHeight: this.lineHeight,
                                 wordWrap: this.wordWrap,
+                                arrowStyle: this.arrowStyle,
+                                arrowCurvature: this.arrowCurvature,
                                 undoStack: this.undoStack,
                                 redoStack: this.redoStack
                             }));
@@ -4801,9 +4877,9 @@
 
                     // User preferences & configuration (use ?? for proper defaults)
                     this.textLengthThreshold = parsed.textLengthThreshold ?? 80;
-                    this.charWidth = parsed.charWidth ?? 8;
-                    this.nodePadding = parsed.nodePadding ?? 15;
-                    this.minNodeWidth = parsed.minNodeWidth ?? 80;
+                    this.charWidth = parsed.charWidth ?? 8.5;
+                    this.nodePadding = parsed.nodePadding ?? 30;
+                    this.minNodeWidth = parsed.minNodeWidth ?? 100;
                     this.fontFamily = parsed.fontFamily ?? "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace";
                     this.fontWeight = parsed.fontWeight ?? 700;
                     this.showDeleteConfirmation = parsed.showDeleteConfirmation ?? true;
@@ -4813,6 +4889,8 @@
                     this.maxNodeHeight = parsed.maxNodeHeight ?? 0;
                     this.lineHeight = parsed.lineHeight ?? 20;
                     this.wordWrap = parsed.wordWrap ?? true;
+                    this.arrowStyle = parsed.arrowStyle ?? 'straight';
+                    this.arrowCurvature = parsed.arrowCurvature ?? 0.25;
                     // Undo/redo history
                     this.undoStack = parsed.undoStack || [];
                     this.redoStack = parsed.redoStack || [];
