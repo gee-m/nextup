@@ -1049,7 +1049,7 @@
     </div>
 
     <div id="settings-modal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-content" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
             <h2>⚙️ Settings</h2>
             <p style="color: #666; font-size: 13px; margin-bottom: 20px;">Customize appearance and behavior</p>
             <div id="settings-form"></div>
@@ -1131,6 +1131,12 @@
             minNodeWidth: 80,  // Minimum rectangle width
             fontFamily: "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace",  // Font stack for task text
             fontWeight: 700,   // Font weight: 400=normal, 500=medium, 600=semibold, 700=bold
+            // Multiline text configuration
+            enableMultiline: true,   // Master toggle for multiline text support
+            maxNodeWidth: 600,       // Maximum node width in pixels before wrapping
+            maxNodeHeight: 0,        // Maximum node height in pixels (0 = unlimited)
+            lineHeight: 20,          // Vertical spacing between lines in pixels
+            wordWrap: true,          // Wrap on word boundaries (vs character boundaries)
             // Homes - named bookmarks for quick navigation
             homes: [],            // Array of {id, name, centerX, centerY, zoomLevel, timestamp}
             homeIdCounter: 1,     // For unique IDs
@@ -2123,6 +2129,64 @@
                 this.render();
             },
 
+            wrapText(text, maxWidth, charWidth, wordWrap) {
+                // Return single line if multiline is disabled
+                if (!this.enableMultiline) {
+                    return [text];
+                }
+
+                // Calculate maximum characters that fit in one line
+                const maxChars = Math.floor(maxWidth / charWidth);
+                if (maxChars <= 0) return [text]; // Safety check
+
+                const lines = [];
+
+                if (wordWrap) {
+                    // Split on word boundaries
+                    const words = text.split(' ');
+                    let currentLine = '';
+
+                    for (const word of words) {
+                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                        const testWidth = testLine.length * charWidth;
+
+                        if (testWidth <= maxWidth) {
+                            currentLine = testLine;
+                        } else {
+                            // Line would be too long
+                            if (currentLine) {
+                                lines.push(currentLine);
+                            }
+
+                            // Handle single word longer than max width
+                            if (word.length * charWidth > maxWidth) {
+                                // Force character break for long words
+                                let remainingWord = word;
+                                while (remainingWord.length > 0) {
+                                    lines.push(remainingWord.substring(0, maxChars));
+                                    remainingWord = remainingWord.substring(maxChars);
+                                }
+                                currentLine = '';
+                            } else {
+                                currentLine = word;
+                            }
+                        }
+                    }
+
+                    if (currentLine) {
+                        lines.push(currentLine);
+                    }
+                } else {
+                    // Character wrapping - simple split at max chars
+                    for (let i = 0; i < text.length; i += maxChars) {
+                        lines.push(text.substring(i, i + maxChars));
+                    }
+                }
+
+                // Return at least one line (even if empty)
+                return lines.length > 0 ? lines : [''];
+            },
+
             clearAllData() {
                 this.showConfirm(
                     'Clear All Data',
@@ -2290,6 +2354,42 @@
                         type: 'checkbox',
                         default: true,
                         description: 'Automatically hide child nodes when they and their parent are marked done'
+                    },
+                    enableMultiline: {
+                        label: 'Enable Multiline Text',
+                        type: 'checkbox',
+                        default: true,
+                        description: 'Allow task text to wrap to multiple lines when it exceeds max width'
+                    },
+                    maxNodeWidth: {
+                        label: 'Max Node Width (px)',
+                        type: 'number',
+                        default: 600,
+                        min: 100,
+                        max: 2000,
+                        description: 'Maximum node width in pixels before text wraps to next line'
+                    },
+                    maxNodeHeight: {
+                        label: 'Max Node Height (px)',
+                        type: 'number',
+                        default: 0,
+                        min: 0,
+                        max: 1000,
+                        description: 'Maximum node height in pixels (0 = unlimited)'
+                    },
+                    lineHeight: {
+                        label: 'Line Height (px)',
+                        type: 'number',
+                        default: 20,
+                        min: 12,
+                        max: 40,
+                        description: 'Vertical spacing between lines of text'
+                    },
+                    wordWrap: {
+                        label: 'Word Wrap',
+                        type: 'checkbox',
+                        default: true,
+                        description: 'Wrap text on word boundaries (more readable) vs character boundaries'
                     }
                 };
 
@@ -3777,16 +3877,8 @@
 
                             // Create visible line (non-interactive) with arrow at edge
                             // Calculate arrow endpoint at rectangle edge for pixel-perfect positioning
-                            const charWidth = this.charWidth;
-                            const minWidth = this.minNodeWidth;
-                            const padding = this.nodePadding;
-                            // Calculate display title (same logic as in node rendering)
-                            const charsOverLimit = task.title.length - this.textLengthThreshold;
-                            const shouldTruncate = charsOverLimit > 5;
-                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
-                            const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
-                            const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
-                            const rectHeight = 40;
+                            // Use dynamic dimensions to account for multiline nodes
+                            const { rectWidth, rectHeight } = this.calculateTaskDimensions(task);
                             const arrowEnd = this.getLineEndAtRectEdge(parent.x, parent.y, task.x, task.y, rectWidth, rectHeight);
 
                             const line = this.createLine(parent.x, parent.y, arrowEnd.x, arrowEnd.y, 'link parent-visible');
@@ -3857,16 +3949,8 @@
 
                             // Create visible line (non-interactive) with arrow at edge
                             // Calculate arrow endpoint at rectangle edge for pixel-perfect positioning
-                            const charWidth = this.charWidth;
-                            const minWidth = this.minNodeWidth;
-                            const padding = this.nodePadding;
-                            // Calculate display title (same logic as in node rendering)
-                            const charsOverLimit = task.title.length - this.textLengthThreshold;
-                            const shouldTruncate = charsOverLimit > 5;
-                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
-                            const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
-                            const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
-                            const rectHeight = 40;
+                            // Use dynamic dimensions to account for multiline nodes
+                            const { rectWidth, rectHeight } = this.calculateTaskDimensions(task);
                             const arrowEnd = this.getLineEndAtRectEdge(parent.x, parent.y, task.x, task.y, rectWidth, rectHeight);
 
                             const line = this.createLine(parent.x, parent.y, arrowEnd.x, arrowEnd.y, 'link other-parent');
@@ -3903,16 +3987,8 @@
 
                             // Create visible line (non-interactive) with arrow at edge
                             // Calculate arrow endpoint at rectangle edge for pixel-perfect positioning
-                            const charWidth = this.charWidth;
-                            const minWidth = this.minNodeWidth;
-                            const padding = this.nodePadding;
-                            // Calculate display title (same logic as in node rendering)
-                            const charsOverLimit = task.title.length - this.textLengthThreshold;
-                            const shouldTruncate = charsOverLimit > 5;
-                            const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
-                            const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
-                            const rectWidth = Math.max(minWidth, displayTitle.length * charWidth + padding * 2);
-                            const rectHeight = 40;
+                            // Use dynamic dimensions to account for multiline nodes
+                            const { rectWidth, rectHeight } = this.calculateTaskDimensions(task);
                             const arrowEnd = this.getLineEndAtRectEdge(dep.x, dep.y, task.x, task.y, rectWidth, rectHeight);
 
                             const line = this.createLine(dep.x, dep.y, arrowEnd.x, arrowEnd.y, 'link dependency');
@@ -3964,13 +4040,45 @@
                         isTruncated = true;
                     }
 
-                    // Calculate rect width - use full title when editing, otherwise use display text
+                    // Calculate rect dimensions with multiline support
                     const padding = this.nodePadding;
                     const charWidth = this.charWidth;
                     const minWidth = this.minNodeWidth;
-                    const textForSizing = this.editingTaskId === task.id ? task.title : displayTitle;
-                    const rectWidth = Math.max(minWidth, textForSizing.length * charWidth + padding * 2);
-                    const rectHeight = 40;
+                    // When multiline is enabled, always use full text for wrapping (maxNodeHeight handles limiting)
+                    // When multiline is disabled, use truncated displayTitle
+                    // When editing, always use full text
+                    const textForSizing = this.editingTaskId === task.id || this.enableMultiline ? task.title : displayTitle;
+
+                    // Wrap text into lines based on max width
+                    const lines = this.wrapText(textForSizing, this.maxNodeWidth, charWidth, this.wordWrap);
+
+                    // Calculate width: minimum of (maxNodeWidth OR longest line width OR minWidth)
+                    const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
+                    const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
+
+                    // Calculate height: lines * lineHeight + padding, respecting maxNodeHeight
+                    const calculatedHeight = lines.length * this.lineHeight + padding * 2;
+
+                    // Determine if we should bypass maxNodeHeight and show full text
+                    // - When editing: show all lines for easier editing
+                    // - When selected: show all lines so user can see full text and use lock button
+                    // - When already expanded (currentlyWorking, textLocked, etc.): show all lines
+                    const shouldFullyExpand = this.editingTaskId === task.id || this.selectedTaskIds.has(task.id) || shouldExpand;
+
+                    // Check if text overflows BEFORE calculating rectHeight
+                    const isOverflowing = this.maxNodeHeight > 0 && !shouldFullyExpand && calculatedHeight > this.maxNodeHeight;
+
+                    // Calculate how many lines will actually be rendered when overflowing
+                    let actualRenderedLines = lines.length;
+                    if (isOverflowing) {
+                        const availableHeightForOverflow = this.maxNodeHeight - padding * 2;
+                        actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
+                    }
+
+                    // Size rectangle based on actual rendered content (not blindly using maxNodeHeight)
+                    const rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
+                        ? actualRenderedLines * this.lineHeight + padding * 2
+                        : calculatedHeight;
 
                     // ⭐ NEW: Rect positioned RELATIVE to group (centered at 0,0)
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -3993,46 +4101,70 @@
                         foreignObject.onmousedown = (e) => e.stopPropagation();
                         foreignObject.onclick = (e) => e.stopPropagation();
 
-                        const input = document.createElement('input');
-                        input.id = 'edit-input';
-                        input.type = 'text';
-                        input.value = task.title;
-                        input.style.cssText = `width: 100%; max-width: none; height: 100%; border: 2px solid #007bff; border-radius: 4px; padding: 4px 8px; font-size: 14px; font-family: ${this.fontFamily}; text-align: left; box-sizing: border-box;`;
-                        input.onkeydown = (e) => {
-                            if (e.key === 'Enter') {
+                        const textarea = document.createElement('textarea');
+                        textarea.id = 'edit-input';
+                        textarea.value = task.title;
+                        textarea.rows = Math.max(2, lines.length); // Dynamic rows based on content
+                        textarea.style.cssText = `width: 100%; max-width: none; height: 100%; border: 2px solid #007bff; border-radius: 4px; padding: 4px 8px; font-size: 14px; font-family: ${this.fontFamily}; text-align: left; box-sizing: border-box; resize: none; overflow: auto;`;
+                        textarea.onkeydown = (e) => {
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                // Ctrl+Enter or Cmd+Enter = save
                                 this.finishEditing(true);
+                                e.preventDefault();
                             } else if (e.key === 'Escape') {
                                 this.finishEditing(false);
                             }
+                            // Regular Enter key creates newline (natural textarea behavior)
                             e.stopPropagation();
                         };
-                        // Prevent clicks on input from bubbling to canvas handlers
-                        input.onmousedown = (e) => e.stopPropagation();
-                        input.onclick = (e) => e.stopPropagation();
-                        input.onblur = () => this.finishEditing(true);
+                        // Prevent clicks on textarea from bubbling to canvas handlers
+                        textarea.onmousedown = (e) => e.stopPropagation();
+                        textarea.onclick = (e) => e.stopPropagation();
+                        textarea.onblur = () => this.finishEditing(true);
 
-                        foreignObject.appendChild(input);
+                        foreignObject.appendChild(textarea);
                         g.appendChild(foreignObject);
                     } else {
                         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        // ⭐ NEW: Relative to group center (0, 5 for vertical centering)
                         text.setAttribute('x', 0);
-                        text.setAttribute('y', 5);
-                        text.setAttribute('text-anchor', 'middle');
+                        text.setAttribute('text-anchor', 'start'); // Left-aligned for multiline
                         text.style.cursor = 'pointer';
                         text.style.fontFamily = this.fontFamily;
                         text.style.fontWeight = this.fontWeight;
 
-                        // Add emoji status indicators
-                        let baseText = displayTitle;
+                        // Add emoji status indicators to first line
+                        let emoji = '';
                         if (task.currentlyWorking) {
-                            baseText = '🔄 ' + baseText;
+                            emoji = '🔄 ';
                         } else if (task.status === 'done') {
-                            baseText = '✅ ' + baseText;
+                            emoji = '✅ ';
                         }
 
-                        // Set text content (no special styling for truncation)
-                        text.textContent = baseText;
+                        // Calculate how many lines actually fit within rectHeight
+                        const availableHeight = rectHeight - padding * 2;
+                        const maxVisibleLines = Math.floor(availableHeight / this.lineHeight);
+                        // Render all visible lines (truncate last line if overflowing)
+                        const linesToRender = Math.min(lines.length, maxVisibleLines);
+
+                        // Render only the lines that fit within the rectangle
+                        for (let index = 0; index < linesToRender; index++) {
+                            let lineText = lines[index];
+
+                            // If this is the last visible line and text is overflowing, truncate it
+                            if (isOverflowing && index === linesToRender - 1) {
+                                // Truncate to make room for "..." (remove last 3 chars, add ellipsis)
+                                lineText = lineText.length > 3 ? lineText.slice(0, -3) + '...' : lineText + '...';
+                            }
+
+                            const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                            // Add emoji to first line only
+                            tspan.textContent = (index === 0 ? emoji : '') + lineText;
+                            tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding
+                            // Vertical position: start from top + padding, add lineHeight per line
+                            const yOffset = -rectHeight / 2 + padding + this.lineHeight * (index + 0.75);
+                            tspan.setAttribute('y', yOffset);
+                            text.appendChild(tspan);
+                        }
 
 
                         // Add dblclick handler directly to text element
@@ -4180,6 +4312,37 @@
 
                     nodesGroup.appendChild(g);
                 }
+            },
+
+            // Helper: Calculate task dimensions with multiline support
+            calculateTaskDimensions(task) {
+                const padding = this.nodePadding;
+                const charWidth = this.charWidth;
+                const minWidth = this.minNodeWidth;
+
+                // Determine display text (same logic as main rendering)
+                const charsOverLimit = task.title.length - this.textLengthThreshold;
+                const shouldTruncate = charsOverLimit > 5;
+                const shouldExpand = task.currentlyWorking || task.textLocked || (task.textExpanded && this.selectedTaskIds.has(task.id));
+                const displayTitle = (shouldTruncate && !shouldExpand) ? task.title.substring(0, this.textLengthThreshold) + '...' : task.title;
+
+                // Use full text for multiline, truncated for single-line
+                const textForSizing = this.enableMultiline ? task.title : displayTitle;
+
+                // Wrap text into lines
+                const lines = this.wrapText(textForSizing, this.maxNodeWidth, charWidth, this.wordWrap);
+
+                // Calculate width
+                const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
+                const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
+
+                // Calculate height
+                const calculatedHeight = lines.length * this.lineHeight + padding * 2;
+                const rectHeight = this.maxNodeHeight > 0
+                    ? Math.min(this.maxNodeHeight, calculatedHeight)
+                    : calculatedHeight;
+
+                return { rectWidth, rectHeight, lines };
             },
 
             // Calculate line endpoint at rectangle edge for pixel-perfect arrows
@@ -4555,6 +4718,11 @@
                         fontWeight: this.fontWeight,
                         showDeleteConfirmation: this.showDeleteConfirmation,
                         autoHideCompletedNodes: this.autoHideCompletedNodes,
+                        enableMultiline: this.enableMultiline,
+                        maxNodeWidth: this.maxNodeWidth,
+                        maxNodeHeight: this.maxNodeHeight,
+                        lineHeight: this.lineHeight,
+                        wordWrap: this.wordWrap,
                         // Undo/redo history
                         undoStack: this.undoStack,
                         redoStack: this.redoStack
@@ -4582,6 +4750,11 @@
                                 fontWeight: this.fontWeight,
                                 showDeleteConfirmation: this.showDeleteConfirmation,
                                 autoHideCompletedNodes: this.autoHideCompletedNodes,
+                                enableMultiline: this.enableMultiline,
+                                maxNodeWidth: this.maxNodeWidth,
+                                maxNodeHeight: this.maxNodeHeight,
+                                lineHeight: this.lineHeight,
+                                wordWrap: this.wordWrap,
                                 undoStack: this.undoStack,
                                 redoStack: this.redoStack
                             }));
@@ -4635,6 +4808,11 @@
                     this.fontWeight = parsed.fontWeight ?? 700;
                     this.showDeleteConfirmation = parsed.showDeleteConfirmation ?? true;
                     this.autoHideCompletedNodes = parsed.autoHideCompletedNodes ?? true;
+                    this.enableMultiline = parsed.enableMultiline ?? true;
+                    this.maxNodeWidth = parsed.maxNodeWidth ?? 600;
+                    this.maxNodeHeight = parsed.maxNodeHeight ?? 0;
+                    this.lineHeight = parsed.lineHeight ?? 20;
+                    this.wordWrap = parsed.wordWrap ?? true;
                     // Undo/redo history
                     this.undoStack = parsed.undoStack || [];
                     this.redoStack = parsed.redoStack || [];

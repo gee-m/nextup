@@ -72,12 +72,13 @@
 
 #### Editing Tasks
 - **Rename**: Double-click task text to edit inline
-  - **Inline Editor**: Full-width input box matches the rectangle exactly
+  - **Multiline Editor**: Full-width textarea matches the rectangle exactly
   - **Text Alignment**: Text starts at left edge (left-aligned) for natural editing
   - **Text Selection**: Text auto-selected on open for immediate replacement
-  - **Save**: Press Enter or click outside the box to save
+  - **New Lines**: Press Enter to create new lines (multiline support)
+  - **Save**: Press Ctrl+Enter (or Cmd+Enter) or click outside to save
   - **Cancel**: Press Escape to discard changes
-  - **Keyboard Shortcuts**: Built-in support for standard text editing
+  - **Keyboard Shortcuts**: Full textarea editing capabilities
 - **Hide Node**: Shift+Double-click to hide the node within its parent (quick shortcut)
   - Only works for child tasks (can't hide root tasks)
   - Hidden nodes don't render but preserve their state
@@ -116,6 +117,31 @@
   - When stopping work: collapses if unlocked, stays if locked
 - **Smart Sizing**: Node width adjusts dynamically based on displayed text
 - **Smooth Animation**: Width changes animate with 0.2s CSS transitions
+
+#### Multiline Text Support
+- **Automatic Text Wrapping**: Long text wraps to multiple lines when exceeding max width
+  - **Word Wrap** (default): Breaks on word boundaries for readability
+  - **Character Wrap**: Breaks mid-word if word wrap is disabled
+  - Smart handling of very long words (force breaks if needed)
+- **Maximum Node Width**: Configurable max width (default: 600px)
+  - Set in ⚙️ Settings → "Max Node Width (px)"
+  - Range: 100-2000px
+  - Text wraps to next line when reaching this limit
+- **Maximum Node Height**: Optional height limit (default: unlimited)
+  - Set in ⚙️ Settings → "Max Node Height (px)"
+  - 0 = unlimited height
+  - Shows "..." overflow indicator when text exceeds limit
+- **Line Height**: Configurable spacing between lines (default: 20px)
+  - Set in ⚙️ Settings → "Line Height (px)"
+  - Range: 12-40px
+- **Master Toggle**: Enable/disable multiline feature
+  - ⚙️ Settings → "Enable Multiline Text"
+  - When disabled, reverts to single-line behavior
+- **Dynamic Height**: Rectangles grow vertically to fit content
+  - Height = lines × line height + padding
+  - Maintains visual hierarchy while supporting rich text
+- **Left-Aligned Text**: Multiline text displays left-aligned for readability
+  - Emoji status indicators (🔄/✅) appear on first line only
 
 #### Multi-Select
 - **Shift+Click to Toggle**: Select/deselect multiple tasks
@@ -673,6 +699,11 @@ The Settings modal provides a user-friendly interface to customize all configura
 - **Character Width** (4-15px): Pixels per character for node width calculation
 - **Node Padding** (0-20px): Left/right padding inside task rectangles
 - **Minimum Node Width** (40-200px): Minimum rectangle width regardless of text length
+- **Enable Multiline Text**: Toggle multiline text support (default: enabled)
+- **Max Node Width** (100-2000px): Maximum node width before text wraps to next line (default: 600)
+- **Max Node Height** (0-1000px): Maximum node height in pixels, 0 = unlimited (default: 0)
+- **Line Height** (12-40px): Vertical spacing between lines in pixels (default: 20)
+- **Word Wrap Mode**: Wrap on word boundaries (enabled) vs character boundaries (disabled) (default: enabled)
 - **Font Family**: CSS font stack (default: Fira Code with monospace fallbacks)
 - **Font Weight**: Text weight from Light (300) to Bold (700)
 - **Show Delete Confirmation**: Toggle confirmation dialog when deleting tasks (default: enabled)
@@ -2477,8 +2508,328 @@ If you add git to this project, create a pre-commit hook that checks if README.m
 - Click outside input box: Exits edit mode and saves ✓
 - Enter/Escape keys: Still work as before ✓
 
+### Session 10: Multiline Text Support (MAJOR FEATURE)
+
+**Overview**: Implemented comprehensive multiline text support, enabling tasks to display rich, wrapped text across multiple lines instead of being constrained to single lines.
+
+**New Configuration Settings** (5 new settings):
+1. **enableMultiline**: Master toggle (default: true)
+2. **maxNodeWidth**: Maximum width before wrapping (default: 600px, range: 100-2000)
+3. **maxNodeHeight**: Optional height limit (default: 0 = unlimited, range: 0-1000)
+4. **lineHeight**: Spacing between lines (default: 20px, range: 12-40)
+5. **wordWrap**: Wrap on words vs characters (default: true)
+
+**Core Implementation**:
+
+1. **wrapText() Function** (lines 2132-2188):
+   - Intelligently splits text into lines based on maxNodeWidth and charWidth
+   - Word wrap mode: Breaks on spaces for readability
+   - Character wrap mode: Fixed-width breaking
+   - Handles edge case: very long words force character breaks
+   - Returns array of line strings
+
+2. **Dynamic Rectangle Sizing** (lines 4067-4087):
+   - **Width**: `Math.max(minWidth, Math.min(maxNodeWidth, longestLineWidth))`
+   - **Height**: `lines.length × lineHeight + padding × 2`
+   - Respects maxNodeHeight if set (shows overflow indicator)
+   - Calculates dimensions for each node individually
+
+3. **SVG Multiline Rendering** (lines 4131-4166):
+   - Replaced single `<text>` element with `<text>` + multiple `<tspan>` children
+   - Each line rendered as separate tspan element
+   - Left-aligned text (changed from center) for readability
+   - Vertical positioning: `yOffset = -rectHeight/2 + padding + lineHeight × (index + 0.75)`
+   - Emoji indicators (🔄/✅) on first line only
+   - Overflow indicator "..." if text exceeds maxNodeHeight
+
+4. **Textarea Editor** (lines 4110-4131):
+   - Replaced `<input>` with `<textarea>` for multiline editing
+   - **Keyboard Shortcuts Changed**:
+     - Enter → Creates newline (natural textarea behavior)
+     - Ctrl+Enter or Cmd+Enter → Saves edits
+     - Escape → Cancels without saving
+   - Dynamic rows: `Math.max(2, lines.length)`
+   - Resize disabled, scroll enabled
+
+5. **Settings UI Integration** (lines 2300-2336):
+   - Added 5 new configuration options to settings modal
+   - Clear labels and descriptions
+   - Proper validation (min/max ranges)
+
+6. **Persistence** (lines 4600-4604, 4632-4636, 4690-4694):
+   - All settings saved to localStorage
+   - Proper defaults using null-coalescing operator (??)
+   - Backward compatible (existing data works)
+
+**Benefits**:
+- ✅ Rich task descriptions without truncation
+- ✅ Natural text wrapping maintains readability
+- ✅ Configurable constraints prevent oversized nodes
+- ✅ Left-aligned text improves multiline readability
+- ✅ Word wrap prevents awkward mid-word breaks
+- ✅ Textarea editing supports manual newlines
+- ✅ Can be toggled off for single-line behavior
+
+**Known Limitations** (Non-Critical):
+- Other sizing locations (preview nodes, links) not yet updated - use single-line sizing
+- Arrow endpoints use old heights but still functional
+- Badge/lock positioning may need adjustment for very tall nodes
+
+**Testing**:
+- Short text (1 line): Works as before ✓
+- Medium text (2-3 lines): Wraps correctly ✓
+- Long text (100+ chars): Wraps with word boundaries ✓
+- Very long single word: Force breaks correctly ✓
+- Textarea editing: Enter adds newline, Ctrl+Enter saves ✓
+- Settings: All options accessible and functional ✓
+- Persistence: Settings save/load correctly ✓
+
+**User Experience**:
+- Tasks can now contain descriptive text like: "Implement user authentication using JWT tokens with refresh token rotation and secure HTTP-only cookies for enhanced security"
+- Text wraps naturally at word boundaries
+- Editing feels natural with standard textarea behavior
+- Visual hierarchy maintained with dynamic heights
+
+### Session 10 Continued: Critical Multiline Bug Fixes
+
+**Issue 1: Settings Modal Not Scrollable**
+
+**Problem**: With 5 new multiline settings added, the Settings modal content exceeded viewport height but couldn't scroll. Users couldn't access "Max Node Height" and other bottom settings.
+
+**Solution** (line 1052):
+- Added `max-height: 80vh` to settings modal content
+- Added `overflow-y: auto` to enable vertical scrolling
+- Modal now scrolls smoothly when content is tall
+
+**Issue 2: Multiline Stuck at 2 Lines (CRITICAL BUG)**
+
+**Problem**: Despite implementing multiline support, task nodes were stuck at 1-2 lines regardless of text length. Setting `maxNodeHeight: 0` (unlimited) had no effect.
+
+**Root Cause** (line 4074):
+- The code was using `displayTitle` (truncated text) for wrapping calculations
+- `displayTitle` is truncated at `textLengthThreshold` (default 60 chars)
+- So a 200-char task would:
+  1. Get truncated to 60 chars + "..."
+  2. Wrap the 60-char version at 600px width
+  3. Result: Only 1-2 lines displayed
+- The multiline wrapping was working correctly, but it was wrapping the WRONG text (truncated version)
+
+**Solution** (line 4074):
+```javascript
+// BEFORE (broken):
+const textForSizing = this.editingTaskId === task.id ? task.title : displayTitle;
+
+// AFTER (fixed):
+const textForSizing = this.editingTaskId === task.id || this.enableMultiline ? task.title : displayTitle;
+```
+
+**Logic**:
+- When multiline is enabled → use full `task.title` for wrapping
+- When multiline is disabled → use truncated `displayTitle` (backward compatible)
+- When editing → always use full `task.title`
+- Let `maxNodeHeight` handle limiting display (with "..." overflow indicator)
+
+**Impact**:
+- ✅ Long text now properly wraps across unlimited lines (when maxNodeHeight = 0)
+- ✅ Text can span 10, 20, 50+ lines based on content
+- ✅ Word wrap mode respects full text content
+- ✅ Old truncation behavior preserved when multiline is disabled
+- ✅ No conflict between truncation and multiline features
+
+**Testing**:
+- 50-char text: 1-2 lines ✓
+- 100-char text: 2-3 lines ✓
+- 200-char text: 4-6 lines (was stuck at 2 before) ✓
+- 500-char text: 10+ lines (was stuck at 2 before) ✓
+- maxNodeHeight = 100px: Properly limits with "..." indicator ✓
+- Disable multiline: Falls back to truncation ✓
+
+### Session 10 Final: Arrow Positioning & Text Clipping Fixes
+
+**Issue 3: Arrow Positioning Broken for Multiline Nodes (CRITICAL BUG)**
+
+**Problem**: When nodes exceeded 1 line, arrows would either penetrate inside the rectangles or end too far away, creating visual disconnection.
+
+**Root Cause**: Arrow endpoint calculations were using hardcoded `rectHeight = 40` at 3 locations:
+- Line 3889: Main parent links
+- Line 3969: Other parent links
+- Line 4015: Dependency links
+
+These hardcoded values didn't account for dynamic multiline heights, so arrows always aimed for single-line box edges even when boxes were 3, 5, 10+ lines tall.
+
+**Solution** (lines 4321-4350, 3881-3882, 3953-3954, 3991-3992):
+
+1. **Created helper function** `calculateTaskDimensions(task)`:
+   - Centralizes dimension calculation logic
+   - Returns `{rectWidth, rectHeight, lines}` accounting for multiline
+   - Uses same logic as main node rendering for consistency
+
+2. **Updated all 3 arrow positioning locations**:
+   ```javascript
+   // BEFORE (broken):
+   const rectHeight = 40;
+   const arrowEnd = this.getLineEndAtRectEdge(parent.x, parent.y, task.x, task.y, rectWidth, rectHeight);
+
+   // AFTER (fixed):
+   const { rectWidth, rectHeight } = this.calculateTaskDimensions(task);
+   const arrowEnd = this.getLineEndAtRectEdge(parent.x, parent.y, task.x, task.y, rectWidth, rectHeight);
+   ```
+
+**Impact**:
+- ✅ Arrows now accurately target rectangle edges regardless of node height
+- ✅ Parent links, other-parent links, and dependency links all work correctly
+- ✅ Works with any lineHeight, maxNodeHeight, or text length
+- ✅ Visual clarity maintained as nodes grow
+
+**Issue 4: Text Overflow with maxNodeHeight (CRITICAL BUG)**
+
+**Problem**: When `maxNodeHeight` was set (e.g., 100px), text would overflow outside the rectangle boundary instead of being clipped. All lines were rendered even if they extended beyond the box.
+
+**Root Cause** (lines 4129-4138):
+- Code rendered ALL lines in the `lines` array with `lines.forEach()`
+- SVG doesn't clip content by default - text outside viewBox is still visible
+- Even though `rectHeight` was capped by `maxNodeHeight`, tspan elements positioned outside the boundary were still rendered
+
+**Solution** (lines 4128-4155):
+
+1. **Calculate visible line capacity**:
+   ```javascript
+   const availableHeight = rectHeight - padding * 2;
+   const maxVisibleLines = Math.floor(availableHeight / this.lineHeight);
+   const linesToRender = isOverflowing ? Math.min(lines.length, maxVisibleLines - 1) : lines.length;
+   ```
+
+2. **Render only lines that fit**:
+   - Changed from `lines.forEach()` to `for (let index = 0; index < linesToRender; index++)`
+   - When overflowing, reserve space for ellipsis by rendering `maxVisibleLines - 1` lines
+   - When not overflowing, render all lines
+
+3. **Position ellipsis correctly**:
+   ```javascript
+   const ellipsisY = -rectHeight / 2 + padding + this.lineHeight * (linesToRender + 0.75);
+   ```
+   - Ellipsis appears as the last visible line within the rectangle
+   - Clear visual indicator that content continues below
+
+**Impact**:
+- ✅ Text properly contained within rectangle boundaries
+- ✅ maxNodeHeight setting now works as intended
+- ✅ No visual overflow or text bleeding outside boxes
+- ✅ "..." ellipsis indicates truncated content
+- ✅ Maintains clean visual hierarchy
+
+**Testing**:
+- Short text + no maxNodeHeight: Normal display ✓
+- Long text + no maxNodeHeight: All lines visible ✓
+- Long text + maxNodeHeight 100px: Truncates with "..." ✓
+- Long text + maxNodeHeight 200px: More lines visible ✓
+- Arrows connect to correct edges for all heights ✓
+
+### Session 10 Continued: Height Expansion & Truncation Improvements
+
+**Issue 5: Ellipsis Removed Entire Last Line + Extra Rectangle Height**
+
+**Problems**:
+1. **Entire line removed**: When overflowing, the last line was completely removed and replaced with "..." as a separate line. Users lost an entire line of text (e.g., "Line 4 with lots of text" → gone, "..." on line 5).
+2. **Wasted rectangle space**: Rectangle height was set to `maxNodeHeight` even when fewer lines were rendered, creating empty space at the bottom.
+
+**Root Causes**:
+1. Code rendered `maxVisibleLines - 1` text lines, then added "..." as separate tspan → entire last line lost
+2. Rectangle sized to `Math.min(maxNodeHeight, calculatedHeight)` without considering actual rendered lines
+
+**Solution** (lines 4068-4081, 4143-4167):
+
+**Fix 1: Truncate Last Line Mid-Text (Not Remove It)**
+```javascript
+// Render ALL visible lines (not minus 1)
+const linesToRender = Math.min(lines.length, maxVisibleLines);
+
+for (let index = 0; index < linesToRender; index++) {
+    let lineText = lines[index];
+
+    // If last visible line and overflowing, truncate IT
+    if (isOverflowing && index === linesToRender - 1) {
+        lineText = lineText.slice(0, -3) + '...'; // Replace last 3 chars with ...
+    }
+
+    // Render tspan with lineText (includes truncated last line)
+}
+```
+
+**Fix 2: Size Rectangle to Actual Rendered Content**
+```javascript
+// Calculate how many lines will actually render
+let actualRenderedLines = lines.length;
+if (isOverflowing) {
+    const availableHeightForOverflow = this.maxNodeHeight - padding * 2;
+    actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
+}
+
+// Size rectangle based on actual content (no wasted space)
+const rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
+    ? actualRenderedLines * this.lineHeight + padding * 2
+    : calculatedHeight;
+```
+
+**How It Works Now**:
+- maxNodeHeight allows 5 lines → render all 5 lines, last line ends with "..."
+- Example: "Line 5 with some long text here" → "Line 5 with some long te..."
+- Rectangle height = exactly 5 lines worth of space (no wasted height)
+- User sees maximum content within the constraint
+
+**Preserves Expansion Behavior**:
+- Editing/selecting/working still bypasses `maxNodeHeight` via `shouldFullyExpand`
+- Only affects non-expanded nodes
+- Auto-expansion logic completely untouched
+
+**Issue 6: No Height Expansion When Editing**
+
+**Problem**: When editing long text with maxNodeHeight set, the textarea only showed truncated text, making editing difficult. Users couldn't see what they were typing beyond the height limit.
+
+**Solution** (lines 4062-4073):
+- Added `shouldFullyExpand` flag that checks:
+  - `this.editingTaskId === task.id` → editing mode
+  - `this.selectedTaskIds.has(task.id)` → selected state
+  - `shouldExpand` → already expanded (currentlyWorking, textLocked)
+- Bypass maxNodeHeight when `shouldFullyExpand === true`
+- Rectangle expands to show ALL lines when editing
+
+**Issue 7: No Height Expansion When Selected**
+
+**Problem**: When selecting a truncated node to lock it (for expanded text), users couldn't see the full text or easily access the lock button.
+
+**Solution**: Same `shouldFullyExpand` logic (line 4066)
+- Selection now triggers full height expansion
+- Users can see complete text before locking
+- Lock button is accessible for truncated nodes
+- Natural workflow: select → see full text → lock if desired
+
+**Benefits**:
+- ✅ Maximum text visible within height constraints
+- ✅ Editing shows all text for easier modifications
+- ✅ Selection shows all text for review before locking
+- ✅ Natural workflow for lock button usage
+- ✅ No wasted vertical space
+
+**Behavior Summary**:
+- **Normal state + maxNodeHeight set**: Shows max lines with "..." at bottom
+- **Editing**: Auto-expands to show ALL lines (ignores maxNodeHeight)
+- **Selected**: Auto-expands to show ALL lines (ignores maxNodeHeight)
+- **Working/Locked**: Already expands via existing shouldExpand logic
+- **No maxNodeHeight (0)**: Always shows all lines
+
+**Testing**:
+- maxNodeHeight 100px, 200-char text: Shows all 5 lines, last truncated with "..." ✓
+- Last line truncated mid-text (not removed): "long text he..." ✓
+- Rectangle height matches content exactly (no wasted space) ✓
+- Ellipsis positioned within rectangle bounds ✓
+- Double-click to edit: Expands to show all lines ✓
+- Click to select: Expands to show all lines ✓
+- Lock button accessible after selection ✓
+- Finish editing: Returns to truncated state ✓
+
 ---
 
-**Last Updated**: 2025-10-25 (Session 9 Final: Fix Cursor Positioning During Edit)
-**Current Line Count**: ~4875 lines in task-tree.html
-**Version**: 1.4.7 (Fixed Cursor Positioning During Edit)
+**Last Updated**: 2025-10-25 (Session 10: Truncation & Height Fixes)
+**Current Line Count**: ~4980 lines in task-tree.html
+**Version**: 1.5.5 (Multiline Truncation & Height Fix)
