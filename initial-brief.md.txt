@@ -1,0 +1,315 @@
+# Task Tree - Project Summary
+
+## Overview
+**Task Tree** is a web-based todo list application that represents tasks as an interactive graph/tree structure. Unlike traditional linear todo lists, it models real-world task relationships: parent-child hierarchies, dependencies, and work-in-progress states.
+
+**Core Philosophy**: Every task exists within a context. Tasks have parents (larger goals), children (subtasks), and dependencies (prerequisites). The visual graph makes these relationships explicit.
+
+## Core Concepts
+
+### Data Model
+Each task is a node with:
+```javascript
+{
+    id: number,              // Unique identifier
+    title: string,           // Task name
+    x, y: number,            // Canvas position
+    vx, vy: number,          // Velocity (for physics sim)
+    mainParent: number|null, // Primary parent task ID
+    otherParents: [ids],     // Secondary parent relationships
+    children: [ids],         // Child task IDs
+    dependencies: [ids],     // Tasks this depends on
+    status: 'pending'|'done',
+    currentlyWorking: boolean,
+    hidden: boolean          // For collapsed subtrees
+}
+```
+
+### Task States
+1. **Pending** (white box) - Not started
+2. **Working** (yellow border) - Actively working on this task
+3. **Done** (green box) - Completed
+
+**Only one task can be "Working" at a time.**
+
+### Relationships
+- **Parent-Child** (solid lines): Hierarchical breakdown. "Build App" → "Design UI", "Write Code"
+- **Dependencies** (dashed arrows): "Task A depends on Task B completing first"
+- **Other Parents**: Tasks can belong to multiple contexts (not currently heavily used)
+
+## Key Features
+
+### Task Management
+- **Create**: Type name + "Add Root Task" button, or "Add Child" from context menu
+- **Edit**: Double-click any node → inline editing
+- **Delete**: Context menu → Delete (deletes entire subtree)
+- **Status Cycling**: Middle-click cycles through Pending → Working → Done → Pending
+
+### Relationships
+- **Add Child**: Context menu
+- **Create Dependency**: Ctrl+Drag from task A to task B (toggle: drag again to remove)
+- **Reparent**: Alt+Drag task to new parent (automatically removes redundant dependencies)
+- **Remove Dependency**: 
+  - Ctrl+Click dependency line
+  - Ctrl+Drag again (toggle)
+  - Delete from context menu's dependency list
+
+### Visual Features
+- **Parent Chain Highlighting**: When working on a task, all ancestor tasks highlighted orange (shows your goal path)
+- **Incomplete Children Highlighting**: Red borders on incomplete children of working task
+- **Status Bar**: Shows full path to root, completion %, incomplete children list
+- **Auto-collapse**: Completed subtrees collapse automatically
+
+### Navigation
+- **Pan Canvas**: Drag empty space
+- **Move Node**: Drag node (children stay in place)
+- **Move Subtree**: Shift+Drag (entire subtree moves together, preserving relative positions)
+- **Physics Toggle**: Optional force-directed layout for automatic organization
+
+### Data Management
+- **Auto-save**: localStorage on every change
+- **Export JSON**: Download timestamped file
+- **Copy JSON**: Copy to clipboard
+- **Import JSON**: Paste JSON data
+- **Clear All**: Reset application
+- **Load Test Checklist**: Inject testing tasks for recent features
+
+## Technical Architecture
+
+### Stack
+- **Pure Vanilla JavaScript** (no frameworks)
+- **SVG** for graph rendering
+- **HTML5 Drag & Drop API**
+- **localStorage** for persistence
+
+### File Structure
+Single-file application: `task-tree.html` (~1650 lines)
+- Lines 1-350: CSS styling
+- Lines 351-367: HTML structure (controls, canvas, modals)
+- Lines 368-1650: JavaScript application logic
+
+### Key Components
+
+**App State** (`app` object):
+```javascript
+{
+    tasks: [],              // All tasks
+    taskIdCounter: 0,       // Auto-increment ID
+    dragMode: null,         // 'node'|'subtree'|'dependency'|'reparent'|'canvas'
+    selectedNode: null,     // Currently dragging task
+    editingTaskId: null,    // Task being edited
+    physicsEnabled: false,  // Force simulation on/off
+    clickTimeout: null      // For click/dblclick distinction
+}
+```
+
+**Core Methods**:
+- `render()` - Redraws entire SVG canvas
+- `updateStatusBar()` - Updates bottom bar with working task info
+- `cycleStatus()` - Middle-click status cycling
+- `addDependency()` / `removeDependency()` - Relationship management
+- `reparentTask()` - Change parent, clean dependencies
+- `getDescendants()` / `getAncestors()` - Tree traversal
+- `saveToStorage()` / `loadFromStorage()` - Persistence
+
+### Event Handling
+Mouse interactions differentiated by:
+- **No modifier**: Single node drag, click for menu
+- **Shift**: Subtree drag
+- **Ctrl/Cmd**: Dependency creation/removal
+- **Alt**: Reparent
+- **Middle-click**: Status cycling
+- **Double-click**: Edit text
+
+Click vs Double-click: 200ms delay on single-click menu display, cancelled by double-click.
+
+### Physics Simulation
+Optional force-directed layout (off by default):
+- Repulsion between nodes (only when <100px apart)
+- Attraction between parent-child
+- Damping to prevent endless drift
+- Runs in `requestAnimationFrame` loop
+
+### Rendering Pipeline
+1. Calculate working task + ancestors + incomplete children
+2. Render links (parent, dependency, other-parent)
+3. Render nodes with appropriate classes
+4. Apply CSS for visual states
+
+## User Controls Reference
+
+### Mouse Interactions
+| Action | Effect |
+|--------|--------|
+| Click | Context menu (200ms delay) |
+| Double-click | Edit task name |
+| Middle-click | Cycle status (pending→working→done) |
+| Drag | Move single node |
+| Shift+Drag | Move entire subtree |
+| Ctrl+Drag | Create/remove dependency |
+| Alt+Drag | Reparent task |
+| Ctrl+Click line | Remove dependency |
+| Drag empty space | Pan canvas |
+
+### Keyboard Shortcuts
+- **Enter** (while editing): Save
+- **Escape** (while editing): Cancel
+
+### Context Menu Options
+- Add Child
+- Mark Done / Mark Pending
+- Start Working / Stop Working
+- Hide Subtree / Show Subtree
+- Delete (+ all descendants)
+- Dependencies list with [X] remove buttons
+
+## Important Implementation Details
+
+### Sandboxing Constraints
+**The app runs in a sandboxed iframe**, which blocks:
+- `prompt()`, `confirm()`, `alert()`
+- File input dialogs
+
+**Solutions implemented**:
+- Custom modal system for confirmations/alerts
+- Textarea-based JSON import (paste instead of file select)
+- Default task names ("New Task") with immediate edit mode
+
+### Click Detection
+**Challenge**: Distinguish click vs drag vs double-click.
+
+**Solution**:
+- Store `dragOriginalPos` on mousedown
+- On mouseup, calculate distance moved
+- If <5px: treat as click
+- If click: setTimeout 200ms for menu
+- If double-click: clearTimeout to prevent menu
+
+### Dependency Cycles
+**Prevention**: `wouldCreateCycle()` checks if adding A→B would create a cycle by traversing from B back to A.
+
+### Text Rendering
+Uses SVG `<foreignObject>` to embed HTML `<input>` for inline editing. This allows standard text input behavior inside SVG.
+
+### Hit Detection for Thin Lines
+Dependency lines are 2px thick (hard to click). Solution: Two overlapping lines:
+1. Invisible 15px line with `pointer-events: stroke` (hit detection)
+2. Visible 2px dashed line with `pointer-events: none` (visual)
+
+## Development Workflow
+
+### Making Changes
+1. Identify feature/bug
+2. Write tech spec: problem analysis, solution approach, code changes
+3. Get approval
+4. Implement changes
+5. Update test checklist
+6. Test using "🧪 Test Checklist" button
+
+### Testing
+Click "🧪 Test Checklist" button to inject structured test tasks. Check off items as you verify functionality.
+
+### Debugging
+- Check browser console for errors
+- `console.log(app.tasks)` to inspect state
+- Use Export JSON to save state before testing
+- Use Import JSON to restore known-good state
+
+## Known Limitations
+
+1. **No undo/redo** - All actions immediate and persistent
+2. **Single user** - No collaboration features
+3. **No task properties** - Can't add due dates, priorities, notes, tags
+4. **Physics is basic** - Force-directed layout is simple, not optimal
+5. **No search/filter** - Hard to find tasks in large trees
+6. **No keyboard navigation** - Mouse required for most operations
+7. **No mobile support** - Desktop browser only
+
+## Future Ideas (Documented)
+
+From conversations with user:
+- **LLM-powered suggestions**: Suggest which nodes should link based on descriptions
+- **Time estimation**: Duration per task, critical path calculation
+- **Subtree templates**: Save/reuse common patterns
+- **Multi-user collaboration**: Shared trees with conflict resolution
+- **Better visualization**: Zoom, minimap, custom layouts
+- **Task properties**: Due dates, priorities, notes, attachments
+
+## Getting Started as a Developer
+
+### Prerequisites
+- Modern browser (Chrome, Firefox, Safari, Edge)
+- Text editor
+- Basic understanding of: JavaScript, SVG, DOM APIs
+
+### Running Locally
+1. Save `task-tree.html` to disk
+2. Open in browser
+3. Start adding tasks
+
+### Making Your First Change
+1. Open `task-tree.html` in editor
+2. Find the relevant method (use Ctrl+F)
+3. Make changes
+4. Refresh browser
+5. Test using checklist feature
+
+### Code Organization Tips
+- **CSS**: Lines 1-350
+- **HTML**: Lines 351-367
+- **App State**: ~Line 410
+- **Event Handlers**: ~Lines 440-650
+- **Core Logic**: Lines 650-1400
+- **Rendering**: ~Line 1100
+- **Helpers**: Lines 1400-1650
+
+### Common Tasks
+
+**Add new task property**:
+1. Update task creation in `addRootTask()` and `addChildTask()`
+2. Update `saveToStorage()` / `loadFromStorage()` if needed
+3. Update UI to display/edit property
+
+**Add new relationship type**:
+1. Add array to task model
+2. Add visual rendering in `render()`
+3. Add interaction handler (drag + modifier key)
+4. Add removal method
+
+**Add new visual state**:
+1. Add CSS class (`.task-node.newstate rect { ... }`)
+2. Add logic in `render()` to apply class
+3. Add UI to toggle state
+
+## Architecture Decisions
+
+### Why Single File?
+- **Simplicity**: No build process, bundling, or dependencies
+- **Portability**: Share one file, runs anywhere
+- **Fast iteration**: Save → Refresh → Test
+
+### Why Vanilla JS?
+- **Zero dependencies**: No npm, webpack, React, etc.
+- **Learning**: Forces understanding of fundamentals
+- **Performance**: Direct DOM manipulation is fast
+- **Longevity**: Won't break when framework versions change
+
+### Why SVG?
+- **Scalability**: Infinite zoom without pixelation
+- **Easy manipulation**: Declarative attributes for positioning
+- **Native events**: Click/drag work out of box
+- **Styling**: CSS works on SVG elements
+
+### Why localStorage?
+- **Zero config**: Built into browser
+- **Instant save**: No server/database needed
+- **Offline-first**: Works without internet
+- **Simple API**: Just `setItem()` and `getItem()`
+
+## Summary
+
+**Task Tree is a single-file, vanilla JS web app for hierarchical task management with dependency tracking.** It visualizes todos as an interactive graph where you can see parent-child relationships, dependencies, and focus on what you're currently working on. The visual, spatial nature makes it easy to understand complex task structures at a glance.
+
+**Core innovation**: Most todo apps are flat lists. Task Tree embraces hierarchy and relationships, making project planning more intuitive for complex work.
+
+**Current state**: Fully functional PoC with robust features. Ready for personal use, not yet production-ready for teams.
