@@ -3285,8 +3285,78 @@ Unlike typical viewport navigation, this app's canvas panning actually modifies 
 - Preserved "Origin Home" functionality through Homes system
 - Cleaner, safer UX without unexpected task movement
 
+### Session 14: Dynamic Text Input Resizing
+
+**New Feature**: Textbox and rectangle now resize dynamically as you type during inline editing.
+
+**Problem**:
+- Previously, when editing a task, the rectangle and textarea had fixed dimensions
+- If you typed more text, it would scroll within the fixed box
+- If you deleted text, the box stayed the same large size
+- Awkward editing experience, especially for multiline text
+
+**Solution**: Real-time dynamic resizing
+- Rectangle and textarea expand/contract as you type
+- Grows wider when text exceeds current width
+- Grows taller when adding newlines or wrapping text
+- Shrinks when deleting text (respects min/max constraints)
+- Natural editing experience like modern text editors
+
+**Implementation Details**:
+
+**1. Extracted Sizing Logic** (lines 2172-2198):
+- New `calculateTextBoxDimensions(text)` helper method
+- Takes text string, returns `{ rectWidth, rectHeight, lines }`
+- Reusable by both initial render and dynamic resizing
+- Applies all configuration constraints (minNodeWidth, maxNodeWidth, maxNodeHeight, lineHeight, nodePadding)
+
+**2. Dynamic Resize Method** (lines 2200-2238):
+- New `resizeEditingBox()` method
+- Gets current textarea value
+- Calculates new dimensions using helper
+- Updates DOM elements directly:
+  - `<rect>` - background rectangle
+  - `<foreignObject>` - container for textarea
+  - `textarea.rows` - for better UX
+- Fast and efficient (no full canvas re-render)
+
+**3. Input Event Handler** (line 4288):
+- Added `textarea.oninput = () => this.resizeEditingBox();`
+- Triggers on every keystroke
+- No debouncing needed - calculations are fast
+- Immediate visual feedback
+
+**Key Features**:
+- ✅ **Width adjustment**: Expands for long single lines, shrinks when deleted
+- ✅ **Height adjustment**: Grows with newlines and text wrapping
+- ✅ **Min/max constraints**: Respects minNodeWidth, maxNodeWidth, maxNodeHeight
+- ✅ **Configuration aware**: Uses charWidth, lineHeight, nodePadding settings
+- ✅ **Word wrapping**: Respects wordWrap setting for line breaks
+- ✅ **Smooth UX**: No flicker, no focus loss, cursor position maintained
+
+**Benefits**:
+- Natural editing experience like Google Docs, Notion, etc.
+- Always see full text being edited (no scrolling in tiny box)
+- Visual feedback matches final rendered size
+- No performance impact (targeted DOM updates only)
+
+**Edge Cases Handled**:
+- Empty text: Shows minimum 2 rows
+- Very long single line: Wraps according to maxNodeWidth
+- Multiline disabled: Still allows vertical growth for newlines
+- Max height reached: Textarea becomes scrollable
+
+**Testing**:
+- ✓ Type long text → Rectangle grows horizontally
+- ✓ Add newlines → Rectangle grows vertically
+- ✓ Delete text → Rectangle shrinks appropriately
+- ✓ Respects minNodeWidth (never too small)
+- ✓ Respects maxNodeWidth (wraps when exceeded)
+- ✓ Respects maxNodeHeight (scrollable when exceeded)
+- ✓ Works with all font/padding/spacing settings
+
 ---
 
-**Last Updated**: 2025-10-26 (Session 13: Removed Reset View)
-**Current Line Count**: ~5540 lines in task-tree.html
-**Version**: 1.8.2 (Reset View Removed)
+**Last Updated**: 2025-10-26 (Session 14: Dynamic Text Input)
+**Current Line Count**: ~5580 lines in task-tree.html
+**Version**: 1.9.0 (Dynamic Editing UX)

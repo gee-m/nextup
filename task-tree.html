@@ -2197,6 +2197,46 @@
                 return { rectWidth, rectHeight, lines };
             },
 
+            resizeEditingBox() {
+                // Dynamically resize the editing textarea and its container rectangle
+                // Called on every keystroke (oninput event) during editing
+
+                if (this.editingTaskId === null) return;
+
+                const textarea = document.getElementById('edit-input');
+                if (!textarea) return;
+
+                // Get current text from textarea
+                const currentText = textarea.value || '';
+
+                // Calculate new dimensions based on current text
+                const { rectWidth, rectHeight, lines } = this.calculateTextBoxDimensions(currentText);
+
+                // Find the task node and its child elements
+                const taskNode = document.querySelector(`.task-node[data-id="${this.editingTaskId}"]`);
+                if (!taskNode) return;
+
+                const rect = taskNode.querySelector('rect');
+                const foreignObject = taskNode.querySelector('foreignObject');
+
+                if (!rect || !foreignObject) return;
+
+                // Update rectangle dimensions (centered at 0,0)
+                rect.setAttribute('x', -rectWidth / 2);
+                rect.setAttribute('y', -rectHeight / 2);
+                rect.setAttribute('width', rectWidth);
+                rect.setAttribute('height', rectHeight);
+
+                // Update foreignObject (container for textarea)
+                foreignObject.setAttribute('x', -rectWidth / 2);
+                foreignObject.setAttribute('y', -rectHeight / 2 + 5);
+                foreignObject.setAttribute('width', rectWidth);
+                foreignObject.setAttribute('height', rectHeight - 10);
+
+                // Update textarea rows for better UX
+                textarea.rows = Math.max(2, lines.length);
+            },
+
             wrapText(text, maxWidth, charWidth, wordWrap) {
                 // Return single line if multiline is disabled
                 if (!this.enableMultiline) {
@@ -4244,6 +4284,8 @@
                         textarea.onmousedown = (e) => e.stopPropagation();
                         textarea.onclick = (e) => e.stopPropagation();
                         textarea.onblur = () => this.finishEditing(true);
+                        // Dynamically resize box as user types
+                        textarea.oninput = () => this.resizeEditingBox();
 
                         foreignObject.appendChild(textarea);
                         g.appendChild(foreignObject);
