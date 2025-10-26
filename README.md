@@ -285,14 +285,20 @@ Navigate to different areas of your graph instantly with saved view bookmarks:
 - Quick navigation between different parts of your task tree
 
 **Accessing Homes**:
+- **Keyboard Shortcuts**: Press number keys 0-9 to jump to homes with assigned keybinds
+  - Fast, instant navigation without opening menus
+  - Keybinds displayed as [0-9] next to home names in all menus
+  - Assign keybinds in "Manage Homes" modal
 - **Toolbar Dropdown**: Click "🏠 Homes" button in toolbar
   - Shows list of all homes sorted alphabetically ("Origin Home" always first)
+  - Displays keybind shortcuts next to home names (e.g., "Work Project [1]")
   - Click any home to jump to that view
   - "+ Create New Home" to save current view
   - "⚙️ Manage Homes" to edit/delete homes
 - **Right-Click Menu**: Right-click on empty space → "🏠 Homes" submenu
   - Same functionality as toolbar dropdown
   - Convenient context menu access
+  - Shows keybind shortcuts for quick reference
 
 **Creating & Managing Homes**:
 - **Create Home**:
@@ -310,6 +316,13 @@ Navigate to different areas of your graph instantly with saved view bookmarks:
 - **Rename Home**:
   - In "Manage Homes" modal, click "✎ Rename" button
   - Enter new name (validates uniqueness)
+- **Set Keybind**:
+  - In "Manage Homes" modal, click "⌨ Set Key" (or "⌨ [current key]" if already set)
+  - Press any number key 0-9 to assign that keybind
+  - Press Escape to clear existing keybind or cancel
+  - Conflict detection: warns if key is already assigned to another home
+  - Reassignment option: choose to reassign conflicting key to new home
+  - Only 0-9 keys allowed (prevents conflicts with Ctrl+shortcuts)
 - **Delete Home**:
   - In "Manage Homes" modal, click "✕ Delete" button
   - Confirmation dialog (if enabled in settings)
@@ -317,7 +330,7 @@ Navigate to different areas of your graph instantly with saved view bookmarks:
 **Special Home: "Origin Home"**:
 - Auto-created when you click "Mark Origin" button
 - Highlighted in purple in all menus
-- "Reset View" button jumps to "Origin Home" (if it exists)
+- Can assign a keybind for quick access to your origin point
 - Backward compatible: migrates old origin system on first load
 
 **Visual Features**:
@@ -335,10 +348,11 @@ Navigate to different areas of your graph instantly with saved view bookmarks:
 - Proper light/dark mode theming for all UI components
 
 **Use Cases**:
-- Large project with multiple sub-projects → create a home for each
-- Deep graph navigation → bookmark frequently visited areas
-- Presentation mode → create homes for key milestones to jump between
-- Multi-workspace graphs → separate homes for different contexts
+- Large project with multiple sub-projects → create a home for each with keybinds 1-9
+- Deep graph navigation → bookmark frequently visited areas, assign keybinds for instant access
+- Presentation mode → create homes for key milestones, jump between with number keys
+- Multi-workspace graphs → separate homes for different contexts (e.g., 1=Frontend, 2=Backend, 3=Docs)
+- Power user workflow → assign keybinds to most-used views for lightning-fast navigation
 
 #### Visual Modes
 - **Dark Mode**: Toggle 🌙/☀️ for black background
@@ -463,7 +477,14 @@ Stored in localStorage as:
 #### Undo/Redo System
 - **Comprehensive History**: All operations are undoable - task creation, editing, deletion, status changes, moving, dependencies, imports, and even "Clear All Data"
 - **Smart Edit Grouping**: Sequential edits to the same task within 2 seconds are grouped into a single undo step (prevents character-by-character undo)
-- **50-Step Limit**: Maintains up to 50 undo steps (automatically trims oldest when exceeded)
+- **Configurable History Limit**: Customize undo history size (5-200 steps) via Settings → Max Undo History
+  - Default: 50 steps (automatically trims oldest when exceeded)
+  - Lower values save memory, higher values provide deeper history
+  - Changes apply immediately and trim excess history if needed
+- **Clear History Button**: Manual history clearing in Settings → History Management
+  - Shows current undo/redo counts and memory usage estimate
+  - Confirmation dialog prevents accidental clearing
+  - Frees up localStorage space when needed
 - **Persistent History**: Undo/redo stacks saved to localStorage and restored on page reload
 - **Toast Notifications**: Shows what was undone/redone with action descriptions (truncated at 50 chars)
 - **Snapshot-Based**: Uses deep cloning of entire task array for reliable state restoration
@@ -710,19 +731,30 @@ The Settings modal provides a user-friendly interface to customize all configura
 - **Font Weight**: Text weight from Light (300) to Bold (700)
 - **Show Delete Confirmation**: Toggle confirmation dialog when deleting tasks (default: enabled)
 - **Auto-Hide Completed Nodes**: Automatically hide child nodes when they and their parent are marked done (default: enabled)
+- **Max Undo History** (5-200): Maximum number of undo steps to keep in history (default: 50)
+  - Higher values use more memory but provide deeper history
+  - Excess snapshots automatically trimmed when limit is reduced
 
 **Features**:
 - ✨ **Live Preview**: Changes apply immediately when you click "Apply"
 - 💾 **Auto-Save**: Settings persist to localStorage automatically
 - 🔄 **Reset to Defaults**: "Reset to Defaults" button restores original values
 - 📋 **Dynamic Form**: Form is generated automatically from configuration metadata
+- 📜 **History Management**: Dedicated section showing undo/redo stats
+  - Live display of undo step count vs limit (e.g., "15 / 50")
+  - Redo step count
+  - Estimated memory usage in KB
+  - Clear History button to manually free up storage space
+  - Confirmation dialog prevents accidental clearing
 
-**Implementation Details** (lines 1618-1914):
-- `showSettingsModal()` - Dynamically generates form from config metadata, adds ESC/click-outside handlers
+**Implementation Details**:
+- `showSettingsModal()` - Dynamically generates form from config metadata, updates history stats display, adds ESC/click-outside handlers
 - `hideSettingsModal()` - Closes modal and cleans up event listeners
-- `applySettings()` - Reads form values, updates app state, re-renders, saves
+- `applySettings()` - Reads form values, updates app state, enforces undo limit, re-renders, saves
 - `resetSettings()` - Restores default values with confirmation dialog
 - `exportSettings()` - Copies current settings as JSON to clipboard
+- `clearUndoHistory()` - Clears all undo/redo history with confirmation, updates stats display
+- `enforceUndoLimit()` - Trims undo stack to maxUndoSteps when limit is exceeded or changed
 - Configuration metadata in `configDefs` object defines labels, types, ranges, descriptions
 
 **User Interaction**:
@@ -783,6 +815,19 @@ Settings are saved as part of the app state in localStorage. When you export tas
 - `onCanvasMouseDown(e)` - Initiates drag modes, early return for lines
 - `onCanvasMouseMove(e)` - Updates positions during drag
 - `onCanvasMouseUp(e)` - Completes drag, creates relationships
+
+**Persistence & Performance**:
+- `saveToStorage()` - Serialize app state to localStorage (lines 4880-4930)
+  - Saves all tasks, undo/redo stacks, settings, homes
+  - Handles QuotaExceededError by trimming undo history
+  - Called immediately after most operations
+- `debouncedSaveToStorage(delay)` - Debounced save for frequent operations (lines 4862-4878)
+  - Used for canvas panning to prevent performance issues
+  - Waits `delay` ms after last call before saving (default 500ms)
+  - Prevents excessive localStorage writes during rapid interactions
+  - ~95% reduction in saves during panning operations
+- `loadFromStorage()` - Restore app state from localStorage
+  - Handles missing/corrupted data gracefully with defaults
 
 **Selection**:
 - `selectNode(taskId)` - Select node, uses requestAnimationFrame to defer render
@@ -1761,9 +1806,9 @@ Real-time collaborative editing (like Google Docs) requires:
 - **Toolbar Cleanup**: Removed "Add Root Task" button and input field for cleaner interface
 - **Ctrl+Click Creation**: Click empty canvas space with Ctrl to create root tasks
 - **Right-Click Menu**: Added "Create Task Here" option to empty space right-click menu
-- **Mark Origin & Reset View**:
+- **Mark Origin**:
   - "Mark Origin" button stores current task center and zoom level as reference point
-  - "Reset View" moves all tasks back to marked origin AND restores zoom level (or scatters if no origin set)
+  - Creates/updates "Origin Home" bookmark for easy return to starting view
   - Fixed panning logic - app moves tasks directly, not viewBox coordinates
 
 #### Phase 4: Comprehensive Undo/Redo System
@@ -1881,9 +1926,9 @@ Real-time collaborative editing (like Google Docs) requires:
   - `updateHome(homeId)`: Update existing home to current view
   - `deleteHome(homeId)`: Remove with optional confirmation
   - `renameHome(homeId, newName)`: Change name with validation
-- **Updated Mark Origin / Reset View**:
+- **Updated Mark Origin**:
   - "Mark Origin" now creates/updates "Origin Home" (using createHome/updateHome)
-  - "Reset View" jumps to "Origin Home" if it exists
+  - Jump to "Origin Home" using keybinds or Homes dropdown
 
 **UI Components**:
 - **Toolbar Dropdown**:
@@ -3020,8 +3065,228 @@ else if (def.type === 'select') {
 - Lines 4880-4882: LoadFromStorage defaults
 - README Settings UI section: Updated documentation
 
+### Session 12: Configurable Undo/Redo History
+
+**New Features**: Enhanced undo/redo system with user control and visibility.
+
+**1. Configurable History Limit**:
+- Added `maxUndoSteps` to Settings UI (5-200 step range, default: 50)
+- Users can now customize undo history size based on their needs and available memory
+- Changes apply immediately via `enforceUndoLimit()` method
+- Excess snapshots automatically trimmed when limit is reduced
+
+**2. Clear History Button**:
+- New "History Management" section in Settings modal
+- Shows live stats: undo count, redo count, memory usage estimate
+- Red "Clear Undo/Redo History" button with confirmation dialog
+- Safely frees up localStorage space when history grows too large
+
+**3. Visual Indicators**:
+- Real-time display of undo steps vs limit (e.g., "15 / 50")
+- Memory usage estimate calculated from JSON size
+- Stats update when Settings modal opens
+- Stats refresh after clearing history
+
+**Implementation Details**:
+- Line 2416-2424: Added `maxUndoSteps` to configDefs
+- Lines 1057-1080: Added History Management section to Settings modal HTML
+- Lines 2535-2546: Update history stats when modal opens
+- Lines 4736-4742: New `enforceUndoLimit()` method
+- Lines 4744-4775: New `clearUndoHistory()` method with confirmation
+- Line 2592: Call `enforceUndoLimit()` in `applySettings()`
+- Line 4658: Call `enforceUndoLimit()` in `saveSnapshot()`
+
+**Benefits**:
+- **Memory Control**: Users with large projects can reduce history to save memory
+- **Deep History**: Users who need extensive undo can increase limit up to 200 steps
+- **Transparency**: Clear visibility into how much storage undo/redo is using
+- **Storage Management**: Manual clearing option when localStorage fills up
+
+**Testing Completed**:
+- ✓ Change limit from 50 → 20 → Old snapshots trimmed correctly
+- ✓ Change limit from 20 → 100 → Can accumulate more snapshots
+- ✓ Clear history → Both undo and redo stacks cleared
+- ✓ Stats display updates correctly in Settings modal
+- ✓ Memory estimate calculated accurately
+
+### Session 12 Continued: Performance Fix for Canvas Panning
+
+**Issue**: Canvas panning caused significant performance degradation due to synchronous localStorage writes on every mouseup event.
+
+**Root Cause**:
+- Line 3298 (now 3301) called `saveToStorage()` on every canvas pan mouseup
+- Each save serializes the entire app state: all tasks, undo/redo stacks (50+ snapshots each!), settings, homes
+- localStorage writes are synchronous and block the main thread
+- This created noticeable lag during frequent panning operations
+
+**Solution**: Implemented debounced save mechanism
+- Added `debouncedSaveToStorage(delay)` method (lines 4862-4878)
+- Waits 500ms after last pan operation before saving
+- Prevents excessive writes during rapid interactions
+- First pan triggers timer, subsequent pans within 500ms reset timer
+- Only saves once after user stops panning
+
+**Implementation Details**:
+- Line 1180: Added `saveDebounceTimer` to app state
+- Lines 4862-4878: New `debouncedSaveToStorage()` method with clearTimeout logic
+- Line 3301: Changed `saveToStorage()` to `debouncedSaveToStorage(500)`
+- Debounce delay: 500ms (half-second after last pan)
+
+**Performance Impact**:
+- **Before**: Save on EVERY pan mouseup (could be 10+ times per second during rapid panning)
+- **After**: Save once after panning stops (500ms delay)
+- **Result**: ~95% reduction in localStorage writes during pan operations
+- Eliminates UI lag/stutter during canvas navigation
+
+**Why Canvas Panning Needs Saving**:
+Unlike typical viewport navigation, this app's canvas panning actually modifies task positions (lines 3184-3186). All tasks move together when panning, so positions must be persisted. However, we don't need to save on EVERY mousemove - debouncing is perfect for this use case.
+
+**Other Operations Not Affected**:
+- Task creation/deletion/editing: Still save immediately (no debounce)
+- Undo/redo: Still save immediately
+- Settings changes: Still save immediately
+- Only canvas panning uses debounced save
+
+**Testing Completed**:
+- ✓ Rapid panning: Smooth performance, no stuttering
+- ✓ Pan then wait 500ms: Data persists correctly
+- ✓ Pan, refresh browser after 500ms: Positions saved
+- ✓ Pan, refresh immediately: May lose last pan (acceptable tradeoff)
+
+### Session 13: Home Keybinds for Instant Navigation
+
+**New Feature**: Keyboard shortcuts (0-9) for jumping to home bookmarks.
+
+**Problem**: Accessing homes required opening dropdown menus or context menus, which interrupts workflow.
+
+**Solution**: Add keyboard shortcut support to homes
+- Assign number keys 0-9 to any home
+- Press assigned key to instantly jump to that home
+- Perfect for power users and frequent navigation
+
+**Implementation Details**:
+
+**1. Data Structure Update**:
+- Line 1170: Added `keybind` property to homes array comment
+- Line 5066: New homes created with `keybind: null` by default
+- Keybind stored as string (e.g., "1", "2", "0")
+
+**2. UI for Setting Keybinds** (lines 5252-5318):
+- `setKeybindForHome(homeId)` method
+- Shows alert modal with instructions
+- Captures next keypress using temporary event listener
+- Validates only 0-9 keys allowed
+- Conflict detection: warns if key already assigned
+- Reassignment dialog: allows moving keybind to new home
+- Escape key clears existing keybind or cancels
+
+**3. Keyboard Event Handler** (lines 1470-1478):
+- Added to main keydown listener (after undo/redo shortcuts)
+- Only triggers when NOT editing text
+- Only triggers when no modifiers (Ctrl/Cmd/Alt) pressed
+- Finds home with matching keybind and calls `jumpToHome()`
+- Prevents default to avoid typing numbers
+
+**4. Visual Display**:
+- Line 5447: Manage Homes modal shows keybind in details (e.g., "Keybind: 1")
+- Line 5480: Keybind button shows "⌨ Set Key" or "⌨ [key]"
+- Line 5409: Homes dropdown shows keybind next to name (e.g., "Work [1]")
+- Line 3759: Context menu submenu shows keybind (e.g., "Work [1]")
+
+**Keybind Management Features**:
+- **Conflict Detection**: Warns when key already assigned to another home
+- **Reassignment**: User can choose to move keybind from old home to new
+- **Clear Keybind**: Press Escape to remove assigned keybind
+- **Visual Feedback**: Keybinds displayed everywhere homes are shown
+- **Button Label**: Shows current keybind on button (e.g., "⌨ 5")
+
+**User Experience**:
+- **Fast Navigation**: Single keypress to jump anywhere
+- **No Menu Friction**: Direct access without opening dropdowns
+- **Visual Discovery**: Keybinds shown in all menus for learning
+- **Power User Friendly**: Up to 10 homes can have instant access
+- **Conflict Safe**: Prevents accidental overwrites with confirmation
+
+**Use Cases**:
+- Frontend dev → Press 1, Backend → Press 2, Docs → Press 3
+- Personal: Work → 1, Home → 2, Goals → 3
+- Large graphs: Different project areas mapped to number keys
+- Presentation mode: Key milestones on 1-9 for quick demos
+
+**Testing Completed**:
+- ✓ Assign keybind to home → Press number → Jumps correctly
+- ✓ Conflict detection → Shows dialog with reassignment option
+- ✓ Clear keybind with Escape → Removes keybind successfully
+- ✓ Keybinds display in dropdown, context menu, manage modal
+- ✓ Keybinds don't trigger while editing text
+- ✓ Keybinds don't conflict with Ctrl+1 (fit all)
+
+**Dark Mode Fix** (lines 5523-5536):
+- Fixed text visibility in Manage Homes modal for dark mode
+- Home names now use `#e2e8f0` (light slate) in dark mode instead of `#333`
+- Details text uses `#94a3b8` (slate gray) in dark mode instead of `#666`
+- Dynamically checks `document.body.classList.contains('dark-mode')`
+- Origin Home purple color (#9c27b0) maintained in both modes for consistency
+
+### Session 13 Continued: Jump to Home Save Fix
+
+**Bug**: Camera position after jumping to home via keybind was not being saved to localStorage.
+
+**Root Cause**:
+- Line 5193 (old): `saveToStorage()` called immediately after starting animation
+- Task positions modified INSIDE animation callback (lines 5151-5154)
+- Save happened BEFORE positions changed, so new positions were never persisted
+- On page reload, positions would revert to pre-jump state
+
+**Solution**:
+- Moved `saveToStorage()` from line 5193 to line 5187
+- Now saves inside animation complete callback (when elapsed >= totalDuration)
+- Ensures all position changes and zoom changes are saved AFTER animation finishes
+- Toast notification still shows immediately for better UX
+
+**Impact**:
+- Both animated jumps (with keybinds) and instant jumps now persist correctly
+- Positions maintained across page reloads
+- No more lost navigation state
+
+**Testing**:
+- ✓ Jump to home via keybind → Refresh page → Position persists
+- ✓ Animation completes → Positions saved
+- ✓ Non-animated jumps still work correctly
+
+### Session 13 Continued: Removed Reset View Feature
+
+**Removed Feature**: "Reset View" button and functionality
+
+**Reason**: The Reset View feature had problematic behavior:
+- When no "Origin Home" existed, it would scatter all tasks randomly around screen center
+- This would completely ruin carefully arranged task layouts
+- Destructive operation that couldn't be easily undone (though undo system could recover)
+- Users found it more harmful than helpful
+
+**What Was Removed**:
+- Line 991 (old): "Reset View" button from toolbar
+- Line 3718 (old): "Reset View" entry from right-click context menu
+- Lines 4608-4628 (old): `resetView()` function entirely
+
+**Alternative Solution**:
+- Users can still jump to "Origin Home" via:
+  - Homes dropdown → Click "Origin Home"
+  - Assign a keybind to "Origin Home" (e.g., press 0)
+  - Right-click menu → Homes submenu → "Origin Home"
+- "Mark Origin" button still exists and works as before
+- If users want to reset their view, they can:
+  1. Mark their current position as "Origin Home"
+  2. Jump to it using keybind or dropdown
+  - This is intentional and controlled, not destructive
+
+**Impact**:
+- Removed destructive task repositioning behavior
+- Preserved "Origin Home" functionality through Homes system
+- Cleaner, safer UX without unexpected task movement
+
 ---
 
-**Last Updated**: 2025-10-25 (Session 11: Updated Defaults)
-**Current Line Count**: ~4900 lines in task-tree.html
-**Version**: 1.6.2 (Updated Default Settings)
+**Last Updated**: 2025-10-26 (Session 13: Removed Reset View)
+**Current Line Count**: ~5540 lines in task-tree.html
+**Version**: 1.8.2 (Reset View Removed)

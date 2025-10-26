@@ -988,7 +988,6 @@
         <button class="secondary" onclick="app.copyDataToClipboard(event)">Copy JSON</button>
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
-        <button class="secondary" onclick="app.resetView()">Reset View</button>
         <div class="info">
             <span>Double-click: edit | Right-click: menu (or on empty space) | Left-click: select | Backspace: delete | Middle-click: cycle | Ctrl+Click: create task | Shift+Drag: subtree | Scroll: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
         </div>
@@ -1053,6 +1052,32 @@
             <h2>⚙️ Settings</h2>
             <p style="color: #666; font-size: 13px; margin-bottom: 20px;">Customize appearance and behavior</p>
             <div id="settings-form"></div>
+
+            <!-- History Management Section -->
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #ddd;">
+                <h3 style="margin-bottom: 15px; font-size: 16px;">📜 History Management</h3>
+                <div id="history-stats" style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 15px; font-size: 13px;">
+                    <div style="margin-bottom: 8px;">
+                        <strong>Current History:</strong>
+                    </div>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li>Undo steps: <span id="undo-count">0</span> / <span id="undo-limit">50</span></li>
+                        <li>Redo steps: <span id="redo-count">0</span></li>
+                        <li>Memory estimate: ~<span id="history-size">0</span> KB</li>
+                    </ul>
+                </div>
+                <button
+                    onclick="app.clearUndoHistory()"
+                    style="background: #f44336; color: white; border: 1px solid #d32f2f; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%;"
+                    onmouseover="this.style.background='#d32f2f'"
+                    onmouseout="this.style.background='#f44336'">
+                    🗑️ Clear Undo/Redo History
+                </button>
+                <p style="font-size: 12px; color: #666; margin-top: 8px; margin-bottom: 0;">
+                    Removes all undo/redo history to free up storage space. This action cannot be undone.
+                </p>
+            </div>
+
             <div class="modal-buttons">
                 <button onclick="app.applySettings()">Apply</button>
                 <button class="secondary" onclick="app.exportSettings()">Export Settings</button>
@@ -1141,7 +1166,7 @@
             arrowStyle: 'straight',  // Arrow path style: 'straight' or 'curved'
             arrowCurvature: 0.25,    // Curve intensity for curved arrows (0.1 to 0.5)
             // Homes - named bookmarks for quick navigation
-            homes: [],            // Array of {id, name, centerX, centerY, zoomLevel, timestamp}
+            homes: [],            // Array of {id, name, centerX, centerY, zoomLevel, timestamp, keybind}
             homeIdCounter: 1,     // For unique IDs
             // Undo/Redo system
             undoStack: [],        // Array of {tasks: [], description: string, timestamp: number}
@@ -1150,6 +1175,8 @@
             isUndoing: false,     // Flag to prevent saveSnapshot during undo/redo
             lastSnapshotTime: 0,  // For 2-second edit grouping
             lastSnapshotTaskId: null, // For grouping edits to same task
+            // Debounced save for performance
+            saveDebounceTimer: null,  // Timer for debounced saves (canvas pan, etc.)
             // User preferences
             showDeleteConfirmation: true,  // Show confirmation dialog when deleting tasks
             autoHideCompletedNodes: true,  // Auto-hide nodes when task and parent are done
@@ -1437,6 +1464,16 @@
                         (e.ctrlKey && e.key.toLowerCase() === 'y')) {
                         e.preventDefault();
                         this.redo();
+                    }
+
+                    // Number keys (0-9) = jump to home with that keybind (only when not modifying with Ctrl/Cmd/Alt)
+                    if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
+                        // Find home with this keybind
+                        const home = this.homes.find(h => h.keybind === e.key);
+                        if (home) {
+                            e.preventDefault();
+                            this.jumpToHome(home.id);
+                        }
                     }
                 });
             },
@@ -2132,6 +2169,34 @@
                 this.render();
             },
 
+            calculateTextBoxDimensions(text) {
+                // Helper method to calculate rectangle dimensions for given text
+                // Returns { rectWidth, rectHeight, lines }
+                // Used by both render() and resizeEditingBox() for consistent sizing
+
+                const padding = this.nodePadding;
+                const charWidth = this.charWidth;
+                const minWidth = this.minNodeWidth;
+
+                // Wrap text into lines based on max width
+                const lines = this.wrapText(text, this.maxNodeWidth, charWidth, this.wordWrap);
+
+                // Calculate width: minimum of (maxNodeWidth OR longest line width OR minWidth)
+                const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
+                const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
+
+                // Calculate height: lines * lineHeight + vertical padding
+                const verticalPadding = 10;
+                const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
+
+                // Apply max height constraint if configured
+                const rectHeight = this.maxNodeHeight > 0
+                    ? Math.min(this.maxNodeHeight, calculatedHeight)
+                    : calculatedHeight;
+
+                return { rectWidth, rectHeight, lines };
+            },
+
             wrapText(text, maxWidth, charWidth, wordWrap) {
                 // Return single line if multiline is disabled
                 if (!this.enableMultiline) {
@@ -2412,6 +2477,15 @@
                         max: 0.5,
                         step: 0.05,
                         description: 'Intensity of curve for curved arrows (0.05 = subtle, 0.5 = dramatic)'
+                    },
+                    maxUndoSteps: {
+                        label: 'Max Undo History',
+                        type: 'number',
+                        default: 50,
+                        min: 5,
+                        max: 200,
+                        step: 5,
+                        description: 'Maximum number of undo steps to keep in history (5-200). Higher values use more memory.'
                     }
                 };
 
@@ -2497,6 +2571,19 @@
                 const modal = document.getElementById('settings-modal');
                 modal.addEventListener('click', this._settingsClickHandler);
 
+                // Update history stats
+                document.getElementById('undo-count').textContent = this.undoStack.length;
+                document.getElementById('undo-limit').textContent = this.maxUndoSteps;
+                document.getElementById('redo-count').textContent = this.redoStack.length;
+
+                // Estimate memory usage
+                const historyJSON = JSON.stringify({
+                    undoStack: this.undoStack,
+                    redoStack: this.redoStack
+                });
+                const sizeKB = Math.round(historyJSON.length / 1024);
+                document.getElementById('history-size').textContent = sizeKB;
+
                 // Show modal
                 modal.classList.add('show');
             },
@@ -2539,6 +2626,9 @@
                         this[key] = input.value;
                     }
                 }
+
+                // Enforce undo limit if maxUndoSteps was changed
+                this.enforceUndoLimit();
 
                 // Re-render to apply visual changes
                 this.render();
@@ -3244,7 +3334,8 @@
                     // Don't create undo snapshot for canvas panning - it's a viewport navigation
                     // action, not a content modification. Creating a snapshot would clear the
                     // redo stack, preventing users from redoing after panning to look around.
-                    this.saveToStorage();
+                    // Use debounced save to prevent performance issues from frequent localStorage writes
+                    this.debouncedSaveToStorage(500);
                 } else if (this.dragMode === 'box-select' && this.boxSelectStart) {
                     // Complete box selection
                     const pt = this.getSVGPoint(e);
@@ -3651,7 +3742,6 @@
                             this.render();
                         }
                     },
-                    { label: 'Reset View', action: () => this.resetView() },
                     { label: 'Zoom to Fit', action: () => this.zoomToFit() },
                     { label: 'Mark Origin', action: () => this.markOrigin() }
                 ];
@@ -3691,7 +3781,9 @@
                         if (home.name === "Origin Home") {
                             item.classList.add('special');
                         }
-                        item.textContent = home.name;
+                        // Display home name with keybind if it exists
+                        const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
+                        item.textContent = nameText;
                         item.onclick = (evt) => {
                             evt.stopPropagation();
                             this.closeMenu();
@@ -4539,28 +4631,6 @@
                 }
             },
 
-            resetView() {
-                // Jump to "Origin Home" if it exists, otherwise fit all tasks
-                const originHome = this.homes.find(h => h.name === "Origin Home");
-
-                if (originHome) {
-                    this.jumpToHome(originHome.id);
-                } else {
-                    // Default behavior: scatter tasks around screen center
-                    const screenCenterX = this.viewBox.width / 2;
-                    const screenCenterY = this.viewBox.height / 2;
-
-                    this.tasks.forEach(task => {
-                        task.x = screenCenterX + (Math.random() - 0.5) * 200;
-                        task.y = screenCenterY + (Math.random() - 0.5) * 200;
-                    });
-
-                    this.saveToStorage();
-                    this.render();
-                    this.showToast('Tasks repositioned to center', 'success');
-                }
-            },
-
             saveSnapshot(description, taskId = null) {
                 // SNAPSHOT MECHANISM:
                 // Call this BEFORE modifying this.tasks to save current state for undo
@@ -4606,10 +4676,8 @@
 
                     this.undoStack.push(snapshot);
 
-                    // Limit stack size
-                    if (this.undoStack.length > this.maxUndoSteps) {
-                        this.undoStack.shift(); // Remove oldest
-                    }
+                    // Enforce undo limit
+                    this.enforceUndoLimit();
                 }
 
                 // Clear redo stack when new action is performed
@@ -4686,6 +4754,47 @@
                 this._lastTasksHash = currentHash;
             }
             */
+
+            enforceUndoLimit() {
+                // Trim undoStack if it exceeds user-configured limit
+                // Called after adding new snapshot and when user changes maxUndoSteps in Settings
+                while (this.undoStack.length > this.maxUndoSteps) {
+                    this.undoStack.shift(); // Remove oldest snapshot
+                }
+            },
+
+            clearUndoHistory() {
+                // Clear all undo/redo history (called from Settings modal)
+                const undoCount = this.undoStack.length;
+                const redoCount = this.redoStack.length;
+
+                if (undoCount === 0 && redoCount === 0) {
+                    this.showToast('History is already empty', 'info');
+                    return;
+                }
+
+                // Show confirmation dialog
+                this.showConfirm(
+                    'Clear Undo/Redo History?',
+                    `This will remove ${undoCount} undo steps and ${redoCount} redo steps. This action cannot be undone.`,
+                    () => {
+                        // On confirm
+                        this.undoStack = [];
+                        this.redoStack = [];
+                        this.saveToStorage();
+                        this.updateStatusBar();
+                        this.showToast(`✓ History cleared (${undoCount + redoCount} steps removed)`, 'success');
+
+                        // Update stats in settings modal if it's open
+                        const modal = document.getElementById('settings-modal');
+                        if (modal && modal.classList.contains('show')) {
+                            document.getElementById('undo-count').textContent = '0';
+                            document.getElementById('redo-count').textContent = '0';
+                            document.getElementById('history-size').textContent = '0';
+                        }
+                    }
+                );
+            },
 
             undo() {
                 // UNDO MECHANISM:
@@ -4765,6 +4874,24 @@
                     ? snapshot.description.substring(0, 47) + '...'
                     : snapshot.description;
                 this.showToast(`✓ Redone: ${desc}`, 'success');
+            },
+
+            debouncedSaveToStorage(delay = 500) {
+                // Debounced save for performance optimization
+                // Used for operations that happen frequently (like canvas panning)
+                // Waits 'delay' ms after last call before actually saving
+                // This prevents excessive localStorage writes during rapid interactions
+
+                // Clear existing timer if any
+                if (this.saveDebounceTimer) {
+                    clearTimeout(this.saveDebounceTimer);
+                }
+
+                // Set new timer
+                this.saveDebounceTimer = setTimeout(() => {
+                    this.saveToStorage();
+                    this.saveDebounceTimer = null;
+                }, delay);
             },
 
             saveToStorage() {
@@ -4951,7 +5078,8 @@
                     centerX: centerX,
                     centerY: centerY,
                     zoomLevel: this.zoomLevel,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    keybind: null  // No keybind by default
                 };
 
                 this.homes.push(newHome);
@@ -5058,6 +5186,9 @@
                             this.updateZoomDisplay();
                             svg.classList.remove('animating-view');
                             this.render(); // Lines reappear with perfect edge-to-edge arrows
+
+                            // Save after animation completes to persist new positions and zoom
+                            this.saveToStorage();
                         }
                     };
 
@@ -5066,7 +5197,6 @@
                     // Note: Lines fade out via CSS (opacity: 0 on .animating-view line)
                     // They'll be re-rendered perfectly after animation completes
 
-                    this.saveToStorage();
                     this.showToast(`→ Jumped to "${home.name}"`, 'success');
                 } else {
                     // Instant jump (no animation)
@@ -5135,6 +5265,74 @@
                 } else {
                     confirmDelete();
                 }
+            },
+
+            setKeybindForHome(homeId) {
+                // Set a keyboard shortcut for a home
+                const home = this.homes.find(h => h.id === homeId);
+                if (!home) return;
+
+                // Show alert instructing user to press a key
+                const message = home.keybind
+                    ? `Current keybind for "${home.name}": ${home.keybind}\n\nPress a key (0-9) to set new keybind, or press Escape to clear keybind.`
+                    : `Press a key (0-9) to set keybind for "${home.name}", or press Escape to cancel.`;
+
+                this.showAlert('Set Keybind', message);
+
+                // Capture next keypress
+                const keyHandler = (e) => {
+                    // Remove listener immediately
+                    document.removeEventListener('keydown', keyHandler);
+
+                    // Close alert modal
+                    this.hideAlert();
+
+                    // Handle Escape key
+                    if (e.key === 'Escape') {
+                        if (home.keybind) {
+                            // Clear existing keybind
+                            home.keybind = null;
+                            this.saveToStorage();
+                            this.renderManageHomesModal();
+                            this.showToast(`✓ Keybind cleared for "${home.name}"`, 'success');
+                        }
+                        // Otherwise just cancel
+                        return;
+                    }
+
+                    // Only allow 0-9 keys
+                    if (!/^[0-9]$/.test(e.key)) {
+                        this.showToast('Only keys 0-9 are allowed for keybinds', 'error');
+                        return;
+                    }
+
+                    // Check if keybind is already used by another home
+                    const existingHome = this.homes.find(h => h.id !== homeId && h.keybind === e.key);
+                    if (existingHome) {
+                        this.showConfirm(
+                            'Keybind Conflict',
+                            `Key "${e.key}" is already assigned to "${existingHome.name}". Reassign it to "${home.name}"?`,
+                            () => {
+                                // Remove from old home
+                                existingHome.keybind = null;
+                                // Assign to new home
+                                home.keybind = e.key;
+                                this.saveToStorage();
+                                this.renderManageHomesModal();
+                                this.showToast(`✓ Keybind "${e.key}" assigned to "${home.name}"`, 'success');
+                            }
+                        );
+                    } else {
+                        // No conflict, assign keybind
+                        home.keybind = e.key;
+                        this.saveToStorage();
+                        this.renderManageHomesModal();
+                        this.showToast(`✓ Keybind "${e.key}" assigned to "${home.name}"`, 'success');
+                    }
+                };
+
+                // Add listener for next keypress
+                document.addEventListener('keydown', keyHandler);
             },
 
             renameHome(homeId, newName) {
@@ -5214,7 +5412,11 @@
                         if (home.name === "Origin Home") {
                             item.classList.add('special');
                         }
-                        item.textContent = home.name;
+
+                        // Display home name with keybind if it exists
+                        const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
+                        item.textContent = nameText;
+
                         item.onclick = (e) => {
                             e.stopPropagation();
                             this.jumpToHome(home.id);
@@ -5323,16 +5525,21 @@
 
                     const nameSpan = document.createElement('div');
                     nameSpan.textContent = home.name;
+                    // Use light colors in dark mode for visibility
+                    const isDarkMode = document.body.classList.contains('dark-mode');
+                    const nameColor = home.name === "Origin Home" ? '#9c27b0' : (isDarkMode ? '#e2e8f0' : '#333');
                     nameSpan.style.cssText = `
                         font-weight: 600;
                         font-size: 15px;
                         margin-bottom: 6px;
-                        color: ${home.name === "Origin Home" ? '#9c27b0' : '#333'};
+                        color: ${nameColor};
                     `;
 
                     const detailsSpan = document.createElement('div');
-                    detailsSpan.textContent = `Zoom: ${home.zoomLevel.toFixed(1)}x • Position: (${Math.round(home.centerX)}, ${Math.round(home.centerY)})`;
-                    detailsSpan.style.cssText = 'font-size: 12px; color: #666;';
+                    const keybindText = home.keybind ? ` • Keybind: ${home.keybind}` : '';
+                    detailsSpan.textContent = `Zoom: ${home.zoomLevel.toFixed(1)}x • Position: (${Math.round(home.centerX)}, ${Math.round(home.centerY)})${keybindText}`;
+                    const detailsColor = isDarkMode ? '#94a3b8' : '#666';
+                    detailsSpan.style.cssText = `font-size: 12px; color: ${detailsColor};`;
 
                     infoDiv.appendChild(nameSpan);
                     infoDiv.appendChild(detailsSpan);
@@ -5360,6 +5567,16 @@
                         this.renderManageHomesModal();
                     };
                     actionsDiv.appendChild(updateBtn);
+
+                    // Keybind button
+                    const keybindBtn = document.createElement('button');
+                    keybindBtn.className = 'secondary';
+                    keybindBtn.textContent = home.keybind ? `⌨ ${home.keybind}` : '⌨ Set Key';
+                    keybindBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+                    keybindBtn.onclick = () => {
+                        this.setKeybindForHome(home.id);
+                    };
+                    actionsDiv.appendChild(keybindBtn);
 
                     // Rename button
                     const renameBtn = document.createElement('button');
