@@ -699,6 +699,36 @@
             font-weight: 600;
         }
 
+        .status-btn {
+            margin-left: auto; /* Push to right side */
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 4px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .status-btn:active {
+            transform: translateY(0);
+        }
+
+        .status-btn.hidden {
+            display: none;
+        }
+
         /* Dark Mode Styles */
         body.dark-mode {
             background: #0a0a0a;
@@ -1069,7 +1099,7 @@
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
         <div class="info">
-            <span>Double-click: edit | Shift+Double-click: hide/show | Right-click: menu | Left-click: select | Shift+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | Shift+Drag: subtree | Scroll/Ctrl+±: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
+            <span>Double-click: edit | Shift+Double-click: hide/show | Right-click: menu | Left-click: select | Shift+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | J: jump to working | Shift+Drag: subtree | Scroll/Ctrl+±: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
         </div>
     </div>
 
@@ -1221,6 +1251,9 @@
         <span class="status-label">Working on:</span>
         <span id="status-path"></span>
         <span class="status-detail" id="status-children"></span>
+        <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()" title="Jump to working task (J)">
+            🎯 Jump
+        </button>
     </div>
 
     <script>
@@ -1592,6 +1625,12 @@
                         }
                     }
 
+                    // J = jump to working task (only when not editing and not modifying with Ctrl/Cmd/Alt)
+                    if ((e.key === 'j' || e.key === 'J') && this.editingTaskId === null && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                        e.preventDefault();
+                        this.jumpToWorkingTask();
+                    }
+
                     // Number keys (0-9) = jump to home with that keybind (only when not modifying with Ctrl/Cmd/Alt)
                     if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
                         // Find home with this keybind
@@ -1875,6 +1914,7 @@
                 const workingTask = this.tasks.find(t => t.currentlyWorking);
                 const statusBar = document.getElementById('status-bar');
                 const container = document.getElementById('canvas-container');
+                const jumpBtn = document.getElementById('jump-to-working-btn');
 
                 // Always show the status bar
                 statusBar.classList.add('show');
@@ -1887,8 +1927,14 @@
 
                     const childrenEl = document.getElementById('status-children');
                     childrenEl.textContent = '| Middle-click a task to start working on it';
+
+                    // Hide jump button when no working task
+                    if (jumpBtn) jumpBtn.classList.add('hidden');
                     return;
                 }
+
+                // Show jump button when there's a working task
+                if (jumpBtn) jumpBtn.classList.remove('hidden');
 
                 // Get full path
                 const path = this.getPathToRoot(workingTask.id);
@@ -5974,6 +6020,134 @@
                     this.render();
 
                     this.showToast(`→ Jumped to "${home.name}"`, 'success');
+                }
+            },
+
+            jumpToWorkingTask(animate = true) {
+                // Navigate to the currently working task
+                // Centers the working task on screen with a focused zoom level
+
+                const workingTask = this.tasks.find(t => t.currentlyWorking);
+                if (!workingTask) {
+                    this.showToast('No task is currently being worked on', 'warning');
+                    return;
+                }
+
+                if (this.tasks.length === 0) {
+                    return;
+                }
+
+                // Handle hidden tasks - temporarily show them
+                const wasHidden = workingTask.hidden;
+                if (wasHidden) {
+                    workingTask.hidden = false;
+                }
+
+                // The viewport center is the fixed point we want the working task to move to
+                // This is the center of the viewBox (screen center in SVG coordinates)
+                const viewportCenterX = this.viewBox.width / 2;
+                const viewportCenterY = this.viewBox.height / 2;
+
+                // Calculate offset to move working task to viewport center
+                const dx = viewportCenterX - workingTask.x;
+                const dy = viewportCenterY - workingTask.y;
+
+                const targetZoom = 1.2; // Focused view
+
+                if (animate) {
+                    // Cinematic 3-phase animation: zoom out → pan → zoom in
+                    const svg = document.getElementById('canvas');
+                    svg.classList.add('animating-view');
+
+                    const startZoom = this.zoomLevel;
+                    const endZoom = targetZoom;
+                    const overviewZoom = Math.min(startZoom, endZoom) * 0.5; // Zoom out to 50% of minimum
+
+                    const totalDuration = 1300; // ms
+                    const zoomOutDuration = 300;
+                    const panDuration = 500;
+                    const zoomInDuration = 500;
+                    const startTime = performance.now();
+                    let panTriggered = false;
+
+                    // Animation phases
+                    const animatePhases = (currentTime) => {
+                        const elapsed = currentTime - startTime;
+
+                        if (elapsed < zoomOutDuration) {
+                            // Phase 1: Zoom out (0-300ms)
+                            const progress = elapsed / zoomOutDuration;
+                            const eased = 1 - Math.pow(1 - progress, 3); // ease-out
+                            this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+                            this.updateZoomDisplay();
+                            this.updateViewBoxOnly();
+                            requestAnimationFrame(animatePhases);
+
+                        } else if (elapsed < zoomOutDuration + panDuration) {
+                            // Phase 2: Pan while zoomed out (300-800ms)
+                            if (!panTriggered) {
+                                panTriggered = true;
+                                // Update data model and trigger CSS transition for nodes
+                                this.tasks.forEach(task => {
+                                    task.x += dx;
+                                    task.y += dy;
+                                });
+
+                                // Update node transforms to trigger smooth CSS animation
+                                this.tasks.forEach(task => {
+                                    const node = document.querySelector(`.task-node[data-id="${task.id}"]`);
+                                    if (node) {
+                                        node.setAttribute('transform', `translate(${task.x}, ${task.y})`);
+                                    }
+                                });
+                            }
+                            // Stay at overview zoom during pan
+                            this.zoomLevel = overviewZoom;
+                            this.updateZoomDisplay();
+                            this.updateViewBoxOnly();
+                            requestAnimationFrame(animatePhases);
+
+                        } else if (elapsed < totalDuration) {
+                            // Phase 3: Zoom in to target (800-1300ms)
+                            const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
+                            const eased = 1 - Math.pow(1 - progress, 3); // ease-out
+                            this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
+                            this.updateZoomDisplay();
+                            this.updateViewBoxOnly();
+                            requestAnimationFrame(animatePhases);
+
+                        } else {
+                            // Animation complete
+                            this.zoomLevel = endZoom;
+                            this.updateZoomDisplay();
+                            svg.classList.remove('animating-view');
+                            this.saveToStorage();
+                            this.render();
+
+                            const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
+                            this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
+                        }
+                    };
+
+                    requestAnimationFrame(animatePhases);
+                    // Don't re-render during animation - nodes animate via CSS transforms
+                    // They'll be re-rendered perfectly after animation completes
+
+                } else {
+                    // Instant jump (no animation)
+                    this.tasks.forEach(task => {
+                        task.x += dx;
+                        task.y += dy;
+                    });
+
+                    this.zoomLevel = targetZoom;
+                    this.updateZoomDisplay();
+
+                    this.saveToStorage();
+                    this.render();
+
+                    const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
+                    this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
                 }
             },
 

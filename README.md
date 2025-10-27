@@ -529,6 +529,14 @@ Shows when a task is marked as "working":
 - **Progress**: Percentage of children completed
 - **Incomplete Children**: Listed by name with ⚠️ warning if any exist
 - **Default Message**: "No task selected | Middle-click a task to start working on it"
+- **Jump to Working Button** (🎯 Jump):
+  - Appears on right side of status bar when a working task exists
+  - Click to smoothly navigate to the currently working task
+  - 3-phase cinematic animation: zoom out → pan → zoom in
+  - Centers working task on screen at 1.2x zoom
+  - Keyboard shortcut: Press **J** to jump instantly
+  - Automatically unhides task if it was hidden
+  - Multi-project support: jumps to the working task shown in status bar
 
 Always visible at bottom of screen.
 
@@ -4208,8 +4216,106 @@ This establishes a formal handoff: Claude makes changes → User tests and confi
 
 **Line Count**: ~6560 lines in task-tree.html (+10 lines)
 
+### Session 20: Jump to Working Task Navigation (2025-10-27)
+
+**Version**: 1.13.0 (Navigation Enhancement)
+
+**Changes**:
+1. Added "Jump to Working" button to status bar
+2. Implemented jumpToWorkingTask() function with cinematic animation
+3. Added J keyboard shortcut for instant navigation
+4. Updated help text and status bar logic
+
+**Problem**: User wanted a quick way to navigate to the currently working task from anywhere in the graph, especially useful when the canvas is large or the working task is off-screen.
+
+**Solution**: Added a navigation button in the status bar that smoothly animates to center the working task on screen.
+
+**Implementation**:
+
+**1. Core Function** (Lines 5980-6105):
+- `jumpToWorkingTask(animate = true)`: Centers working task on screen
+- Reuses the cinematic 3-phase animation pattern from `jumpToHome()`:
+  - Phase 1: Zoom out to 0.5x (300ms) - get overview
+  - Phase 2: Pan to center working task (500ms) - smooth movement
+  - Phase 3: Zoom in to 1.2x (500ms) - focused view
+- Total duration: 1.3 seconds
+- Handles edge cases:
+  - No working task: Shows warning toast
+  - Hidden working task: Temporarily unhides it
+- Toast notification: "🎯 Jumped to [Task Name]"
+
+**2. Status Bar Button** (Lines 1224-1226):
+- Button HTML: `<button id="jump-to-working-btn" class="status-btn">`
+- Icon: 🎯 (target/focus emoji) + "Jump" text
+- Positioned on right side of status bar using `margin-left: auto`
+- Tooltip: "Jump to working task (J)"
+- Shows/hides based on working task existence
+
+**3. Button Styling** (Lines 702-730):
+- Semi-transparent background: `rgba(255, 255, 255, 0.1)`
+- Border: `rgba(255, 255, 255, 0.25)`
+- Hover effect: Brightens background, slight lift (`translateY(-1px)`)
+- Active effect: Subtle press-down animation
+- Hidden class: `display: none` when no working task
+- Works in both light and dark modes
+
+**4. Show/Hide Logic** (Lines 1911, 1926, 1931):
+- Updated `updateStatusBar()` to control button visibility
+- Gets button element: `const jumpBtn = document.getElementById('jump-to-working-btn')`
+- No working task: `jumpBtn.classList.add('hidden')`
+- Working task exists: `jumpBtn.classList.remove('hidden')`
+
+**5. Keyboard Shortcut** (Lines 1628-1632):
+- Press **J** to jump to working task
+- Only works when not editing text
+- Prevents triggering with Ctrl/Cmd/Alt modifiers
+- Same smooth animation as clicking the button
+
+**6. Help Text Update** (Line 1102):
+- Added "J: jump to working" to keyboard shortcuts display
+- Positioned between "P: priority" and "Shift+Drag: subtree"
+
+**Benefits**:
+- ✅ Instant navigation to working task from anywhere
+- ✅ Smooth, professional cinematic animation
+- ✅ Button only appears when relevant (working task exists)
+- ✅ Keyboard shortcut for power users (J)
+- ✅ Handles hidden tasks gracefully
+- ✅ Multi-project aware (jumps to task shown in status bar)
+- ✅ Consistent with existing navigation pattern (reuses jumpToHome logic)
+
+**Use Cases**:
+- Large graph: Working task is off-screen, need to find it quickly
+- Multi-project: Switch between projects, jump back to current work
+- Lost context: Been exploring other parts of graph, want to refocus
+- Status check: Quick visual confirmation of what you're working on
+
+**Design Rationale**:
+- **🎯 Icon**: Universal symbol for target/focus
+- **Right placement**: Doesn't interfere with path/status info on left
+- **1.2x zoom**: Focused but not too close (leaves room to see context)
+- **J shortcut**: Mnemonic for "Jump", easy to reach, not already used
+- **Hidden by default**: Reduces clutter when not applicable
+
+**Animation Details**:
+```
+Current state → Zoom out to 0.5x → Pan working task to center → Zoom in to 1.2x
+  [instant]      [0-300ms]            [300-800ms]               [800-1300ms]
+```
+
+**Testing**:
+- ✓ Click button → Smooth animation to working task
+- ✓ Press J → Same animation
+- ✓ No working task → Button hidden, J shows warning toast
+- ✓ Working task hidden → Temporarily unhides during jump
+- ✓ Multi-project → Jumps to working task in status bar
+- ✓ Already centered → Still animates (gentle zoom pulse)
+- ✓ Button appears/disappears when working status changes
+
+**Line Count**: ~6680 lines in task-tree.html (+120 lines)
+
 ---
 
-**Last Updated**: 2025-10-27 (Session 19 Final: Hover Priority Control & Refined Stripes)
-**Current Line Count**: ~6560 lines in task-tree.html
-**Version**: 1.12.2 (Hover Priority + Thin Stripes)
+**Last Updated**: 2025-10-27 (Session 20: Jump to Working Task Navigation)
+**Current Line Count**: ~6680 lines in task-tree.html
+**Version**: 1.13.0 (Navigation Enhancement)
