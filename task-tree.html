@@ -3272,6 +3272,10 @@
                             const pt = this.getSVGPoint(e);
                             this.dragStart = { x: pt.x - task.x, y: pt.y - task.y };
                             this.dragOriginalPos = { x: task.x, y: task.y };
+
+                            // Save snapshot BEFORE drag starts (captures original position)
+                            const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+                            this.saveSnapshot(`Move subtree '${truncatedTitle}'`);
                         } else {
                             // Start node drag
                             this.dragMode = 'node';
@@ -3280,6 +3284,14 @@
                             const pt = this.getSVGPoint(e);
                             this.dragStart = { x: pt.x - task.x, y: pt.y - task.y };
                             this.dragOriginalPos = { x: task.x, y: task.y };
+
+                            // Save snapshot BEFORE drag starts (captures original position)
+                            if (this.selectedTaskIds.size > 1) {
+                                this.saveSnapshot(`Move ${this.selectedTaskIds.size} tasks`);
+                            } else {
+                                const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+                                this.saveSnapshot(`Move task '${truncatedTitle}'`);
+                            }
                         }
                     }
                     e.preventDefault();
@@ -3629,11 +3641,14 @@
                             Math.pow(task.y - this.dragOriginalPos.y, 2)
                         );
 
-                        // Save if we actually moved
+                        // Save to storage if we actually moved (snapshot was saved in mousedown)
                         if (movedDistance >= 5) {
-                            const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
-                            this.saveSnapshot(`Moved subtree '${truncatedTitle}'`);
                             this.saveToStorage();
+                        } else {
+                            // Didn't move enough - remove the snapshot we created in mousedown
+                            if (this.undoStack.length > 0) {
+                                this.undoStack.pop();
+                            }
                         }
                     }
 
@@ -3648,15 +3663,14 @@
                             Math.pow(task.y - this.dragOriginalPos.y, 2)
                         );
 
-                        // Save if we actually moved
+                        // Save to storage if we actually moved (snapshot was saved in mousedown)
                         if (movedDistance >= 5) {
-                            if (this.selectedTaskIds.size > 1) {
-                                this.saveSnapshot(`Moved ${this.selectedTaskIds.size} tasks`);
-                            } else {
-                                const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
-                                this.saveSnapshot(`Moved task '${truncatedTitle}'`);
-                            }
                             this.saveToStorage();
+                        } else {
+                            // Didn't move enough - remove the snapshot we created in mousedown
+                            if (this.undoStack.length > 0) {
+                                this.undoStack.pop();
+                            }
                         }
                     }
                 } else if (this.dragMode === 'canvas') {

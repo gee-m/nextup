@@ -4314,8 +4314,71 @@ Current state → Zoom out to 0.5x → Pan working task to center → Zoom in to
 
 **Line Count**: ~6680 lines in task-tree.html (+120 lines)
 
+### Session 20 Continued: Fix Undo/Redo for Task Movement (2025-10-27)
+
+**Version**: 1.13.1 (Critical Bug Fix)
+
+**Changes**:
+1. Fixed undo/redo snapshot timing for task movement
+2. Moved saveSnapshot() from mouseup to mousedown
+3. Added logic to remove snapshot if move distance < 5px
+
+**Problem**: Undoing a task move operation would show the undo toast but not visually restore the task to its original position. The undo was working in the data layer but not updating visually.
+
+**Root Cause**: The `saveSnapshot()` call was happening in `onCanvasMouseUp` AFTER the task had already been moved. This meant the snapshot captured the NEW position instead of the OLD position. When undoing, it would "restore" to the already-moved position.
+
+**Solution**: Move `saveSnapshot()` to `onCanvasMouseDown` BEFORE any movement happens, so the snapshot captures the original position.
+
+**Implementation**:
+
+**1. Subtree Drag** (Lines 3276-3278):
+- Added `saveSnapshot()` call immediately after storing `dragOriginalPos`
+- Captures state BEFORE any movement: `Move subtree '${title}'`
+- Snapshot now contains original positions of all tasks in subtree
+
+**2. Node Drag** (Lines 3288-3294):
+- Added `saveSnapshot()` call immediately after storing `dragOriginalPos`
+- Captures state BEFORE any movement
+- Handles multi-select: `Move ${count} tasks` or `Move task '${title}'`
+
+**3. Mouseup Cleanup** (Lines 3644-3652, 3666-3674):
+- Removed `saveSnapshot()` calls from mouseup (no longer needed)
+- Changed logic:
+  - If `movedDistance >= 5px`: `saveToStorage()` only (snapshot already in undo stack)
+  - If `movedDistance < 5px`: `undoStack.pop()` (remove unnecessary snapshot)
+- Prevents undo stack pollution from accidental micro-drags
+
+**Snapshot Timing Flow**:
+```
+BEFORE (broken):
+1. mousedown: Store dragOriginalPos
+2. mousemove: Update task.x, task.y (original position lost!)
+3. mouseup: saveSnapshot() → captures NEW position ❌
+
+AFTER (fixed):
+1. mousedown: saveSnapshot() → captures OLD position ✓
+2. mousemove: Update task.x, task.y
+3. mouseup: Check distance, saveToStorage() or pop snapshot
+```
+
+**Edge Case Handled**:
+- **Accidental clicks**: If you click a task but don't drag it (distance < 5px), the snapshot is removed from the undo stack
+- **Prevents clutter**: Undo stack doesn't fill up with "non-moves"
+
+**Testing**:
+- ✓ Drag task → Undo → Task returns to original position visually
+- ✓ Drag subtree → Undo → All tasks return to original positions
+- ✓ Multi-select drag → Undo → All selected tasks return
+- ✓ Click without dragging → No snapshot added to undo stack
+- ✓ Render() is called by undo() → Visual update works correctly
+
+**Why This Was Broken**:
+The original implementation likely assumed snapshots should be taken "when something changes", but the correct timing for undo/redo is "before something changes". The snapshot must capture the pre-change state, not the post-change state.
+
+**Line Count**: ~6685 lines in task-tree.html (+5 lines)
+
 ---
 
-**Last Updated**: 2025-10-27 (Session 20: Jump to Working Task Navigation)
-**Current Line Count**: ~6680 lines in task-tree.html
-**Version**: 1.13.0 (Navigation Enhancement)
+**Last Updated**: 2025-10-27 (Session 20 Continued: Fix Undo/Redo for Task Movement)
+**Current Line Count**: ~6685 lines in task-tree.html
+**Version**: 1.13.1 (Critical Bug Fix)
