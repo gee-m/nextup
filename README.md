@@ -183,17 +183,26 @@
 
 #### Priority Management
 - **3 Priority Levels**: High (🔴), Medium (🟠), Normal (no badge)
-- **Visual Badge**: Colored dot in top-left corner of task nodes
-  - 🔴 Red dot for High priority tasks
-  - 🟠 Orange dot for Medium priority tasks
-  - No badge for Normal priority (default)
-  - Small drop shadow for visibility in both light/dark modes
+- **Visual Indicators**:
+  - **Colored dot badge** in top-left corner
+    - 🔴 Red dot for High priority
+    - 🟠 Orange dot for Medium priority
+    - No badge for Normal priority (default)
+  - **Diagonal stripe background** on task rectangles
+    - Thin diagonal stripes (1.5px width) for High priority (light red #ffcdd2) and Medium priority (light orange #ffe0b2)
+    - Solid colors with no transparency for crisp appearance
+    - Adapts to light/dark mode automatically (darker shades in dark mode)
 - **Set Priority**: Right-click task → "Set Priority" submenu
   - Shows current priority with checkmark
   - Choose: High Priority, Medium Priority, or Normal Priority
   - Toast notification confirms priority change
+- **Hover Priority Control**: Press `P` while hovering over any task to change its priority
+  - No need to select the task first
+  - Just hover and press `P` to cycle through priority levels
+  - Falls back to selected task(s) if not hovering over anything
+  - Fast workflow for setting priorities on many tasks
 - **Keyboard Shortcut**: Press `P` to cycle priority (Normal → Medium → High → Normal)
-  - Works on selected task(s)
+  - Works on hovered task (priority), or selected task(s) if not hovering
   - Cycles through all three levels
   - Shows toast with new priority level
 - **Multi-Select Support**: Set priority on multiple tasks at once
@@ -4074,8 +4083,133 @@ This establishes a formal handoff: Claude makes changes → User tests and confi
 
 **Line Count**: ~6500 lines in task-tree.html (+100 lines)
 
+### Session 19 Continued: Diagonal Stripe Backgrounds & Complete Shortcuts (2025-10-27)
+
+**Version**: 1.12.1 (Priority Visual Enhancement)
+
+**Changes**:
+1. Added diagonal stripe background patterns for priority levels
+2. Updated help text with comprehensive keyboard shortcuts
+3. Fixed null/undefined priority handling in cycle function
+
+**Problem**: User wanted diagonal stripe backgrounds on priority tasks and all shortcuts listed in help text.
+
+**Solution**: Created SVG pattern definitions for subtle diagonal stripes and updated shortcut documentation.
+
+**Implementation**:
+
+**1. SVG Pattern Definitions** (Lines 1092-1110):
+- Added 4 patterns in `<defs>`: high/medium for light/dark modes
+- Pattern: 8x8px grid with 45° rotation for diagonal effect
+- Light mode: White + rgba stripes (15% opacity)
+- Dark mode: Dark gray + rgba stripes (25% opacity for better visibility)
+- Pattern IDs: `priority-high-light`, `priority-medium-light`, `priority-high-dark`, `priority-medium-dark`
+
+**2. Rectangle Fill Logic** (Lines 4866-4875):
+- Changed static fill from `'#fff'` to dynamic fill based on priority
+- High priority: `url(#priority-high-light)` or `url(#priority-high-dark)`
+- Medium priority: `url(#priority-medium-light)` or `url(#priority-medium-dark)`
+- Normal priority: `'#fff'` (light) or `'#2d3748'` (dark)
+- Automatically switches pattern based on `this.darkMode` state
+
+**3. Comprehensive Shortcuts** (Line 1072):
+- **Added**: Shift+Double-click (hide/show), Shift+Click (multi-select), Escape (clear), Ctrl+± (zoom)
+- **Complete list**: Double-click: edit | Shift+Double-click: hide/show | Right-click: menu | Left-click: select | Shift+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | Shift+Drag: subtree | Scroll/Ctrl+±: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo
+
+**4. Priority Cycle Fix** (Line 1831):
+- Changed condition from `task.priority === 'normal'` to `!task.priority || task.priority === 'normal'`
+- Handles legacy tasks created before priority feature (null/undefined priority)
+- First press of `P` on legacy tasks now goes to medium instead of normal
+
+**Visual Design**:
+- **Stripe angle**: 45° diagonal (classic, universally recognizable)
+- **Stripe width**: 4px per stripe in 8px pattern (50/50 ratio)
+- **Opacity**: Low enough to not interfere with text readability
+- **Color matching**: Matches dot badge colors (red #f44336, orange #ff9800)
+- **Pattern overlay**: Works with all task states (pending, working, done)
+- **Dark mode**: Higher opacity (25%) for better visibility on dark backgrounds
+
+**Benefits**:
+- ✅ Stronger visual priority indicator without being overwhelming
+- ✅ Both dot badge AND background pattern reinforce priority
+- ✅ Subtle enough to maintain text readability
+- ✅ Seamless dark mode support
+- ✅ All shortcuts documented for new users
+- ✅ Legacy task compatibility with null priority handling
+
+**Testing**:
+- ✓ Light mode: Red/orange stripes visible but subtle
+- ✓ Dark mode: Stripes visible with higher opacity
+- ✓ Priority dot + stripes work together cohesively
+- ✓ Text remains readable over striped background
+- ✓ Works with all task states (pending, working, done)
+- ✓ All shortcuts listed and accurate
+
+**Line Count**: ~6550 lines in task-tree.html (+50 lines)
+
+### Session 19 Final: Hover Priority Control & Refined Stripes (2025-10-27)
+
+**Version**: 1.12.2 (Hover Priority + Thin Stripes)
+
+**Changes**:
+1. Added hover-based priority control with P key
+2. Made stripe patterns thinner with solid colors (no transparency)
+3. Updated keyboard shortcut to work with hover priority
+
+**Problem**: User wanted to press P while hovering over tasks without selecting them, and wanted thinner stripes with no transparency.
+
+**Solution**: Implemented hover tracking and refined stripe patterns with solid, thin stripes.
+
+**Implementation**:
+
+**1. Hover State Tracking** (Lines 1238, 5154-5159):
+- Added `hoveredTaskId: null` to app state
+- Added mouseenter/mouseleave listeners on task node groups
+- Sets `hoveredTaskId` when mouse enters a task
+- Clears `hoveredTaskId` when mouse leaves
+
+**2. Hover-First Priority Control** (Lines 1469-1480):
+- Updated P key handler to check `hoveredTaskId` first
+- If hovering over a task: changes that task's priority
+- If not hovering: falls back to selected task(s)
+- No need to select tasks to change priority - just hover and press P
+
+**3. Refined Stripe Patterns** (Lines 1093-1110):
+- **Width**: Reduced from 4px to 1.5px (much thinner, more subtle)
+- **Opacity**: Changed from rgba transparency to solid colors
+- **Light mode colors**:
+  - High priority: Light red #ffcdd2 (solid)
+  - Medium priority: Light orange #ffe0b2 (solid)
+- **Dark mode colors**:
+  - High priority: Darker red #d32f2f (solid)
+  - Medium priority: Darker orange #f57c00 (solid)
+- **Pattern**: 8x8px repeating, 45° diagonal angle
+- **Result**: Crisp, thin stripes that don't interfere with text
+
+**Benefits**:
+- ✅ Ultra-fast priority setting - hover + P (no selection needed)
+- ✅ Thinner stripes are more subtle and professional
+- ✅ Solid colors give crisp appearance (no transparency artifacts)
+- ✅ Falls back to selected tasks if not hovering (best of both worlds)
+- ✅ Great for quickly triaging many tasks
+
+**Workflow Examples**:
+1. **Quick triage**: Move mouse over tasks while pressing P to cycle priorities
+2. **Batch mode**: Select multiple tasks → Press P to set all at once
+3. **Single task**: Hover and press P (no selection needed)
+
+**Testing**:
+- ✓ Hover over task + press P → Priority cycles
+- ✓ Not hovering + press P → Selected tasks cycle
+- ✓ Stripes visible but subtle (1.5px thin)
+- ✓ Solid colors crisp in both light/dark modes
+- ✓ No transparency artifacts
+- ✓ Hover state clears when mouse leaves
+
+**Line Count**: ~6560 lines in task-tree.html (+10 lines)
+
 ---
 
-**Last Updated**: 2025-10-27 (Session 19: Priority Management Feature)
-**Current Line Count**: ~6500 lines in task-tree.html
-**Version**: 1.12.0 (Priority System)
+**Last Updated**: 2025-10-27 (Session 19 Final: Hover Priority Control & Refined Stripes)
+**Current Line Count**: ~6560 lines in task-tree.html
+**Version**: 1.12.2 (Hover Priority + Thin Stripes)

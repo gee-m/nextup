@@ -1069,7 +1069,7 @@
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
         <div class="info">
-            <span>Double-click: edit | Right-click: menu (or on empty space) | Left-click: select | Backspace: delete | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | Shift+Drag: subtree | Scroll: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
+            <span>Double-click: edit | Shift+Double-click: hide/show | Right-click: menu | Left-click: select | Shift+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | Shift+Drag: subtree | Scroll/Ctrl+±: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
         </div>
     </div>
 
@@ -1088,6 +1088,26 @@
                 <marker id="arrowhead-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
                     <polygon points="0 0, 10 3, 0 6" fill="#4caf50" />
                 </marker>
+
+                <!-- Priority stripe patterns for light mode (thin solid stripes) -->
+                <pattern id="priority-high-light" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect x="0" y="0" width="8" height="8" fill="#fff" />
+                    <rect x="0" y="0" width="1.5" height="8" fill="#ffcdd2" />
+                </pattern>
+                <pattern id="priority-medium-light" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect x="0" y="0" width="8" height="8" fill="#fff" />
+                    <rect x="0" y="0" width="1.5" height="8" fill="#ffe0b2" />
+                </pattern>
+
+                <!-- Priority stripe patterns for dark mode (thin solid stripes) -->
+                <pattern id="priority-high-dark" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect x="0" y="0" width="8" height="8" fill="#2d3748" />
+                    <rect x="0" y="0" width="1.5" height="8" fill="#d32f2f" />
+                </pattern>
+                <pattern id="priority-medium-dark" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect x="0" y="0" width="8" height="8" fill="#2d3748" />
+                    <rect x="0" y="0" width="1.5" height="8" fill="#f57c00" />
+                </pattern>
             </defs>
             <g id="links"></g>
             <g id="nodes"></g>
@@ -1215,6 +1235,7 @@
             selectedNode: null,
             selectedTaskIds: new Set(),  // For multi-select (Set of task IDs)
             lastClickedTaskId: null,     // For Shift+Click range selection
+            hoveredTaskId: null,         // For hover-based priority changes
             selectedLine: null,    // For line selection {type: 'parent'|'dependency', taskId, parentId/depId}
             // Box selection state
             boxSelectStart: null,  // {x, y} when Shift+Click+Drag starts
@@ -1444,11 +1465,18 @@
                         }
                     }
 
-                    // P to cycle priority of selected task(s)
-                    if ((e.key === 'p' || e.key === 'P') && this.editingTaskId === null && this.selectedTaskIds.size > 0) {
-                        e.preventDefault();
-                        const selectedArray = Array.from(this.selectedTaskIds);
-                        selectedArray.forEach(id => this.cyclePriority(id));
+                    // P to cycle priority of hovered task (or selected if not hovering)
+                    if ((e.key === 'p' || e.key === 'P') && this.editingTaskId === null) {
+                        if (this.hoveredTaskId !== null) {
+                            // Hovering over a task - change its priority
+                            e.preventDefault();
+                            this.cyclePriority(this.hoveredTaskId);
+                        } else if (this.selectedTaskIds.size > 0) {
+                            // Not hovering - fall back to selected task(s)
+                            e.preventDefault();
+                            const selectedArray = Array.from(this.selectedTaskIds);
+                            selectedArray.forEach(id => this.cyclePriority(id));
+                        }
                     }
                 });
 
@@ -4842,7 +4870,16 @@
                     rect.setAttribute('y', -rectHeight / 2);
                     rect.setAttribute('width', rectWidth);
                     rect.setAttribute('height', rectHeight);
-                    rect.setAttribute('fill', '#fff');
+
+                    // Set fill based on priority with diagonal stripe patterns
+                    // Use inline style to override CSS rules
+                    if (task.priority === 'high') {
+                        rect.style.fill = this.darkMode ? 'url(#priority-high-dark)' : 'url(#priority-high-light)';
+                    } else if (task.priority === 'medium') {
+                        rect.style.fill = this.darkMode ? 'url(#priority-medium-dark)' : 'url(#priority-medium-light)';
+                    }
+                    // For normal priority, let CSS handle it (no inline style needed)
+
                     g.appendChild(rect);
 
                     // Add link badge if task has links
@@ -5112,6 +5149,14 @@
                             this.expandText(task.id);
                         });
                     }
+
+                    // Track hover for priority changes with P key
+                    g.addEventListener('mouseenter', () => {
+                        this.hoveredTaskId = task.id;
+                    });
+                    g.addEventListener('mouseleave', () => {
+                        this.hoveredTaskId = null;
+                    });
 
                     nodesGroup.appendChild(g);
                 });
