@@ -72,13 +72,14 @@
 
 #### Editing Tasks
 - **Rename**: Double-click task text to edit inline
-  - **Multiline Editor**: Full-width textarea matches the rectangle exactly
+  - **Multiline Editor**: Full-width textarea matches the rectangle exactly, resizes dynamically as you type
   - **Text Alignment**: Text starts at left edge (left-aligned) for natural editing
   - **Text Selection**: Text auto-selected on open for immediate replacement
-  - **New Lines**: Press Enter to create new lines (multiline support)
-  - **Save**: Press Ctrl+Enter (or Cmd+Enter) or click outside to save
-  - **Cancel**: Press Escape to discard changes
-  - **Keyboard Shortcuts**: Full textarea editing capabilities
+  - **Save**: Press **Enter** or click outside to save
+  - **New Lines**: Press **Shift+Enter** to create new lines - **newlines are preserved** after saving!
+  - **Cancel**: Press **Escape** to discard changes
+  - **Keyboard Shortcuts**: Intuitive modern UX - Enter saves, Shift+Enter for newlines
+  - **Blank Lines**: Double Shift+Enter creates visual spacing between paragraphs
 - **Hide Node**: Shift+Double-click to hide the node within its parent (quick shortcut)
   - Only works for child tasks (can't hide root tasks)
   - Hidden nodes don't render but preserve their state
@@ -239,14 +240,14 @@
 - **Drag Node**: Click and drag (no modifier keys)
 - **Drag Subtree**: Shift+Drag parent to move entire tree together
 - **Select Node**: Left-click (highlights blue)
-- **Context Menu**: Right-click for options menu:
-  - Add Child
-  - Mark Done/Pending
-  - Start/Stop Working
-  - Show/Hide (if task has a parent - hides the node itself)
-  - Show/Hide Children (if task has children - hides all children)
-  - Copy Text (copies task title to clipboard)
-  - Delete
+- **Context Menu**: Right-click for options menu with emoji icons:
+  - ➕ Add Child
+  - ✅ Mark Done / ⏸️ Mark Pending
+  - ▶️ Start Working / ⏹️ Stop Working
+  - 👁️ Show / 🙈 Hide (if task has a parent - hides the node itself)
+  - 📂 Show Children / 📦 Hide Children (if task has children - hides all children)
+  - 📋 Copy Text (copies task title to clipboard)
+  - 🗑️ Delete
 - **Hover Effect**: Nodes get thicker border on hover
 
 #### Line Interaction
@@ -296,7 +297,9 @@ Navigate to different areas of your graph instantly with saved view bookmarks:
   - "+ Create New Home" to save current view
   - "⚙️ Manage Homes" to edit/delete homes
 - **Right-Click Menu**: Right-click on empty space → "🏠 Homes" submenu
-  - Same functionality as toolbar dropdown
+  - Each home opens a nested submenu with options:
+    - 🚀 Jump to Home - Navigate to saved view
+    - 📍 Update Home Position - Set home to current view (quick update)
   - Convenient context menu access
   - Shows keybind shortcuts for quick reference
 
@@ -311,7 +314,8 @@ Navigate to different areas of your graph instantly with saved view bookmarks:
   - Smooth animated transition to saved view (0.5s cubic-bezier)
   - Both position AND zoom level restored
 - **Update Home**:
-  - In "Manage Homes" modal, click "↻ Update" button
+  - Quick method: Right-click → Homes → [Home Name] → 📍 Update Home Position
+  - Full method: In "Manage Homes" modal, click "↻ Update" button
   - Updates home to current view position and zoom
 - **Rename Home**:
   - In "Manage Homes" modal, click "✎ Rename" button
@@ -2591,10 +2595,10 @@ If you add git to this project, create a pre-commit hook that checks if README.m
 
 4. **Textarea Editor** (lines 4110-4131):
    - Replaced `<input>` with `<textarea>` for multiline editing
-   - **Keyboard Shortcuts Changed**:
-     - Enter → Creates newline (natural textarea behavior)
-     - Ctrl+Enter or Cmd+Enter → Saves edits
-     - Escape → Cancels without saving
+   - **Keyboard Shortcuts** (Session 14: Updated to modern UX):
+     - **Enter** → Saves edits (intuitive!)
+     - **Shift+Enter** → Creates newline
+     - **Escape** → Cancels without saving
    - Dynamic rows: `Math.max(2, lines.length)`
    - Resize disabled, scroll enabled
 
@@ -2627,7 +2631,7 @@ If you add git to this project, create a pre-commit hook that checks if README.m
 - Medium text (2-3 lines): Wraps correctly ✓
 - Long text (100+ chars): Wraps with word boundaries ✓
 - Very long single word: Force breaks correctly ✓
-- Textarea editing: Enter adds newline, Ctrl+Enter saves ✓
+- Textarea editing: Enter saves, Shift+Enter adds newline ✓
 - Settings: All options accessible and functional ✓
 - Persistence: Settings save/load correctly ✓
 
@@ -3355,8 +3359,266 @@ Unlike typical viewport navigation, this app's canvas panning actually modifies 
 - ✓ Respects maxNodeHeight (scrollable when exceeded)
 - ✓ Works with all font/padding/spacing settings
 
+### Session 14 Continued: Improved Keyboard Shortcuts for Editing
+
+**Change**: Updated keyboard shortcuts during text editing for more intuitive UX.
+
+**Previous Behavior** (Less Intuitive):
+- **Enter** → Creates newline
+- **Ctrl+Enter** or **Cmd+Enter** → Saves edit
+- **Escape** → Cancels edit
+
+**New Behavior** (Modern UX Pattern):
+- **Enter** → Saves edit immediately ✨
+- **Shift+Enter** → Creates newline
+- **Escape** → Cancels edit
+
+**Rationale**:
+This matches the behavior of modern apps like:
+- Slack (Enter sends message, Shift+Enter for newline)
+- Discord (same pattern)
+- GitHub comments (same pattern)
+- Google Chat, Teams, etc.
+
+**Benefits**:
+1. **More intuitive**: Enter is the natural "submit" key
+2. **Faster workflow**: No modifier key needed for common action
+3. **Still supports multiline**: Shift+Enter is well-known pattern
+4. **Discoverable**: Users try Enter first naturally
+
+**Implementation** (line 4273-4283):
+```javascript
+if (e.key === 'Enter' && !e.shiftKey) {
+    // Plain Enter = save
+    this.finishEditing(true);
+    e.preventDefault();
+}
+// Shift+Enter falls through to default textarea behavior (newline)
+```
+
+**Documentation Updated**:
+- README main keyboard shortcuts section (lines 78-81)
+- README multiline text implementation (lines 2594-2597)
+- README testing checklist (line 2630)
+
+**User Experience Flow**:
+```
+Before:
+1. Double-click task
+2. Type "Task title"
+3. Press Enter → Oops, newline added
+4. Press Ctrl+Enter → Finally saves
+
+After:
+1. Double-click task
+2. Type "Task title"
+3. Press Enter → Saves! ✓
+
+OR for multiline:
+1. Double-click task
+2. Type "Line 1"
+3. Press Shift+Enter → Newline added
+4. Type "Line 2"
+5. Press Enter → Saves both lines! ✓
+```
+
+**Testing**:
+- ✓ Type text → Press Enter → Saves immediately
+- ✓ Type line 1 → Shift+Enter → Type line 2 → Enter → Both lines saved
+- ✓ Type text → Escape → Cancels correctly
+- ✓ Type text → Click outside → Saves (unchanged)
+- ✓ Empty text → Enter → Saves as "Untitled" (unchanged)
+
+### Session 14 Continued: Preserve Newlines in Task Text
+
+**New Feature**: Newlines entered during editing are now preserved and displayed correctly.
+
+**Problem**:
+- User types "Line 1" → Shift+Enter → "Line 2" → Enter to save
+- After saving, text displayed as: "Line 1 Line 2" (single line)
+- Newlines were lost - appeared as spaces or nothing
+
+**Root Cause**:
+- `wrapText()` function split text on spaces for word wrapping
+- Never checked for newline characters (`\n`)
+- Newlines got treated as regular characters and lost during wrapping
+
+**Solution**: Modified `wrapText()` to respect newlines (lines 2250-2303)
+
+**How It Works**:
+1. **First**: Split text by newline characters (`\n`) to get paragraphs
+2. **Then**: Apply word wrapping to each paragraph independently
+3. **Finally**: Concatenate all wrapped lines together
+
+**Implementation** (lines 2250-2303):
+```javascript
+// Split by newlines first
+const paragraphs = text.split('\n');
+const allLines = [];
+
+// Process each paragraph
+for (const paragraph of paragraphs) {
+    if (paragraph === '') {
+        allLines.push('');  // Preserve blank lines
+        continue;
+    }
+
+    // Apply word wrapping to this paragraph
+    // ... existing wrapping logic ...
+}
+
+return allLines;
+```
+
+**Benefits**:
+- ✅ **Preserves user intent**: Explicit newlines (Shift+Enter) are respected
+- ✅ **Still wraps text**: Long paragraphs still wrap automatically at max width
+- ✅ **Blank lines work**: Double newline creates visual blank line
+- ✅ **Backward compatible**: Existing tasks without newlines unchanged
+- ✅ **Works everywhere**: calculateTextBoxDimensions() uses wrapText(), so sizing updates automatically
+
+**Use Cases**:
+```
+Task with steps:
+"Implement auth
+- JWT tokens
+- Refresh flow
+- Secure cookies"
+
+Displays as:
+Implement auth
+- JWT tokens
+- Refresh flow
+- Secure cookies
+```
+
+```
+Task with blank line:
+"Phase 1
+
+Phase 2"
+
+Displays as:
+Phase 1
+          <-- blank line
+Phase 2
+```
+
+**Edge Cases Handled**:
+- Empty lines: Preserved as blank visual space
+- Very long paragraph: Wraps within paragraph boundaries
+- Only newlines: Each creates a blank line
+- Mixed short and long: Each paragraph wraps independently
+
+**Testing**:
+- ✓ Single line → No change
+- ✓ Two lines (one newline) → Displays on two lines
+- ✓ Multiple lines → All lines preserved
+- ✓ Blank lines (double newline) → Visual spacing preserved
+- ✓ Long paragraph with newlines → Each paragraph wraps independently
+- ✓ Empty text → Handled correctly
+- ✓ Dynamic resize during edit → Works with newlines
+
+**Visual Examples**:
+
+Before ❌:
+```
+Edit: "Buy:\nMilk\nEggs"
+Save
+Display: "Buy: Milk Eggs"
+```
+
+After ✅:
+```
+Edit: "Buy:\nMilk\nEggs"
+Save
+Display:
+Buy:
+Milk
+Eggs
+```
+
 ---
 
-**Last Updated**: 2025-10-26 (Session 14: Dynamic Text Input)
-**Current Line Count**: ~5580 lines in task-tree.html
-**Version**: 1.9.0 (Dynamic Editing UX)
+### Session 15: Context Menu Enhancement (2025-10-26)
+
+**Version**: 1.10.0 (Emoji Context Menus & Nested Home Options)
+
+**Changes**:
+1. Added emojis to all context menu items for quick visual identification
+2. Converted homes submenu to nested submenus with multiple actions per home
+
+**Problem**: Context menus lacked visual affordances, making it hard to quickly identify actions. Users also needed a quick way to update home positions without going through the manage homes modal.
+
+**Solution**:
+
+**1. Emoji Context Menus** (Lines 3696-3798):
+- Single-task menu items now have emojis:
+  - ➕ Add Child
+  - ✅ Mark Done / ⏸️ Mark Pending
+  - ▶️ Start Working / ⏹️ Stop Working
+  - 👁️ Show / 🙈 Hide
+  - 📂 Show Children / 📦 Hide Children
+  - 📋 Copy Text
+  - 🗑️ Delete
+- Multi-select menu items have emojis:
+  - ✅ Mark Done (N)
+  - ⏸️ Mark Pending (N)
+  - 🙈 Hide Child (N)
+  - 🗑️ Delete (N)
+- Empty space menu items have emojis:
+  - ➕ Create New Task
+  - 🔍 Zoom to Fit
+  - 🎯 Mark Origin
+
+**2. Nested Home Submenus** (Lines 3830-3870):
+- Each home in the Homes submenu now opens a nested submenu with options:
+  - 🚀 Jump to Home - Navigate to the saved home position (existing functionality)
+  - 📍 Update Home Position - Set home to current camera location (quick update)
+- Uses existing `updateHome()` method (line 5299) for updating positions
+- Nested submenu appears to the right of home name
+- Keybind display still shows: `Home Name [5]`
+
+**Benefits**:
+- ✅ Faster visual scanning - emojis provide instant action recognition
+- ✅ Better accessibility - semantic icons supplement text
+- ✅ Quick home updates - no need to open manage modal for position changes
+- ✅ Cleaner UX - all home actions accessible from one location
+
+**Testing**:
+- ✓ Single-task context menu shows all emojis correctly
+- ✓ Multi-task context menu shows emojis with counts
+- ✓ Empty space menu shows emojis
+- ✓ Homes submenu shows nested options for each home
+- ✓ "Jump to Home" navigates correctly
+- ✓ "Update Home Position" updates home to current view
+- ✓ Keybinds still display correctly in home names
+
+**Implementation Notes**:
+- Emojis are Unicode characters, not images - works across all platforms
+- Nested submenus use dedicated `.submenu-nested` class (lines 208-235)
+  - Uses `position: fixed` instead of `position: absolute` to break out of parent's `overflow: auto` context
+  - Dynamic positioning via `getBoundingClientRect()` on mouseenter (lines 3880-3884)
+  - Higher z-index (1002) to float above parent submenu
+  - Prevents scrollbar issues when nesting menus inside scrollable parents
+- All existing functionality preserved, just enhanced with visual indicators
+
+**Technical Fix - Nested Submenu Positioning**:
+- **Problem 1**: Initial implementation used `position: absolute` for nested submenus, which caused them to be constrained by the parent submenu's `overflow-y: auto` container, creating unwanted scrollbars
+- **Solution 1**: Created `.submenu-nested` class with `position: fixed` and dynamic screen-coordinate positioning, allowing nested menus to float freely above the parent without scroll constraints
+- **Problem 2**: CSS :hover rules caused parent submenu to disappear when hovering nested submenu (mouse leaves parent container)
+- **Solution 2**: JavaScript handlers force parent submenu display with `submenu.style.display = 'block'` while nested submenu is visible (lines 3924, 3946)
+- **Problem 3**: Original click-to-navigate functionality was lost when adding nested submenus
+- **Solution 3**: Restored onclick handler on home items to preserve direct navigation (lines 3896-3903), nested submenu only shows on hover
+
+**How It Works Now**:
+- **Hover** on home name → Nested submenu appears with options
+- **Click** on home name → Navigate directly to that home (original behavior preserved)
+- **Move to nested submenu** → Both parent and nested submenus stay visible
+- **Click nested option** → Perform action (jump or update home position)
+
+---
+
+**Last Updated**: 2025-10-26 (Session 15: Context Menu Enhancement)
+**Current Line Count**: ~5900 lines in task-tree.html
+**Version**: 1.10.0 (Emoji Context Menus & Nested Home Options)

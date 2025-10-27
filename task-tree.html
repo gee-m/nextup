@@ -150,6 +150,7 @@
             min-width: 180px;
             max-height: 350px;
             overflow-y: auto;
+            overflow-x: hidden; /* Prevent horizontal scrollbar */
             box-shadow: 0 8px 24px rgba(0,0,0,0.15);
             border-radius: 8px;
             margin-left: -2px; /* Overlap slightly to remove gap */
@@ -202,6 +203,50 @@
 
         .submenu-item.special:hover {
             background: rgba(156, 39, 176, 0.2);
+        }
+
+        /* Fix margin for submenu items that have nested submenus */
+        .submenu-item.menu-item-with-submenu {
+            margin-left: 0 !important;
+            width: 100% !important;
+            position: relative;
+            display: block;
+            cursor: pointer;
+        }
+
+        .submenu-item.menu-item-with-submenu > span {
+            display: inline-block;
+            width: 100%;
+        }
+
+        /* Nested submenu - uses fixed positioning to break out of overflow context */
+        .submenu-nested {
+            display: none;
+            position: fixed; /* Fixed instead of absolute to escape overflow container */
+            background: rgba(255, 255, 255, 0.98);
+            min-width: 200px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            z-index: 1002; /* Higher than parent submenu */
+            padding: 0;
+        }
+
+        .submenu-item.menu-item-with-submenu:hover .submenu-nested,
+        .submenu-nested:hover {
+            display: block !important;
+        }
+
+        .submenu-nested .submenu-item {
+            margin-left: 0;
+            padding-left: 14px;
+            width: 100%;
+        }
+
+        .submenu-nested .submenu-item:first-child {
+            margin-left: 0;
+            padding-left: 14px;
+            width: 100%;
         }
 
         .submenu-empty {
@@ -905,6 +950,11 @@
 
         body.dark-mode .submenu-empty {
             color: rgba(226, 232, 240, 0.5);
+        }
+
+        body.dark-mode .submenu-nested {
+            background: rgba(30, 41, 59, 0.98);
+            border: 1px solid rgba(148, 163, 184, 0.3);
         }
 
         /* Toast Notification System */
@@ -2247,52 +2297,63 @@
                 const maxChars = Math.floor(maxWidth / charWidth);
                 if (maxChars <= 0) return [text]; // Safety check
 
-                const lines = [];
+                // NEW: First split by newlines to preserve user line breaks
+                const paragraphs = text.split('\n');
+                const allLines = [];
 
-                if (wordWrap) {
-                    // Split on word boundaries
-                    const words = text.split(' ');
-                    let currentLine = '';
+                // Process each paragraph (line break = user intent)
+                for (const paragraph of paragraphs) {
+                    // Handle empty lines (preserve them as blank lines)
+                    if (paragraph === '') {
+                        allLines.push('');
+                        continue;
+                    }
 
-                    for (const word of words) {
-                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        const testWidth = testLine.length * charWidth;
+                    if (wordWrap) {
+                        // Split on word boundaries within this paragraph
+                        const words = paragraph.split(' ');
+                        let currentLine = '';
 
-                        if (testWidth <= maxWidth) {
-                            currentLine = testLine;
-                        } else {
-                            // Line would be too long
-                            if (currentLine) {
-                                lines.push(currentLine);
-                            }
+                        for (const word of words) {
+                            const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                            const testWidth = testLine.length * charWidth;
 
-                            // Handle single word longer than max width
-                            if (word.length * charWidth > maxWidth) {
-                                // Force character break for long words
-                                let remainingWord = word;
-                                while (remainingWord.length > 0) {
-                                    lines.push(remainingWord.substring(0, maxChars));
-                                    remainingWord = remainingWord.substring(maxChars);
-                                }
-                                currentLine = '';
+                            if (testWidth <= maxWidth) {
+                                currentLine = testLine;
                             } else {
-                                currentLine = word;
+                                // Line would be too long
+                                if (currentLine) {
+                                    allLines.push(currentLine);
+                                }
+
+                                // Handle single word longer than max width
+                                if (word.length * charWidth > maxWidth) {
+                                    // Force character break for long words
+                                    let remainingWord = word;
+                                    while (remainingWord.length > 0) {
+                                        allLines.push(remainingWord.substring(0, maxChars));
+                                        remainingWord = remainingWord.substring(maxChars);
+                                    }
+                                    currentLine = '';
+                                } else {
+                                    currentLine = word;
+                                }
                             }
                         }
-                    }
 
-                    if (currentLine) {
-                        lines.push(currentLine);
-                    }
-                } else {
-                    // Character wrapping - simple split at max chars
-                    for (let i = 0; i < text.length; i += maxChars) {
-                        lines.push(text.substring(i, i + maxChars));
+                        if (currentLine) {
+                            allLines.push(currentLine);
+                        }
+                    } else {
+                        // Character wrapping - simple split at max chars for this paragraph
+                        for (let i = 0; i < paragraph.length; i += maxChars) {
+                            allLines.push(paragraph.substring(i, i + maxChars));
+                        }
                     }
                 }
 
                 // Return at least one line (even if empty)
-                return lines.length > 0 ? lines : [''];
+                return allLines.length > 0 ? allLines : [''];
             },
 
             clearAllData() {
@@ -3682,14 +3743,14 @@
                 // Multi-select specific options
                 if (isMultiSelect) {
                     buttons.push({
-                        label: `Mark Done (${this.selectedTaskIds.size})`,
+                        label: `✅ Mark Done (${this.selectedTaskIds.size})`,
                         action: () => {
                             const selectedArray = Array.from(this.selectedTaskIds);
                             selectedArray.forEach(id => this.toggleDone(id));
                         }
                     });
                     buttons.push({
-                        label: `Mark Pending (${this.selectedTaskIds.size})`,
+                        label: `⏸️ Mark Pending (${this.selectedTaskIds.size})`,
                         action: () => {
                             const selectedArray = Array.from(this.selectedTaskIds);
                             selectedArray.forEach(id => {
@@ -3699,14 +3760,14 @@
                         }
                     });
                     buttons.push({
-                        label: `Hide Child (${this.selectedTaskIds.size})`,
+                        label: `🙈 Hide Child (${this.selectedTaskIds.size})`,
                         action: () => {
                             const selectedArray = Array.from(this.selectedTaskIds);
                             selectedArray.forEach(id => this.toggleHiddenSelf(id));
                         }
                     });
                     buttons.push({
-                        label: `Delete (${this.selectedTaskIds.size})`,
+                        label: `🗑️ Delete (${this.selectedTaskIds.size})`,
                         action: () => {
                             const selectedArray = Array.from(this.selectedTaskIds);
                             this.deleteMultipleTasks(selectedArray);
@@ -3714,22 +3775,23 @@
                     });
                 } else {
                     // Single select options
-                    buttons.push({ label: 'Add Child', action: () => this.addChildTask(taskId) });
-                    buttons.push({ label: task.status === 'done' ? 'Mark Pending' : 'Mark Done', action: () => this.toggleDone(taskId) });
-                    buttons.push({ label: task.currentlyWorking ? 'Stop Working' : 'Start Working', action: () => this.toggleWorking(taskId) });
+                    buttons.push({ label: '➕ Add Child', action: () => this.addChildTask(taskId) });
+                    buttons.push({ label: task.status === 'done' ? '⏸️ Mark Pending' : '✅ Mark Done', action: () => this.toggleDone(taskId) });
+                    buttons.push({ label: task.currentlyWorking ? '⏹️ Stop Working' : '▶️ Start Working', action: () => this.toggleWorking(taskId) });
 
                     // Add hide option if task has a parent (not a root task)
                     if (task.mainParent !== null) {
-                        buttons.push({ label: task.hidden ? 'Show' : 'Hide', action: () => this.toggleHiddenSelf(taskId) });
+                        buttons.push({ label: task.hidden ? '👁️ Show' : '🙈 Hide', action: () => this.toggleHiddenSelf(taskId) });
                     }
 
                     // Only add hide/show children button if task has children
                     if (hideButtonLabel) {
-                        buttons.push({ label: hideButtonLabel, action: () => this.toggleHidden(taskId) });
+                        const hideEmoji = hideButtonLabel.includes('Show') ? '📂' : '📦';
+                        buttons.push({ label: `${hideEmoji} ${hideButtonLabel}`, action: () => this.toggleHidden(taskId) });
                     }
 
-                    buttons.push({ label: 'Copy Text', action: () => this.copyTaskText(task.title) });
-                    buttons.push({ label: 'Delete', action: () => this.deleteTask(taskId) });
+                    buttons.push({ label: '📋 Copy Text', action: () => this.copyTaskText(task.title) });
+                    buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
                 }
 
                 buttons.forEach(({ label, action }) => {
@@ -3756,7 +3818,7 @@
 
                 const buttons = [
                     {
-                        label: 'Create New Task',
+                        label: '➕ Create New Task',
                         action: () => {
                             this.saveSnapshot(`Created task`);
 
@@ -3782,8 +3844,8 @@
                             this.render();
                         }
                     },
-                    { label: 'Zoom to Fit', action: () => this.zoomToFit() },
-                    { label: 'Mark Origin', action: () => this.markOrigin() }
+                    { label: '🔍 Zoom to Fit', action: () => this.zoomToFit() },
+                    { label: '🎯 Mark Origin', action: () => this.markOrigin() }
                 ];
 
                 buttons.forEach(({ label, action }) => {
@@ -3817,18 +3879,106 @@
 
                     sortedHomes.forEach(home => {
                         const item = document.createElement('div');
-                        item.className = 'submenu-item';
+                        item.className = 'submenu-item menu-item-with-submenu';
                         if (home.name === "Origin Home") {
                             item.classList.add('special');
                         }
+
                         // Display home name with keybind if it exists
                         const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
-                        item.textContent = nameText;
+
+                        // Don't use textContent - it can interfere with appendChild
+                        // Instead, create a span for the text
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = nameText;
+                        item.appendChild(textSpan);
+
+                        // Click on home name navigates to that home
                         item.onclick = (evt) => {
+                            // Only navigate if clicking the item itself, not the nested submenu
+                            if (evt.target === item || evt.target === textSpan) {
+                                evt.stopPropagation();
+                                this.closeMenu();
+                                this.jumpToHome(home.id);
+                            }
+                        };
+
+                        // Create nested submenu for each home (uses fixed positioning)
+                        const homeSubmenu = document.createElement('div');
+                        homeSubmenu.className = 'submenu-nested';
+                        homeSubmenu.style.display = 'none'; // Start hidden
+
+                        // Show/hide nested submenu with JavaScript (CSS hover unreliable with fixed positioning)
+                        let hideTimeout = null;
+
+                        item.addEventListener('mouseenter', () => {
+                            if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                            }
+                            const rect = item.getBoundingClientRect();
+                            homeSubmenu.style.left = `${rect.right}px`;
+                            homeSubmenu.style.top = `${rect.top}px`;
+                            homeSubmenu.style.display = 'block';
+
+                            // Keep parent submenu visible while nested submenu is open
+                            submenu.style.display = 'block';
+                        });
+
+                        item.addEventListener('mouseleave', (evt) => {
+                            // Don't hide if mouse moved to the submenu
+                            hideTimeout = setTimeout(() => {
+                                const hoveredElement = document.elementFromPoint(evt.clientX, evt.clientY);
+                                if (!homeSubmenu.contains(hoveredElement)) {
+                                    homeSubmenu.style.display = 'none';
+                                    // Allow parent submenu to use CSS hover again
+                                    submenu.style.display = '';
+                                }
+                            }, 100);
+                        });
+
+                        // Keep both submenus visible when hovering nested submenu
+                        homeSubmenu.addEventListener('mouseenter', () => {
+                            if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                            }
+                            // Force parent submenu to stay visible
+                            submenu.style.display = 'block';
+                        });
+
+                        homeSubmenu.addEventListener('mouseleave', () => {
+                            homeSubmenu.style.display = 'none';
+                            // Allow parent submenu to use CSS hover again
+                            submenu.style.display = '';
+                        });
+
+                        // Jump to Home option
+                        const jumpOption = document.createElement('div');
+                        jumpOption.className = 'submenu-item';
+                        jumpOption.textContent = '🚀 Jump to Home';
+                        jumpOption.onclick = (evt) => {
                             evt.stopPropagation();
                             this.closeMenu();
                             this.jumpToHome(home.id);
                         };
+                        homeSubmenu.appendChild(jumpOption);
+
+                        // Update Home Position option
+                        const updateOption = document.createElement('div');
+                        updateOption.className = 'submenu-item';
+                        updateOption.textContent = '📍 Update Home Position';
+                        updateOption.onclick = (evt) => {
+                            evt.stopPropagation();
+                            this.closeMenu();
+                            this.updateHome(home.id);
+                        };
+                        homeSubmenu.appendChild(updateOption);
+
+                        // Append nested submenu to body (not to item) since it uses fixed positioning
+                        // This avoids parent overflow issues
+                        document.body.appendChild(homeSubmenu);
+
                         submenu.appendChild(item);
                     });
 
@@ -3841,7 +3991,7 @@
                 // Add "Create New Home" option
                 const createItem = document.createElement('div');
                 createItem.className = 'submenu-item special';
-                createItem.textContent = '+ Create New Home';
+                createItem.textContent = '➕ Create New Home';
                 createItem.onclick = (evt) => {
                     evt.stopPropagation();
                     this.closeMenu();
@@ -3869,6 +4019,10 @@
             closeMenu() {
                 const menu = document.querySelector('.node-menu');
                 if (menu) menu.remove();
+
+                // Also remove any nested submenus that were appended to body
+                const nestedMenus = document.querySelectorAll('.submenu-nested');
+                nestedMenus.forEach(m => m.remove());
             },
 
             copyTaskText(text) {
@@ -4270,14 +4424,16 @@
                         textarea.rows = Math.max(2, lines.length); // Dynamic rows based on content
                         textarea.style.cssText = `width: 100%; max-width: none; height: 100%; border: 2px solid #007bff; border-radius: 4px; padding: 4px 8px; font-size: 14px; font-family: ${this.fontFamily}; text-align: left; box-sizing: border-box; resize: none; overflow: auto;`;
                         textarea.onkeydown = (e) => {
-                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                // Ctrl+Enter or Cmd+Enter = save
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                // Plain Enter = save and finish editing
                                 this.finishEditing(true);
                                 e.preventDefault();
                             } else if (e.key === 'Escape') {
+                                // Escape = cancel editing
                                 this.finishEditing(false);
+                                e.preventDefault();
                             }
-                            // Regular Enter key creates newline (natural textarea behavior)
+                            // Shift+Enter creates newline (default textarea behavior when we don't preventDefault)
                             e.stopPropagation();
                         };
                         // Prevent clicks on textarea from bubbling to canvas handlers
