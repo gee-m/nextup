@@ -1088,6 +1088,7 @@
         <button style="background: #9c27b0; color: white;" onclick="app.loadTestChecklist()" title="Load testing tasks for recent features">🧪 Test Checklist</button>
         <button class="secondary" onclick="app.toggleDarkMode()" id="darkModeToggle">🌙 Dark Mode</button>
         <button class="secondary" onclick="app.showSettingsModal()" title="Customize appearance and behavior">⚙️ Settings</button>
+        <button class="secondary" onclick="app.showShortcutsModal()" title="View all keyboard shortcuts">❓ Shortcuts</button>
         <div class="dropdown">
             <button class="secondary" onclick="app.toggleHomesDropdown(event)" title="Quick navigation to saved homes">🏠 Homes</button>
             <div id="homesDropdown" class="dropdown-content">
@@ -1099,7 +1100,7 @@
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
         <div class="info">
-            <span>Double-click: edit | Shift+Double-click: hide/show | Right-click: menu | Left-click: select | Shift+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | J: jump to working | Shift+Drag: subtree | Scroll/Ctrl+±: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
+            <span id="shortcuts-help"></span>
         </div>
     </div>
 
@@ -1247,11 +1248,26 @@
         </div>
     </div>
 
+    <div id="shortcuts-modal" class="modal">
+        <div class="modal-content" style="max-width: 700px; max-height: 85vh; overflow-y: auto;">
+            <h2>⌨️ Keyboard Shortcuts</h2>
+            <p id="shortcuts-platform-info" style="color: #666; font-size: 13px; margin-bottom: 20px;"></p>
+
+            <div id="shortcuts-content" style="display: grid; gap: 24px;">
+                <!-- Populated dynamically by showShortcutsModal() -->
+            </div>
+
+            <div class="modal-buttons" style="margin-top: 24px;">
+                <button onclick="app.hideShortcutsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div id="status-bar">
         <span class="status-label">Working on:</span>
         <span id="status-path"></span>
         <span class="status-detail" id="status-children"></span>
-        <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()" title="Jump to working task (J)">
+        <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()">
             🎯 Jump
         </button>
     </div>
@@ -1302,6 +1318,10 @@
             // Homes - named bookmarks for quick navigation
             homes: [],            // Array of {id, name, centerX, centerY, zoomLevel, timestamp, keybind}
             homeIdCounter: 1,     // For unique IDs
+            // Platform detection for keyboard shortcuts
+            isMac: navigator.platform.toUpperCase().indexOf('MAC') >= 0,
+            isWindows: navigator.platform.toUpperCase().indexOf('WIN') >= 0,
+            isLinux: navigator.platform.toUpperCase().indexOf('LINUX') >= 0,
             // Undo/Redo system
             undoStack: [],        // Array of {tasks: [], description: string, timestamp: number}
             redoStack: [],        // Array for redo operations
@@ -1320,8 +1340,26 @@
             init() {
                 this.loadFromStorage();
                 this.setupEventListeners();
+                this.updateShortcutsHelp();
                 this.updateStatusBar();
                 this.render();
+            },
+
+            updateShortcutsHelp() {
+                // Update the shortcuts help text with platform-specific modifiers
+                const mod = this.getModifierKey();
+                const shift = this.getShiftKey();
+
+                const helpElement = document.getElementById('shortcuts-help');
+                if (helpElement) {
+                    helpElement.textContent = `Double-click: edit | ${shift}+Double-click: hide/show | Right-click: menu | Left-click: select | ${shift}+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | ${mod}+Click: create task | ${mod}+K: attach link | P: priority | J: jump to working | ${shift}+Drag: subtree | Scroll/${mod}+±: zoom | ${mod}+Z: undo | ${mod}+${shift}+Z: redo`;
+                }
+
+                // Update tooltips with platform-specific text
+                const jumpBtn = document.getElementById('jump-to-working-btn');
+                if (jumpBtn) {
+                    jumpBtn.title = 'Jump to working task (J)';
+                }
             },
 
             setupEventListeners() {
@@ -1489,9 +1527,14 @@
                         }
                     }
 
-                    // Escape to clear selection
+                    // Escape to close shortcuts modal or clear selection
                     if (e.key === 'Escape' && this.editingTaskId === null) {
-                        if (this.selectedTaskIds.size > 0 || this.selectedLine) {
+                        const shortcutsModal = document.getElementById('shortcuts-modal');
+                        if (shortcutsModal && shortcutsModal.classList.contains('show')) {
+                            // Close shortcuts modal first
+                            this.hideShortcutsModal();
+                        } else if (this.selectedTaskIds.size > 0 || this.selectedLine) {
+                            // Clear selection if no modal is open
                             this.selectedTaskIds.clear();
                             this.selectedLine = null;
                             this.render();
@@ -4576,6 +4619,141 @@
                     return pt.matrixTransform(screenCTM.inverse());
                 }
                 return pt;
+            },
+
+            getModifierKey(short = false) {
+                // Returns the primary modifier key symbol/name for current platform
+                // short = true: Returns '⌘' or 'Ctrl'
+                // short = false: Returns 'Cmd' or 'Ctrl'
+                if (this.isMac) {
+                    return short ? '⌘' : 'Cmd';
+                }
+                return 'Ctrl';
+            },
+
+            getAltKey(short = false) {
+                // Returns the Alt/Option key symbol/name for current platform
+                // short = true: Returns '⌥' or 'Alt'
+                // short = false: Returns 'Option' or 'Alt'
+                if (this.isMac) {
+                    return short ? '⌥' : 'Option';
+                }
+                return 'Alt';
+            },
+
+            getShiftKey(short = false) {
+                // Returns the Shift key symbol/name for current platform
+                // short = true: Returns '⇧' or 'Shift'
+                // short = false: Returns 'Shift' (same on all platforms)
+                return short && this.isMac ? '⇧' : 'Shift';
+            },
+
+            showShortcutsModal() {
+                const modal = document.getElementById('shortcuts-modal');
+                const platformInfo = document.getElementById('shortcuts-platform-info');
+                const content = document.getElementById('shortcuts-content');
+
+                // Set platform info
+                const platform = this.isMac ? 'macOS' : this.isWindows ? 'Windows' : 'Linux';
+                platformInfo.textContent = `Detected platform: ${platform}`;
+
+                // Get platform-specific key names
+                const mod = this.getModifierKey(false); // 'Cmd' or 'Ctrl'
+                const modSymbol = this.getModifierKey(true); // '⌘' or 'Ctrl'
+                const alt = this.getAltKey(false);
+                const altSymbol = this.getAltKey(true);
+                const shift = this.getShiftKey(false);
+                const shiftSymbol = this.getShiftKey(true);
+
+                // Build shortcuts by category
+                const shortcuts = [
+                    {
+                        category: '✏️ Editing',
+                        items: [
+                            { keys: 'Double-click node', description: 'Edit task name' },
+                            { keys: `${modSymbol}+Click node`, description: 'Create child task under clicked node' },
+                            { keys: `${modSymbol}+Click empty`, description: 'Create new root task at cursor' },
+                            { keys: 'Backspace', description: 'Delete selected task(s)' },
+                            { keys: `${altSymbol}+Click node`, description: 'Delete task (alternative method)' }
+                        ]
+                    },
+                    {
+                        category: '🎯 Selection',
+                        items: [
+                            { keys: 'Click node', description: 'Select task (clears other selections)' },
+                            { keys: `${shiftSymbol}+Click node`, description: 'Add/remove task from selection' },
+                            { keys: 'Escape', description: 'Clear all selections' }
+                        ]
+                    },
+                    {
+                        category: '📊 Status & Priority',
+                        items: [
+                            { keys: 'Middle-click', description: 'Cycle task status (pending → working → done → pending)' },
+                            { keys: 'P (hover)', description: 'Cycle priority of hovered task' },
+                            { keys: 'P (selected)', description: 'Cycle priority of selected task(s)' }
+                        ]
+                    },
+                    {
+                        category: '🔗 Relationships',
+                        items: [
+                            { keys: `${modSymbol}+Drag A → B`, description: 'Reparent: Make task A a child of task B' },
+                            { keys: `${altSymbol}+Drag A → B`, description: 'Add dependency: A depends on B (A waits for B)' },
+                            { keys: `${altSymbol}+Drag on dependency`, description: 'Remove dependency link' },
+                            { keys: `${shiftSymbol}+Drag node`, description: 'Move entire subtree (preserves relative positions)' }
+                        ]
+                    },
+                    {
+                        category: '🚀 Navigation',
+                        items: [
+                            { keys: 'Drag node', description: 'Move single task to new position' },
+                            { keys: 'Scroll wheel', description: 'Zoom in/out at cursor position' },
+                            { keys: `${modSymbol}++`, description: 'Zoom in' },
+                            { keys: `${modSymbol}+−`, description: 'Zoom out' },
+                            { keys: 'J or 🎯 button', description: 'Jump to currently working task (cinematic animation)' },
+                            { keys: `${shiftSymbol}+Double-click`, description: 'Toggle subtree visibility (collapse/expand)' }
+                        ]
+                    },
+                    {
+                        category: '🔗 Links',
+                        items: [
+                            { keys: `${modSymbol}+K`, description: 'Attach URL to selected task' },
+                            { keys: 'Click 🔗', description: 'Open attached link in new tab' }
+                        ]
+                    },
+                    {
+                        category: '⏮️ Undo/Redo',
+                        items: [
+                            { keys: `${modSymbol}+Z`, description: 'Undo last action' },
+                            { keys: `${modSymbol}+${shiftSymbol}+Z`, description: 'Redo previously undone action' }
+                        ]
+                    }
+                ];
+
+                // Build HTML for shortcuts
+                let html = '';
+                shortcuts.forEach(section => {
+                    html += `
+                        <div class="shortcut-section">
+                            <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; color: ${this.darkMode ? '#fff' : '#333'};">${section.category}</h3>
+                            <table style="width: 100%; border-collapse: collapse;">
+                                ${section.items.map(item => `
+                                    <tr style="border-bottom: 1px solid ${this.darkMode ? '#444' : '#eee'};">
+                                        <td style="padding: 8px 16px 8px 0; font-family: 'Fira Code', monospace; font-size: 13px; color: ${this.darkMode ? '#4fc3f7' : '#1976d2'}; white-space: nowrap;">${item.keys}</td>
+                                        <td style="padding: 8px 0; font-size: 13px; color: ${this.darkMode ? '#ccc' : '#666'};">${item.description}</td>
+                                    </tr>
+                                `).join('')}
+                            </table>
+                        </div>
+                    `;
+                });
+
+                content.innerHTML = html;
+                modal.classList.add('show');
+            },
+
+            hideShortcutsModal() {
+                const modal = document.getElementById('shortcuts-modal');
+                modal.classList.remove('show');
             },
 
             getWorkingTaskPath() {

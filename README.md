@@ -614,15 +614,48 @@ Stored in localStorage as:
 - **Coordinate Transformation**: Proper SVG matrix transformation for accurate clicks at any zoom level
 
 #### Keyboard Shortcuts
-- **Enter**: Add root task (when input focused)
-- **Backspace**: Delete selected node or line
-- **Ctrl/Cmd + Z**: Undo last action
-- **Ctrl/Cmd + Shift + Z**: Redo (also Ctrl+Y on Windows)
-- **Ctrl/Cmd + +**: Zoom in
-- **Ctrl/Cmd + -**: Zoom out
-- **Ctrl/Cmd + 0**: Reset zoom
-- **Ctrl/Cmd + 1**: Zoom to fit
-- **Ctrl/Cmd + Scroll**: Mouse wheel zoom
+
+**Platform Detection**: Task Tree automatically detects your platform and displays the appropriate shortcuts in the "❓ Shortcuts" modal.
+
+**Quick Reference** (click "❓ Shortcuts" button in toolbar for full interactive reference)
+
+| Action | Mac | Windows/Linux | Notes |
+|--------|-----|---------------|-------|
+| **Editing** |
+| Edit task name | Double-click | Double-click | Inline editing |
+| Create child task | ⌘+Click node | Ctrl+Click node | Creates child under clicked node |
+| Create root task | ⌘+Click empty | Ctrl+Click empty | Creates task at cursor |
+| Delete task | Backspace | Backspace | On selected task(s) |
+| Delete task (alt) | ⌥+Click | Alt+Click | Alternative method |
+| **Selection** |
+| Select task | Click | Click | Clears other selections |
+| Multi-select | ⇧+Click | Shift+Click | Add/remove from selection |
+| Clear selection | Escape | Escape | Clears all selections |
+| **Status & Priority** |
+| Cycle status | Middle-click | Middle-click | Pending → Working → Done |
+| Cycle priority (hover) | P | P | On hovered task |
+| Cycle priority (selected) | P | P | On selected task(s) |
+| **Relationships** |
+| Reparent task | ⌘+Drag A → B | Ctrl+Drag A → B | Make A child of B |
+| Add dependency | ⌥+Drag A → B | Alt+Drag A → B | A depends on B |
+| Remove dependency | ⌥+Drag on link | Alt+Drag on link | Deletes dependency |
+| Move subtree | ⇧+Drag | Shift+Drag | Preserves relative positions |
+| **Navigation** |
+| Move single task | Drag | Drag | Repositions task |
+| Zoom in | ⌘++ | Ctrl++ | Zoom in |
+| Zoom out | ⌘+− | Ctrl+− | Zoom out |
+| Jump to working | J | J | Cinematic animation to working task |
+| Collapse/expand | ⇧+Double-click | Shift+Double-click | Toggle subtree visibility |
+| **Links** |
+| Attach link | ⌘+K | Ctrl+K | Add URL to selected task |
+| **Undo/Redo** |
+| Undo | ⌘+Z | Ctrl+Z | Undo last action |
+| Redo | ⌘+⇧+Z | Ctrl+Shift+Z | Redo previously undone action |
+
+**Symbol Legend**:
+- ⌘ = Command (Mac) / Ctrl (Windows/Linux)
+- ⌥ = Option (Mac) / Alt (Windows/Linux)
+- ⇧ = Shift (all platforms)
 
 #### Undo/Redo System
 - **Comprehensive History**: All operations are undoable - task creation, editing, deletion, status changes, moving, dependencies, imports, and even "Clear All Data"
@@ -4377,8 +4410,124 @@ The original implementation likely assumed snapshots should be taken "when somet
 
 **Line Count**: ~6685 lines in task-tree.html (+5 lines)
 
+### Session 20 Continued (2nd): Mac Keyboard Compatibility (2025-10-27)
+
+**Version**: 1.14.0 (Platform Compatibility)
+
+**Changes**:
+1. Added platform detection (Mac/Windows/Linux)
+2. Dynamic help text with platform-specific modifier symbols
+3. Interactive keyboard shortcuts reference modal
+4. Comprehensive Mac vs Windows shortcut table in README
+
+**Problem**: Keyboard shortcuts needed to work consistently across Mac (Cmd/⌘), Windows (Ctrl), and Linux (Ctrl), and users needed clear documentation showing which keys to use on their platform.
+
+**Solution**: Implement platform detection and dynamic UI that shows the correct modifier keys for each platform, plus a comprehensive shortcuts modal.
+
+**Implementation**:
+
+**1. Platform Detection** (Lines 1322-1324):
+```javascript
+isMac: navigator.platform.toUpperCase().indexOf('MAC') >= 0,
+isWindows: navigator.platform.toUpperCase().indexOf('WIN') >= 0,
+isLinux: navigator.platform.toUpperCase().indexOf('LINUX') >= 0,
+```
+- Detects platform on page load using `navigator.platform`
+- Stored in app state for easy access throughout codebase
+- Used by helper functions to return appropriate key names
+
+**2. Helper Functions** (Lines 4619-4644):
+```javascript
+getModifierKey(short = false) {
+    // Returns '⌘' or 'Cmd' for Mac, 'Ctrl' for Windows/Linux
+    return this.isMac ? (short ? '⌘' : 'Cmd') : 'Ctrl';
+},
+getAltKey(short = false) {
+    // Returns '⌥' or 'Option' for Mac, 'Alt' for Windows/Linux
+    return this.isMac ? (short ? '⌥' : 'Option') : 'Alt';
+},
+getShiftKey(short = false) {
+    // Returns '⇧' or 'Shift' (same on all platforms)
+    return short && this.isMac ? '⇧' : 'Shift';
+}
+```
+- `short = true`: Returns Mac Unicode symbols (⌘ ⌥ ⇧) or Windows text
+- `short = false`: Returns full key names (Cmd/Ctrl, Option/Alt, Shift)
+- Single source of truth for platform-specific key names
+
+**3. Dynamic Help Text** (Lines 1348-1365):
+```javascript
+updateShortcutsHelp() {
+    const mod = this.getModifierKey();
+    const shift = this.getShiftKey();
+
+    const helpElement = document.getElementById('shortcuts-help');
+    if (helpElement) {
+        helpElement.textContent = `...${mod}+Click: create task...${mod}+Z: undo...`;
+    }
+
+    // Update tooltips
+    const jumpBtn = document.getElementById('jump-to-working-btn');
+    if (jumpBtn) jumpBtn.title = 'Jump to working task (J)';
+}
+```
+- Called in `init()` to populate help text on page load
+- Replaces hardcoded "Ctrl" with platform-specific modifier
+- Updates tooltips to match platform conventions
+
+**4. Interactive Shortcuts Modal** (Lines 4646-4752):
+- **Button**: "❓ Shortcuts" in toolbar (Line 1091)
+- **Modal HTML**: Lines 1251-1264 with platform info and content container
+- **showShortcutsModal()**: Dynamically generates shortcut tables by category
+  - Detects platform and displays at top: "Detected platform: macOS"
+  - 7 categories: ✏️ Editing, 🎯 Selection, 📊 Status & Priority, 🔗 Relationships, 🚀 Navigation, 🔗 Links, ⏮️ Undo/Redo
+  - Each shortcut shown with platform-specific symbols (e.g., "⌘+Z" on Mac, "Ctrl+Z" on Windows)
+  - Styled tables with proper dark mode support
+- **hideShortcutsModal()**: Closes modal (Line 4749)
+- **ESC Key Handler**: Lines 1531-1542 - ESC closes modal before clearing selections
+
+**5. README Keyboard Shortcuts Table** (Lines 616-658):
+- Comprehensive table with Mac/Windows/Linux columns
+- Shows all shortcuts side-by-side for easy comparison
+- Organized by category (Editing, Selection, Status, etc.)
+- Symbol legend: ⌘ = Cmd/Ctrl, ⌥ = Option/Alt, ⇧ = Shift
+- Points users to "❓ Shortcuts" button for interactive reference
+
+**Code Already Mac-Compatible**:
+The existing event handlers already worked on Mac! They use:
+```javascript
+if (e.ctrlKey || e.metaKey) { ... }  // ✅ Works on Mac (metaKey = Cmd)
+if (e.altKey) { ... }                 // ✅ Works on Mac (altKey = Option)
+if (e.shiftKey) { ... }               // ✅ Works on Mac
+```
+No changes needed to actual keyboard handling - just documentation and UI!
+
+**Platform Detection Details**:
+- **macOS**: `navigator.platform` = "MacIntel" → Shows ⌘ ⌥ ⇧ symbols
+- **Windows**: `navigator.platform` = "Win32" → Shows Ctrl, Alt, Shift
+- **Linux**: `navigator.platform` = "Linux x86_64" → Shows Ctrl, Alt, Shift
+- **Fallback**: If platform not detected, defaults to Windows key names
+
+**Benefits**:
+- ✅ **Zero breaking changes** - All existing shortcuts still work
+- ✅ **Better UX** - Users see correct keys for their platform
+- ✅ **Discoverable** - Interactive modal shows all shortcuts
+- ✅ **Mac-friendly** - Uses familiar ⌘ ⌥ ⇧ symbols
+- ✅ **Comprehensive docs** - README has side-by-side comparison
+
+**Testing**:
+- ✓ Platform detection works (Mac/Windows/Linux)
+- ✓ Help text shows correct symbols based on platform
+- ✓ "❓ Shortcuts" button opens modal
+- ✓ Modal displays platform-specific shortcuts organized by category
+- ✓ ESC closes modal
+- ✓ All shortcuts work correctly on all platforms
+- ✓ README table shows Mac vs Windows comparison
+
+**Line Count**: ~6790 lines in task-tree.html (+105 lines)
+
 ---
 
-**Last Updated**: 2025-10-27 (Session 20 Continued: Fix Undo/Redo for Task Movement)
-**Current Line Count**: ~6685 lines in task-tree.html
-**Version**: 1.13.1 (Critical Bug Fix)
+**Last Updated**: 2025-10-27 (Session 20 Continued (2nd): Mac Keyboard Compatibility)
+**Current Line Count**: ~6790 lines in task-tree.html
+**Version**: 1.14.0 (Platform Compatibility)
