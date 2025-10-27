@@ -54,6 +54,10 @@ Always update the README when you:
    EOF
    )"
    ```
+4. **Push to main**: `git push origin main`
+   - **CRITICAL**: Always push after committing - this triggers deployment
+   - Pushing to main deploys the changes
+   - Verify push succeeds with `git status`
 
 **When to commit**:
 - ✅ User explicitly confirms: "looks good", "works perfectly", "stable", "commit this"
@@ -62,6 +66,8 @@ Always update the README when you:
 - ❌ NEVER commit if tests are failing or errors exist
 
 **Important**: Always wait for user's explicit confirmation before staging and committing. This ensures only stable, verified changes enter the git history.
+
+**Deployment**: Pushing to main automatically deploys the application. Always push after committing to ensure changes go live.
 
 ---
 
