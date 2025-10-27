@@ -31,6 +31,40 @@ Always update the README when you:
 
 ---
 
+## 💾 Git Commit Workflow
+
+**After user confirms changes are working and stable:**
+
+1. **Stage all changes**: `git add .`
+2. **Commit with descriptive message**: Use conventional commit format
+   - Format: `git commit -m "type: brief description"`
+   - Types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`
+   - Example: `git commit -m "feat: add golden path visualization for working task ancestors"`
+3. **Include co-author footer**:
+   ```bash
+   git commit -m "$(cat <<'EOF'
+   feat: brief description of changes
+
+   - Detailed point 1
+   - Detailed point 2
+
+   🤖 Generated with Claude Code
+
+   Co-Authored-By: Claude <noreply@anthropic.com>
+   EOF
+   )"
+   ```
+
+**When to commit**:
+- ✅ User explicitly confirms: "looks good", "works perfectly", "stable", "commit this"
+- ✅ Feature is fully implemented and tested
+- ❌ NEVER commit without user confirmation
+- ❌ NEVER commit if tests are failing or errors exist
+
+**Important**: Always wait for user's explicit confirmation before staging and committing. This ensures only stable, verified changes enter the git history.
+
+---
+
 ## Project Overview
 
 **Task Tree** is a single-file web application for hierarchical task management with dependency tracking. It visualizes todos as an interactive graph where tasks have parent-child relationships, dependencies, and work-in-progress states.

@@ -957,6 +957,36 @@
             border: 1px solid rgba(148, 163, 184, 0.3);
         }
 
+        /* Link Badge Styling */
+        .link-badge {
+            pointer-events: none;
+            user-select: none;
+        }
+
+        body.dark-mode .link-badge rect {
+            fill: #1e88e5;
+        }
+
+        /* Links Dropdown Styling */
+        .links-dropdown {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+        }
+
+        body.dark-mode .links-dropdown {
+            background: #2a2a2a !important;
+            border-color: #444 !important;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .links-dropdown > div {
+            border-bottom-color: #444 !important;
+        }
+
+        body.dark-mode .links-dropdown > div:hover {
+            background-color: #333 !important;
+        }
+
         /* Toast Notification System */
         .toast-container {
             position: fixed;
@@ -1039,7 +1069,7 @@
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
         <div class="info">
-            <span>Double-click: edit | Right-click: menu (or on empty space) | Left-click: select | Backspace: delete | Middle-click: cycle | Ctrl+Click: create task | Shift+Drag: subtree | Scroll: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
+            <span>Double-click: edit | Right-click: menu (or on empty space) | Left-click: select | Backspace: delete | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | Shift+Drag: subtree | Scroll: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
         </div>
     </div>
 
@@ -1516,6 +1546,17 @@
                         this.redo();
                     }
 
+                    // Ctrl/Cmd + K = attach link to selected node
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                        e.preventDefault();
+                        if (this.selectedTaskIds.size === 1) {
+                            const taskId = Array.from(this.selectedTaskIds)[0];
+                            this.attachLink(taskId);
+                        } else if (this.selectedTaskIds.size > 1) {
+                            this.showToast('⚠️ Select a single node to attach a link', 'warning');
+                        }
+                    }
+
                     // Number keys (0-9) = jump to home with that keybind (only when not modifying with Ctrl/Cmd/Alt)
                     if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
                         // Find home with this keybind
@@ -1549,7 +1590,8 @@
                     hidden: false,
                     currentlyWorking: false,
                     textExpanded: false,
-                    textLocked: false
+                    textLocked: false,
+                    links: []  // Array of URLs attached to this task
                 };
 
                 parent.children.push(task.id);
@@ -1583,7 +1625,8 @@
                     hidden: false,
                     currentlyWorking: false,
                     textExpanded: false,
-                    textLocked: false
+                    textLocked: false,
+                    links: []  // Array of URLs attached to this task
                 };
 
                 parent.children.push(task.id);
@@ -2204,7 +2247,33 @@
                     if (input) {
                         const task = this.tasks.find(t => t.id === this.editingTaskId);
                         if (task) {
-                            const newTitle = input.value.trim() || 'Untitled';
+                            let newTitle = input.value.trim() || 'Untitled';
+
+                            // Extract URLs from text and add to links array
+                            const foundURLs = this.extractURLsFromText(newTitle);
+                            if (foundURLs.length > 0) {
+                                // Initialize links array if doesn't exist
+                                if (!task.links) task.links = [];
+
+                                // Add new links (avoid duplicates)
+                                let newLinksCount = 0;
+                                foundURLs.forEach(url => {
+                                    if (this.isValidURL(url) && !task.links.includes(url)) {
+                                        task.links.push(url);
+                                        newLinksCount++;
+                                    }
+                                });
+
+                                // Remove URLs from visible text
+                                newTitle = this.removeURLsFromText(newTitle) || 'Untitled';
+
+                                // Show toast notification
+                                if (newLinksCount > 0) {
+                                    const plural = newLinksCount > 1 ? 's' : '';
+                                    this.showToast(`🔗 Added ${newLinksCount} link${plural}`, 'success', 3000);
+                                }
+                            }
+
                             // Save snapshot with 2-second grouping for edits to same task
                             const truncatedTitle = newTitle.length > 30 ? newTitle.substring(0, 27) + '...' : newTitle;
                             this.saveSnapshot(`Edited task '${truncatedTitle}'`, this.editingTaskId);
@@ -2354,6 +2423,50 @@
 
                 // Return at least one line (even if empty)
                 return allLines.length > 0 ? allLines : [''];
+            },
+
+            // URL/Link Helper Functions
+            extractURLsFromText(text) {
+                // Match http://, https://, file:///, mailto: protocols
+                const urlPattern = /(https?:\/\/[^\s]+)|(file:\/\/\/[^\s]+)|(mailto:[^\s]+)/gi;
+                const matches = text.match(urlPattern) || [];
+
+                // Clean up URLs (remove trailing punctuation like periods, commas)
+                return matches.map(url => url.replace(/[.,;:!?)\]]+$/, ''));
+            },
+
+            removeURLsFromText(text) {
+                // Remove all URLs from text
+                const urlPattern = /(https?:\/\/[^\s]+)|(file:\/\/\/[^\s]+)|(mailto:[^\s]+)/gi;
+                let cleanText = text.replace(urlPattern, '');
+
+                // Clean up extra whitespace and trailing newlines
+                cleanText = cleanText.replace(/\n\s*\n+/g, '\n'); // Multiple blank lines → single
+                cleanText = cleanText.trim();
+
+                return cleanText;
+            },
+
+            shortenURL(url, maxLength = 30) {
+                if (url.length <= maxLength) return url;
+
+                // Remove protocol for display
+                let display = url.replace(/^(https?:\/\/|file:\/\/\/|mailto:)/, '');
+
+                if (display.length > maxLength) {
+                    return display.substring(0, maxLength - 3) + '...';
+                }
+
+                return display;
+            },
+
+            isValidURL(url) {
+                try {
+                    const u = new URL(url);
+                    return ['http:', 'https:', 'file:', 'mailto:'].includes(u.protocol);
+                } catch {
+                    return false;
+                }
             },
 
             clearAllData() {
@@ -3791,18 +3904,98 @@
                     }
 
                     buttons.push({ label: '📋 Copy Text', action: () => this.copyTaskText(task.title) });
+
+                    // Link management options
+                    if (!task.links) task.links = [];
+
+                    if (task.links.length === 0) {
+                        // No links - show attach option
+                        buttons.push({ label: '📎 Attach Link', action: () => this.attachLink(taskId) });
+                    } else if (task.links.length === 1) {
+                        // Single link - direct options
+                        buttons.push({ label: '🔗 Go to Link', action: () => this.openLink(task.links[0]) });
+                        buttons.push({ label: '📎 Attach Another Link', action: () => this.attachLink(taskId) });
+                        buttons.push({ label: '❌ Remove Link', action: () => this.removeAllLinks(taskId) });
+                    } else {
+                        // Multiple links - will need submenu (handled separately below)
+                        buttons.push({ label: `🔗 Links (${task.links.length})`, isLinksSubmenu: true });
+                        buttons.push({ label: '📎 Attach Another Link', action: () => this.attachLink(taskId) });
+                        buttons.push({ label: '🗑️ Remove All Links', action: () => this.removeAllLinks(taskId) });
+                    }
+
                     buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
                 }
 
-                buttons.forEach(({ label, action }) => {
-                    const btn = document.createElement('button');
-                    btn.textContent = label;
-                    btn.onclick = (evt) => {
-                        evt.stopPropagation();
-                        this.closeMenu();
-                        action();
-                    };
-                    menu.appendChild(btn);
+                buttons.forEach(({ label, action, isLinksSubmenu }) => {
+                    if (isLinksSubmenu) {
+                        // Create submenu for multiple links
+                        const linksBtn = document.createElement('button');
+                        linksBtn.className = 'menu-item-with-submenu';
+                        linksBtn.textContent = label;
+
+                        const linksSubmenu = document.createElement('div');
+                        linksSubmenu.className = 'submenu-nested';
+                        linksSubmenu.style.display = 'none';
+
+                        let hideTimeout = null;
+
+                        linksBtn.addEventListener('mouseenter', () => {
+                            if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                            }
+                            const rect = linksBtn.getBoundingClientRect();
+                            linksSubmenu.style.left = `${rect.right}px`;
+                            linksSubmenu.style.top = `${rect.top}px`;
+                            linksSubmenu.style.display = 'block';
+                        });
+
+                        linksBtn.addEventListener('mouseleave', (evt) => {
+                            hideTimeout = setTimeout(() => {
+                                const hoveredElement = document.elementFromPoint(evt.clientX, evt.clientY);
+                                if (!linksSubmenu.contains(hoveredElement)) {
+                                    linksSubmenu.style.display = 'none';
+                                }
+                            }, 100);
+                        });
+
+                        linksSubmenu.addEventListener('mouseenter', () => {
+                            if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                            }
+                        });
+
+                        linksSubmenu.addEventListener('mouseleave', () => {
+                            linksSubmenu.style.display = 'none';
+                        });
+
+                        // Add each link as a submenu item
+                        task.links.forEach(url => {
+                            const linkItem = document.createElement('div');
+                            linkItem.className = 'submenu-item';
+                            linkItem.textContent = `🌐 ${this.shortenURL(url)}`;
+                            linkItem.onclick = (evt) => {
+                                evt.stopPropagation();
+                                this.closeMenu();
+                                this.openLink(url);
+                            };
+                            linksSubmenu.appendChild(linkItem);
+                        });
+
+                        document.body.appendChild(linksSubmenu);
+                        menu.appendChild(linksBtn);
+                    } else {
+                        // Regular button
+                        const btn = document.createElement('button');
+                        btn.textContent = label;
+                        btn.onclick = (evt) => {
+                            evt.stopPropagation();
+                            this.closeMenu();
+                            action();
+                        };
+                        menu.appendChild(btn);
+                    }
                 });
 
                 document.body.appendChild(menu);
@@ -3836,7 +4029,8 @@
                                 currentlyWorking: false,
                                 hidden: false,
                                 textExpanded: false,
-                                textLocked: false
+                                textLocked: false,
+                                links: []  // Array of URLs attached to this task
                             };
                             this.tasks.push(newTask);
                             this.startEditing(newTask.id);
@@ -4023,6 +4217,9 @@
                 // Also remove any nested submenus that were appended to body
                 const nestedMenus = document.querySelectorAll('.submenu-nested');
                 nestedMenus.forEach(m => m.remove());
+
+                // Close any link dropdowns
+                this.closeLinksDropdown();
             },
 
             copyTaskText(text) {
@@ -4033,6 +4230,132 @@
                     // Show error toast
                     this.showToast('Failed to copy to clipboard', 'error', 4000);
                 });
+            },
+
+            // Link Management Functions
+            attachLink(taskId) {
+                this.showPrompt('Attach Link', 'Enter URL:', '', (url) => {
+                    if (!url) return;
+
+                    url = url.trim();
+                    if (!this.isValidURL(url)) {
+                        this.showToast('❌ Invalid URL format', 'error');
+                        return;
+                    }
+
+                    const task = this.tasks.find(t => t.id === taskId);
+                    if (!task) return;
+
+                    this.saveSnapshot(`Attached link to "${task.title}"`);
+
+                    if (!task.links) task.links = [];
+
+                    if (task.links.includes(url)) {
+                        this.showToast('⚠️ Link already exists', 'warning');
+                        return;
+                    }
+
+                    task.links.push(url);
+                    this.saveToStorage();
+                    this.render();
+                    this.showToast(`🔗 Link attached: ${this.shortenURL(url)}`, 'success');
+                });
+            },
+
+            openLink(url) {
+                try {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    this.showToast(`🔗 Opened: ${this.shortenURL(url)}`, 'info', 2000);
+                } catch (err) {
+                    this.showToast('❌ Failed to open link', 'error');
+                }
+            },
+
+            removeAllLinks(taskId) {
+                const task = this.tasks.find(t => t.id === taskId);
+                if (!task || !task.links || task.links.length === 0) return;
+
+                const count = task.links.length;
+                const confirmMsg = count === 1
+                    ? 'Remove this link from the node?'
+                    : `Remove all ${count} links from this node?`;
+
+                this.showConfirm('Remove Links', confirmMsg, () => {
+                    this.saveSnapshot(`Removed ${count} link(s) from "${task.title}"`);
+                    task.links = [];
+                    this.saveToStorage();
+                    this.render();
+                    this.showToast(`✓ Removed ${count} link(s)`, 'success');
+                });
+            },
+
+            showLinksDropdown(taskId, x, y) {
+                // Close any existing dropdown first
+                this.closeLinksDropdown();
+
+                const task = this.tasks.find(t => t.id === taskId);
+                if (!task || !task.links || task.links.length === 0) return;
+
+                // Create dropdown menu
+                const dropdown = document.createElement('div');
+                dropdown.className = 'links-dropdown';
+                dropdown.style.position = 'fixed';
+                dropdown.style.left = x + 'px';
+                dropdown.style.top = y + 'px';
+                dropdown.style.zIndex = '10000';
+                dropdown.style.background = 'white';
+                dropdown.style.border = '1px solid #ccc';
+                dropdown.style.borderRadius = '4px';
+                dropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                dropdown.style.minWidth = '200px';
+                dropdown.style.maxWidth = '400px';
+
+                // Add each link as a clickable item
+                task.links.forEach((url, index) => {
+                    const linkItem = document.createElement('div');
+                    linkItem.style.padding = '8px 12px';
+                    linkItem.style.cursor = 'pointer';
+                    linkItem.style.borderBottom = index < task.links.length - 1 ? '1px solid #eee' : 'none';
+                    linkItem.style.transition = 'background-color 0.15s';
+                    linkItem.textContent = `🔗 ${this.shortenURL(url, 50)}`;
+                    linkItem.title = url;  // Show full URL on hover
+
+                    linkItem.addEventListener('mouseenter', () => {
+                        linkItem.style.backgroundColor = '#f0f0f0';
+                    });
+
+                    linkItem.addEventListener('mouseleave', () => {
+                        linkItem.style.backgroundColor = '';
+                    });
+
+                    linkItem.onclick = (evt) => {
+                        evt.stopPropagation();
+                        this.closeLinksDropdown();
+                        this.openLink(url);
+                    };
+
+                    dropdown.appendChild(linkItem);
+                });
+
+                document.body.appendChild(dropdown);
+
+                // Close dropdown when clicking outside
+                const closeHandler = (evt) => {
+                    if (!dropdown.contains(evt.target)) {
+                        this.closeLinksDropdown();
+                        document.removeEventListener('click', closeHandler);
+                    }
+                };
+
+                // Use setTimeout to avoid immediate closure from the badge click
+                setTimeout(() => {
+                    document.addEventListener('click', closeHandler);
+                }, 0);
+            },
+
+            closeLinksDropdown() {
+                const dropdown = document.querySelector('.links-dropdown');
+                if (dropdown) dropdown.remove();
             },
 
             getSVGPoint(e) {
@@ -4405,6 +4728,68 @@
                     rect.setAttribute('height', rectHeight);
                     rect.setAttribute('fill', '#fff');
                     g.appendChild(rect);
+
+                    // Add link badge if task has links
+                    if (task.links && task.links.length > 0) {
+                        const badgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        badgeGroup.classList.add('link-badge');
+
+                        // Position badge at top-right corner INSIDE the node bounds
+                        const badgeWidth = task.links.length > 1 ? 28 : 20;
+                        const badgeHeight = 14;
+                        const badgeX = rectWidth / 2 - badgeWidth - 3;  // 3px margin from right edge
+                        const badgeY = -rectHeight / 2 + 3;              // 3px margin from top edge
+
+                        // Badge background (clickable)
+                        const badgeRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        badgeRect.setAttribute('x', badgeX);
+                        badgeRect.setAttribute('y', badgeY);
+                        badgeRect.setAttribute('width', badgeWidth);
+                        badgeRect.setAttribute('height', badgeHeight);
+                        badgeRect.setAttribute('rx', 3);
+                        badgeRect.setAttribute('fill', '#2196f3');
+                        badgeRect.setAttribute('filter', 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))');
+                        badgeRect.style.cursor = 'pointer';
+                        badgeGroup.appendChild(badgeRect);
+
+                        // Badge text (emoji + count)
+                        const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        badgeText.setAttribute('x', badgeX + badgeWidth / 2);
+                        badgeText.setAttribute('y', badgeY + 10);
+                        badgeText.setAttribute('fill', 'white');
+                        badgeText.setAttribute('font-size', '10');
+                        badgeText.setAttribute('font-weight', '600');
+                        badgeText.setAttribute('text-anchor', 'middle');
+                        badgeText.setAttribute('pointer-events', 'none');  // Click passes through to rect
+                        badgeText.textContent = task.links.length > 1 ? `🔗 ${task.links.length}` : '🔗';
+                        badgeGroup.appendChild(badgeText);
+
+                        // Tooltip showing all links
+                        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                        const linkList = task.links.map(url => '• ' + this.shortenURL(url)).join('\n');
+                        title.textContent = `Links (${task.links.length}):\n${linkList}`;
+                        badgeGroup.appendChild(title);
+
+                        // Make badge clickable
+                        badgeGroup.style.cursor = 'pointer';
+                        badgeGroup.style.pointerEvents = 'all';
+
+                        badgeGroup.onclick = (evt) => {
+                            evt.stopPropagation();
+                            evt.preventDefault();
+
+                            if (task.links.length === 1) {
+                                // Single link - open directly
+                                this.openLink(task.links[0]);
+                            } else {
+                                // Multiple links - show dropdown menu at badge location
+                                const rect = badgeRect.getBoundingClientRect();
+                                this.showLinksDropdown(task.id, rect.left, rect.bottom);
+                            }
+                        };
+
+                        g.appendChild(badgeGroup);
+                    }
 
                     // Show input if editing, otherwise show text
                     if (this.editingTaskId === task.id) {

@@ -193,6 +193,103 @@
   - Shows complete context: where your current work fits in the bigger picture
   - Example: Root ⟶ Parent A ⟶ Parent B ⟶ 🔄 Working Task ⟶ [red] Incomplete Child | [green] Done Child
 
+### 🔗 Hyperlinks - Attach URLs to Tasks
+
+Attach multiple URLs to any task for quick access to related resources (PRs, docs, files, emails).
+
+#### Adding Links
+
+**Method 1: Auto-Detection (Paste URLs)**
+- When editing a task, paste URLs anywhere in the text
+- On save (Enter), URLs are automatically:
+  - Extracted from the text
+  - Stored in the task's links array
+  - Removed from visible text (kept as metadata)
+- Supports multiple URLs in one paste
+- Toast notification: "🔗 Added N link(s)"
+
+**Method 2: Manual Attach**
+- Right-click task → "📎 Attach Link"
+- Enter URL in prompt dialog
+- Link is added to task's links array
+
+**Method 3: Keyboard Shortcut**
+- Select a task (left-click to highlight blue)
+- Press **Ctrl+K** (or Cmd+K on Mac)
+- Enter URL in prompt dialog
+
+#### Supported URL Protocols
+- `https://` - HTTPS websites
+- `http://` - HTTP websites
+- `file:///` - Local file paths
+- `mailto:` - Email addresses
+
+#### Visual Indicator
+- **Blue Badge** appears in top-right corner of nodes with links
+- **Single link**: Shows 🔗 icon
+- **Multiple links**: Shows 🔗 N (e.g., "🔗 3")
+- **Hover tooltip**: Shows all links in shortened format
+  - Example: "github.com/user/repo..."
+  - Full list with bullet points
+
+#### Opening Links
+
+**Method 1: Click Badge (Fastest)**
+- **Single link**: Click the 🔗 badge → Opens link directly
+- **Multiple links**: Click the 🔗 N badge → Shows dropdown menu
+  - Dropdown appears below the badge
+  - Each link shown with 🔗 icon and shortened URL
+  - Click any link to open in new tab
+  - Click outside dropdown to close
+
+**Method 2: Context Menu**
+- **No links**: "📎 Attach Link" option
+- **One link**: "🔗 Go to Link" → Opens the link directly
+- **Multiple links**: "🔗 Links (N)" → Opens nested submenu
+  - Each link shown with shortened URL
+  - Click any link to open in new tab
+
+#### Managing Links
+
+**Attach Another Link**
+- Right-click task with existing links → "📎 Attach Another Link"
+- Adds new URL to the task's links array
+- Duplicate URLs are prevented with warning toast
+
+**Remove Links**
+- **Single link**: Right-click → "❌ Remove Link"
+- **Multiple links**: Right-click → "🗑️ Remove All Links"
+- Confirmation dialog shows count: "Remove all N links from this node?"
+- Can be undone with Ctrl+Z
+
+#### Use Cases
+- **Development**: Attach PR links, issue trackers, documentation
+- **Research**: Link to articles, papers, references
+- **Project Management**: Connect to Google Docs, spreadsheets, dashboards
+- **File Organization**: Link to local files with `file:///` protocol
+- **Communication**: Attach mailto: links for team contacts
+
+#### Example Workflow
+```
+1. Create task: "Review authentication PR"
+2. Paste in editor:
+   Review authentication PR
+   https://github.com/user/repo/pull/123
+   https://docs.internal.com/auth-spec
+3. Press Enter to save
+4. URLs are auto-extracted, badge shows "🔗 2"
+5. Click badge → dropdown appears with both links
+6. Click specific link to open in new tab
+```
+
+#### Technical Details
+- **Storage**: Links stored in `task.links` array (strings)
+- **Persistence**: Auto-saved to localStorage
+- **Undo/Redo**: All link operations support undo/redo
+- **URL Validation**: Checks protocol and format before saving
+- **Security**: Links open with `noopener,noreferrer` flags
+- **Clean Text**: URLs stripped from visible text, shown only in badge
+
 ### 🔗 Relationships & Dependencies
 
 #### Parent-Child Relationships
@@ -3619,6 +3716,247 @@ Eggs
 
 ---
 
-**Last Updated**: 2025-10-26 (Session 15: Context Menu Enhancement)
-**Current Line Count**: ~5900 lines in task-tree.html
-**Version**: 1.10.0 (Emoji Context Menus & Nested Home Options)
+### Session 16: Hyperlinks - Attach URLs to Tasks (2025-10-27)
+
+**Version**: 1.11.0 (Hyperlink Support)
+
+**Changes**:
+1. Added multiple URL/hyperlink support to tasks
+2. Auto-detection and extraction of URLs from pasted text
+3. Visual link badges with count indicators
+4. Context menu integration with nested submenu for multiple links
+5. Keyboard shortcuts for quick link access
+
+**Problem**: Users needed a way to attach related resources (GitHub PRs, documentation, Google Docs, local files) to tasks without cluttering the task title text.
+
+**Solution**: Comprehensive hyperlink system with multiple input methods and visual indicators.
+
+**Implementation**:
+
+**1. URL Helper Functions** (Lines 2359-2401):
+```javascript
+extractURLsFromText(text)     // Extract all URLs using regex
+removeURLsFromText(text)      // Strip URLs from visible text
+shortenURL(url, maxLength)    // Truncate URLs for display
+isValidURL(url)               // Validate http/https/file/mailto protocols
+```
+
+**2. Data Model** (Lines 1553, 1588, 3886):
+- Added `links: []` array to task object
+- Stores multiple URL strings per task
+- Auto-persists via existing localStorage system
+
+**3. Auto-Detection** (Lines 2211-2234 in `finishEditing()`):
+- When saving edited text, extracts all URLs using regex pattern:
+  - `/(https?:\/\/[^\s]+)|(file:\/\/\/[^\s]+)|(mailto:[^\s]+)/gi`
+- Removes URLs from visible title text
+- Adds to `task.links` array (prevents duplicates)
+- Shows toast: "🔗 Added N link(s)"
+- Handles multiple URLs in one paste
+
+**4. Visual Badge** (Lines 4482-4522 in `render()`):
+- Blue badge in top-right corner of nodes with links
+- Shows `🔗` for single link or `🔗 N` for multiple
+- Tooltip on hover displays all links (shortened)
+- Styled with drop shadow for depth
+- Dark mode support (#1e88e5)
+
+**5. Context Menu Integration** (Lines 3877-3968):
+- **No links**: "📎 Attach Link" button
+- **One link**:
+  - "🔗 Go to Link" (direct open)
+  - "📎 Attach Another Link"
+  - "❌ Remove Link"
+- **Multiple links**:
+  - "🔗 Links (N)" with nested submenu
+  - Each link shown as "🌐 [shortened URL]"
+  - Hover to expand, click to open
+  - "📎 Attach Another Link"
+  - "🗑️ Remove All Links"
+- Uses same nested submenu pattern as Homes feature
+
+**6. Link Management Functions** (Lines 4121-4176):
+```javascript
+attachLink(taskId)           // Prompt for URL, validate, add to array
+openLink(url)                // Open in new tab with security flags
+removeAllLinks(taskId)       // Clear all links with confirmation
+```
+
+**7. Keyboard Shortcuts**:
+- **Ctrl+K** (Lines 1529-1538): Attach link to selected task
+  - Shows warning if multiple tasks selected
+- **Ctrl+Double-Click** (Lines 1270-1279, 4777-4785): Open first link
+  - Falls through to edit if no links exist
+  - Works on both main and text double-click handlers
+
+**8. Security & Best Practices**:
+- Links open with `window.open(url, '_blank', 'noopener,noreferrer')`
+- URL validation checks protocol whitelist
+- No XSS vulnerabilities (URLs not inserted into DOM as HTML)
+- Trailing punctuation stripped from auto-detected URLs
+
+**9. UI/UX Details**:
+- **Shortened URLs**: Display format removes protocol, truncates to 30 chars
+  - Example: `https://github.com/anthropics/claude-code/pull/123` → `github.com/anthropic...`
+- **Badge Positioning**: Top-right corner, doesn't overlap text or hidden count
+- **Duplicate Prevention**: Warning toast if URL already exists
+- **Empty Links Handling**: Badge only appears if links array has items
+- **Undo/Redo Support**: All link operations create snapshots
+
+**Benefits**:
+- ✅ Keep task titles clean and focused
+- ✅ Attach unlimited URLs per task
+- ✅ Support multiple protocols (web, local files, email)
+- ✅ Quick access via Ctrl+Double-Click or context menu
+- ✅ Visual indicator shows which tasks have links
+- ✅ Auto-extraction makes adding links effortless
+- ✅ Nested submenu handles many links gracefully
+
+**Use Cases**:
+- **Development**: Link PRs, issues, CI/CD dashboards
+- **Research**: Attach articles, papers, Stack Overflow answers
+- **Project Management**: Connect to docs, spreadsheets, Figma designs
+- **File System**: Link to local spec files with `file:///` protocol
+- **Team Coordination**: Add mailto: links for quick communication
+
+**Testing**:
+- ✓ Paste single URL in editor → Auto-extracted, badge appears
+- ✓ Paste multiple URLs → All extracted, badge shows count
+- ✓ Ctrl+K on selected task → Prompt opens, link adds successfully
+- ✓ Ctrl+Double-Click with link → Opens in new tab
+- ✓ Right-click with no links → Shows "Attach Link"
+- ✓ Right-click with one link → Shows direct "Go to Link" option
+- ✓ Right-click with multiple links → Shows nested submenu
+- ✓ Remove all links → Confirmation dialog, badge disappears
+- ✓ Undo after adding/removing links → Works correctly
+- ✓ Dark mode → Badge color adjusted
+
+**Line Count**: ~6200 lines in task-tree.html (+300 lines)
+
+**Documentation**: Added comprehensive "🔗 Hyperlinks" section to README with usage examples and technical details.
+
+---
+
+### Session 17: Clickable Link Badges & UX Refinements (2025-10-27)
+
+**Version**: 1.11.1 (Link Badge Interaction)
+
+**Changes**:
+1. Removed Ctrl+Double-Click link opening functionality
+2. Fixed link badge positioning to stay within node bounds
+3. Made link badge clickable with smart behavior
+4. Added dropdown menu for multiple links
+5. Updated keyboard shortcuts display
+
+**Problem**: User wanted more intuitive interaction with link badges - clicking the badge should open links directly, and the badge was protruding outside node boundaries.
+
+**Solution**: Made badge fully interactive with context-aware behavior and proper positioning.
+
+**Implementation**:
+
+**1. Removed Ctrl+Double-Click** (Lines 1270-1283, 4767-4777):
+- Removed the `e.ctrlKey` check from both double-click handlers
+- Double-click now only supports:
+  - Normal: Edit task name
+  - Shift: Hide/show node within parent
+- Updated keyboard shortcuts display (Line 1052) to remove Ctrl+Double-Click
+
+**2. Fixed Badge Positioning** (Lines 4646-4649):
+- Changed calculation: `badgeX = rectWidth / 2 - badgeWidth - 3`
+- Badge now stays 3px inside the right edge (was protruding outside)
+- Badge positioned 3px inside the top edge for consistent margins
+- Width varies: 20px for single link, 28px for multiple links
+
+**3. Clickable Badge** (Lines 4685-4697):
+- Added onclick handler to badge group
+- **Single link**: Calls `this.openLink(task.links[0])` directly
+- **Multiple links**: Calls `this.showLinksDropdown(task.id, rect.left, rect.bottom)`
+- Used `getBoundingClientRect()` for accurate screen coordinates
+- Event propagation stopped to prevent interference
+
+**4. Links Dropdown** (Lines 4269-4336):
+```javascript
+showLinksDropdown(taskId, x, y)   // Show dropdown at screen coordinates
+closeLinksDropdown()               // Clean up dropdown
+```
+- Creates fixed-position dropdown at badge location
+- Each link displayed as clickable item with shortened URL
+- Hover effect: Light gray background (#f0f0f0)
+- Click outside to close (event listener with setTimeout)
+- Auto-closes when link is clicked
+- Tooltip shows full URL on each item
+
+**5. Dark Mode Support** (Lines 970-988):
+- `.links-dropdown` base styling
+- Dark mode: #2a2a2a background, #444 borders
+- Hover: #333 background
+- All with !important for inline styles
+
+**6. Integration with closeMenu()** (Line 4202):
+- `closeMenu()` now calls `closeLinksDropdown()`
+- Ensures all popups close together
+
+**Benefits**:
+- ✅ Faster access - one click to open link (vs right-click → menu → click)
+- ✅ More intuitive - badge looks clickable, now it is
+- ✅ Better positioning - badge stays within visual node bounds
+- ✅ Cleaner shortcuts - removed redundant Ctrl+Double-Click
+- ✅ Dropdown UX - clear visual hierarchy for multiple links
+
+**Testing**:
+- ✓ Single link: Click badge → Opens immediately
+- ✓ Multiple links: Click badge → Dropdown appears below
+- ✓ Dropdown: Shows all links with shortened URLs
+- ✓ Dropdown: Click link → Opens and closes dropdown
+- ✓ Dropdown: Click outside → Closes dropdown
+- ✓ Badge positioning: Stays within node bounds with 3px margin
+- ✓ Dark mode: Dropdown styled correctly
+- ✓ Context menu: Still shows link options
+- ✓ Keyboard shortcuts: Updated display removes Ctrl+Double-Click
+
+**Line Count**: ~6400 lines in task-tree.html (+200 lines)
+
+### Session 18: Git Commit Workflow Documentation (2025-10-27)
+
+**Version**: 1.11.1 (Documentation Update)
+
+**Changes**:
+1. Added "Git Commit Workflow" section to CLAUDE.md
+2. Updated README.md Development History
+
+**Problem**: User wanted Claude Code to automatically stage all changes and commit after user confirms changes are working and stable.
+
+**Solution**: Added formal workflow documentation in CLAUDE.md to establish clear git commit protocol.
+
+**Implementation**:
+
+**1. New Section in CLAUDE.md** (Lines 34-64):
+- Added "💾 Git Commit Workflow" section after the Critical Workflow Rule
+- Specifies 3-step process: Stage all (`git add .`), Commit with conventional format, Include co-author footer
+- Conventional commit types: feat, fix, refactor, docs, style, test, chore
+- Co-Author footer template with Claude Code attribution
+- Clear "When to commit" rules:
+  - ✅ User explicitly confirms: "looks good", "works perfectly", "stable", "commit this"
+  - ✅ Feature is fully implemented and tested
+  - ❌ NEVER commit without user confirmation
+  - ❌ NEVER commit if tests are failing or errors exist
+
+**2. Documentation Update** (README.md this session):
+- Added Session 18 entry to Development History
+- Documented the CLAUDE.md update for continuity
+
+**Benefits**:
+- ✅ Clear protocol for when to commit changes
+- ✅ Ensures only stable, verified changes enter git history
+- ✅ Consistent commit message format across sessions
+- ✅ Proper attribution with co-author footer
+- ✅ Prevents premature commits of unstable code
+
+**Workflow Impact**:
+This establishes a formal handoff: Claude makes changes → User tests and confirms → Claude commits with proper message format. This ensures git history remains clean and all commits represent stable milestones.
+
+---
+
+**Last Updated**: 2025-10-27 (Session 18: Git Commit Workflow Documentation)
+**Current Line Count**: ~6400 lines in task-tree.html
+**Version**: 1.11.1 (Documentation Update)
