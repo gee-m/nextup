@@ -1069,7 +1069,7 @@
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
         <div class="info">
-            <span>Double-click: edit | Right-click: menu (or on empty space) | Left-click: select | Backspace: delete | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | Shift+Drag: subtree | Scroll: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
+            <span>Double-click: edit | Right-click: menu (or on empty space) | Left-click: select | Backspace: delete | Middle-click: cycle | Ctrl+Click: create task | Ctrl+K: attach link | P: priority | Shift+Drag: subtree | Scroll: zoom | Ctrl+Z: undo | Ctrl+Shift+Z: redo</span>
         </div>
     </div>
 
@@ -1443,6 +1443,13 @@
                             this.render();
                         }
                     }
+
+                    // P to cycle priority of selected task(s)
+                    if ((e.key === 'p' || e.key === 'P') && this.editingTaskId === null && this.selectedTaskIds.size > 0) {
+                        e.preventDefault();
+                        const selectedArray = Array.from(this.selectedTaskIds);
+                        selectedArray.forEach(id => this.cyclePriority(id));
+                    }
                 });
 
                 window.addEventListener('resize', () => {
@@ -1591,7 +1598,8 @@
                     currentlyWorking: false,
                     textExpanded: false,
                     textLocked: false,
-                    links: []  // Array of URLs attached to this task
+                    links: [],  // Array of URLs attached to this task
+                    priority: 'normal'  // Priority: 'high', 'medium', 'normal'
                 };
 
                 parent.children.push(task.id);
@@ -1626,7 +1634,8 @@
                     currentlyWorking: false,
                     textExpanded: false,
                     textLocked: false,
-                    links: []  // Array of URLs attached to this task
+                    links: [],  // Array of URLs attached to this task
+                    priority: 'normal'  // Priority: 'high', 'medium', 'normal'
                 };
 
                 parent.children.push(task.id);
@@ -1796,6 +1805,35 @@
                 this.render();
             },
 
+            setPriority(taskId, priority) {
+                const task = this.tasks.find(t => t.id === taskId);
+                if (!task) return;
+
+                const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+                const priorityLabel = priority === 'high' ? 'High' : priority === 'medium' ? 'Medium' : 'Normal';
+
+                this.saveSnapshot(`Set priority of '${truncatedTitle}' to ${priorityLabel}`);
+
+                task.priority = priority;
+                this.saveToStorage();
+                this.render();
+
+                // Show toast notification
+                const emoji = priority === 'high' ? '🔴' : priority === 'medium' ? '🟠' : '⚪';
+                this.showToast(`${emoji} Priority set to ${priorityLabel}`, 'success', 2000);
+            },
+
+            cyclePriority(taskId) {
+                const task = this.tasks.find(t => t.id === taskId);
+                if (!task) return;
+
+                // Cycle: null/normal → medium → high → normal
+                const nextPriority = !task.priority || task.priority === 'normal' ? 'medium' :
+                                     task.priority === 'medium' ? 'high' : 'normal';
+
+                this.setPriority(taskId, nextPriority);
+            },
+
             selectNode(taskId) {
                 // Single-node selection (clears others)
                 this.selectedTaskIds.clear();
@@ -1838,9 +1876,10 @@
                     pathDisplay = '';
                 }
 
-                // Add current task in yellow
+                // Add current task in yellow with priority indicator
                 const pathEl = document.getElementById('status-path');
-                pathEl.innerHTML = pathDisplay + `<span class="status-task">${workingTask.title}</span>`;
+                const priorityEmoji = workingTask.priority === 'high' ? ' 🔴' : workingTask.priority === 'medium' ? ' 🟠' : '';
+                pathEl.innerHTML = pathDisplay + `<span class="status-task">${workingTask.title}${priorityEmoji}</span>`;
 
                 // Children info with percentage and incomplete list
                 const childrenEl = document.getElementById('status-children');
@@ -3191,7 +3230,9 @@
                             currentlyWorking: false,
                             hidden: false,
                             textExpanded: false,
-                            textLocked: false
+                            textLocked: false,
+                            links: [],
+                            priority: 'normal'
                         };
                         this.tasks.push(newTask);
                         this.startEditing(newTask.id);
@@ -3892,6 +3933,10 @@
                     buttons.push({ label: task.status === 'done' ? '⏸️ Mark Pending' : '✅ Mark Done', action: () => this.toggleDone(taskId) });
                     buttons.push({ label: task.currentlyWorking ? '⏹️ Stop Working' : '▶️ Start Working', action: () => this.toggleWorking(taskId) });
 
+                    // Priority submenu
+                    const currentPriorityEmoji = task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟠' : '⚪';
+                    buttons.push({ label: `${currentPriorityEmoji} Set Priority`, isPrioritySubmenu: true, currentPriority: task.priority });
+
                     // Add hide option if task has a parent (not a root task)
                     if (task.mainParent !== null) {
                         buttons.push({ label: task.hidden ? '👁️ Show' : '🙈 Hide', action: () => this.toggleHiddenSelf(taskId) });
@@ -3926,8 +3971,79 @@
                     buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
                 }
 
-                buttons.forEach(({ label, action, isLinksSubmenu }) => {
-                    if (isLinksSubmenu) {
+                buttons.forEach(({ label, action, isLinksSubmenu, isPrioritySubmenu, currentPriority }) => {
+                    if (isPrioritySubmenu) {
+                        // Create priority submenu
+                        const priorityBtn = document.createElement('button');
+                        priorityBtn.className = 'menu-item-with-submenu';
+                        priorityBtn.textContent = label;
+
+                        const prioritySubmenu = document.createElement('div');
+                        prioritySubmenu.className = 'submenu-nested';
+                        prioritySubmenu.style.display = 'none';
+
+                        let hideTimeout = null;
+
+                        priorityBtn.addEventListener('mouseenter', () => {
+                            if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                            }
+                            const rect = priorityBtn.getBoundingClientRect();
+                            prioritySubmenu.style.left = `${rect.right}px`;
+                            prioritySubmenu.style.top = `${rect.top}px`;
+                            prioritySubmenu.style.display = 'block';
+                        });
+
+                        priorityBtn.addEventListener('mouseleave', (evt) => {
+                            hideTimeout = setTimeout(() => {
+                                const hoveredElement = document.elementFromPoint(evt.clientX, evt.clientY);
+                                if (!prioritySubmenu.contains(hoveredElement)) {
+                                    prioritySubmenu.style.display = 'none';
+                                }
+                            }, 100);
+                        });
+
+                        prioritySubmenu.addEventListener('mouseenter', () => {
+                            if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                            }
+                        });
+
+                        prioritySubmenu.addEventListener('mouseleave', () => {
+                            prioritySubmenu.style.display = 'none';
+                        });
+
+                        // Add priority options
+                        const priorities = [
+                            { value: 'high', label: 'High Priority', emoji: '🔴' },
+                            { value: 'medium', label: 'Medium Priority', emoji: '🟠' },
+                            { value: 'normal', label: 'Normal Priority', emoji: '⚪' }
+                        ];
+
+                        priorities.forEach(({ value, label: priorityLabel, emoji }) => {
+                            const item = document.createElement('div');
+                            item.className = 'submenu-item';
+                            item.textContent = `${emoji} ${priorityLabel}`;
+
+                            // Add checkmark if this is the current priority
+                            if (value === currentPriority) {
+                                item.textContent = `✓ ${emoji} ${priorityLabel}`;
+                                item.style.fontWeight = '600';
+                            }
+
+                            item.onclick = (evt) => {
+                                evt.stopPropagation();
+                                this.closeMenu();
+                                this.setPriority(taskId, value);
+                            };
+                            prioritySubmenu.appendChild(item);
+                        });
+
+                        document.body.appendChild(prioritySubmenu);
+                        menu.appendChild(priorityBtn);
+                    } else if (isLinksSubmenu) {
                         // Create submenu for multiple links
                         const linksBtn = document.createElement('button');
                         linksBtn.className = 'menu-item-with-submenu';
@@ -4930,6 +5046,24 @@
                         lockGroup.appendChild(lockText);
 
                         g.appendChild(lockGroup);
+                    }
+
+                    // Add priority badge (colored dot in top-left corner)
+                    if (task.priority && task.priority !== 'normal') {
+                        const dotRadius = 6;
+                        const dotX = -rectWidth / 2 + dotRadius + 3;  // 3px from left edge
+                        const dotY = -rectHeight / 2 + dotRadius + 3;  // 3px from top edge
+
+                        const priorityDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        priorityDot.setAttribute('cx', dotX);
+                        priorityDot.setAttribute('cy', dotY);
+                        priorityDot.setAttribute('r', dotRadius);
+                        priorityDot.setAttribute('fill', task.priority === 'high' ? '#f44336' : '#ff9800');  // Red for high, Orange for medium
+                        priorityDot.setAttribute('stroke', this.darkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(255, 255, 255, 0.8)');
+                        priorityDot.setAttribute('stroke-width', '1.5');
+                        priorityDot.style.filter = 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))';
+
+                        g.appendChild(priorityDot);
                     }
 
                     // Add hidden children indicator badge

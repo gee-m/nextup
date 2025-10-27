@@ -181,6 +181,38 @@
   - Shows toast notification: "⬆️ Now working on parent: [Parent Name]"
   - Works within each root graph (doesn't affect other projects)
 
+#### Priority Management
+- **3 Priority Levels**: High (🔴), Medium (🟠), Normal (no badge)
+- **Visual Badge**: Colored dot in top-left corner of task nodes
+  - 🔴 Red dot for High priority tasks
+  - 🟠 Orange dot for Medium priority tasks
+  - No badge for Normal priority (default)
+  - Small drop shadow for visibility in both light/dark modes
+- **Set Priority**: Right-click task → "Set Priority" submenu
+  - Shows current priority with checkmark
+  - Choose: High Priority, Medium Priority, or Normal Priority
+  - Toast notification confirms priority change
+- **Keyboard Shortcut**: Press `P` to cycle priority (Normal → Medium → High → Normal)
+  - Works on selected task(s)
+  - Cycles through all three levels
+  - Shows toast with new priority level
+- **Multi-Select Support**: Set priority on multiple tasks at once
+  - Select tasks with Shift+Click or box selection
+  - Press `P` to cycle all selected tasks
+  - Or use right-click menu "Set Priority" on selection
+- **Status Bar Integration**: Priority emoji appears next to working task name
+  - Shows 🔴 or 🟠 indicator in status bar when working on prioritized task
+  - Helps maintain focus on important work
+- **Undo/Redo Support**: Priority changes tracked in undo history
+  - Snapshot description: "Set priority of 'Task Name' to High/Medium/Normal"
+  - Full undo/redo with Ctrl+Z / Ctrl+Shift+Z
+- **Persistence**: Priority saves with task data and persists across sessions
+- **Use Cases**:
+  - Mark critical blockers as high priority
+  - Highlight time-sensitive tasks
+  - Visual aid for deciding what to work on next
+  - Project triage and task organization
+
 #### Status Indicators
 - **✅ Emoji**: Shows on completed tasks
 - **🔄 Emoji**: Shows on currently working task
@@ -3955,8 +3987,95 @@ closeLinksDropdown()               // Clean up dropdown
 **Workflow Impact**:
 This establishes a formal handoff: Claude makes changes → User tests and confirms → Claude commits with proper message format. This ensures git history remains clean and all commits represent stable milestones.
 
+### Session 19: Priority Management Feature (2025-10-27)
+
+**Version**: 1.12.0 (Priority System)
+
+**Changes**:
+1. Added priority property to task data model
+2. Implemented setPriority() and cyclePriority() functions
+3. Added visual priority badge (colored dot) in top-left corner
+4. Added "Set Priority" submenu to right-click context menu
+5. Added 'P' keyboard shortcut to cycle priority
+6. Integrated priority display in status bar
+7. Updated help text with new keyboard shortcut
+
+**Problem**: User wanted the ability to mark certain tasks as higher priority to help decide what to work on next.
+
+**Solution**: Implemented a 3-level priority system (High/Medium/Normal) with visual badges, intuitive controls, and full integration across the app.
+
+**Implementation**:
+
+**1. Data Model** (Lines 1595, 1631, 3198):
+- Added `priority: 'normal'` property to all task creation points
+- Values: `'high'`, `'medium'`, `'normal'`
+- Defaults to `'normal'` for all new tasks
+
+**2. Core Functions** (Lines 1801-1828):
+- `setPriority(taskId, priority)`: Sets task priority with undo support
+  - Saves snapshot with task title and priority level
+  - Shows toast notification with emoji (🔴/🟠/⚪)
+  - Persists to storage and re-renders
+- `cyclePriority(taskId)`: Cycles normal → medium → high → normal
+  - Calls setPriority() internally for consistency
+
+**3. Visual Badge** (Lines 4968-4984):
+- Colored dot (6px radius) in top-left corner
+- Position: 3px from left edge, 3px from top edge
+- Colors: #f44336 (red) for high, #ff9800 (orange) for medium
+- White stroke with drop shadow for visibility
+- Only renders for high/medium priority (normal = no badge)
+
+**4. Right-Click Menu** (Lines 3929-3930, 3967-4037):
+- Added "Set Priority" submenu with current priority emoji
+- Submenu shows three options: High/Medium/Normal
+- Current priority marked with ✓ checkmark and bold text
+- Hover mechanics match existing submenu pattern (Links, Homes)
+- Fixed positioning with mouseenter/mouseleave handlers
+
+**5. Keyboard Shortcut** (Lines 1447-1452):
+- Press `P` (or `p`) to cycle priority of selected task(s)
+- Only works when not editing and tasks are selected
+- Prevents default to avoid typing 'p' in edit mode
+- Multi-select support: cycles all selected tasks
+
+**6. Status Bar Integration** (Lines 1881-1882):
+- Priority emoji (🔴/🟠) appears after working task title
+- Shows at-a-glance priority of current work
+- Only displays for high/medium priority tasks
+
+**7. Help Text Update** (Line 1072):
+- Added "P: priority" to keyboard shortcuts display
+- Positioned between "Ctrl+K: attach link" and "Shift+Drag: subtree"
+
+**Benefits**:
+- ✅ Visual clarity - colored dots immediately show priority at a glance
+- ✅ Quick access - Right-click menu or keyboard shortcut (P)
+- ✅ Multi-select support - Set priority on multiple tasks at once
+- ✅ Status bar integration - See priority of working task
+- ✅ Undo/redo support - All priority changes tracked
+- ✅ Dark mode compatible - Badges visible in both themes
+- ✅ Minimal visual clutter - Only high/medium tasks show badges
+
+**Use Cases**:
+- Mark critical blockers as high priority (red dot)
+- Highlight time-sensitive tasks (orange dot)
+- Visual aid for deciding what to work on next
+- Project triage and task organization
+- Focus attention on important work in large graphs
+
+**Design Choices**:
+- 3 levels instead of 5: Simple, clear, easy to remember
+- Colored dots instead of numbers: Visual, non-intrusive, international
+- Red/Orange/None: Semantic colors (red = urgent, orange = important)
+- Top-left corner: Doesn't interfere with other badges (lock, hidden count, link)
+- Cycle shortcut: Fast workflow for power users
+- Submenu in context menu: Discoverable for new users
+
+**Line Count**: ~6500 lines in task-tree.html (+100 lines)
+
 ---
 
-**Last Updated**: 2025-10-27 (Session 18: Git Commit Workflow Documentation)
-**Current Line Count**: ~6400 lines in task-tree.html
-**Version**: 1.11.1 (Documentation Update)
+**Last Updated**: 2025-10-27 (Session 19: Priority Management Feature)
+**Current Line Count**: ~6500 lines in task-tree.html
+**Version**: 1.12.0 (Priority System)
