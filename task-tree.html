@@ -6409,20 +6409,17 @@
                 const currentTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
                 console.log(`  Current TASK center: (${currentTaskCenterX}, ${currentTaskCenterY})`);
 
-                // IMPORTANT: Use CURRENT task center, not saved home.centerX/Y!
-                // Old homes have obsolete centerX/Y because tasks were moved by previous buggy code.
-                // We want to show where tasks ARE NOW, not where they were when home was created.
-                // This makes homes work like "zoom presets" rather than "position bookmarks".
-                const targetViewBoxX = currentTaskCenterX - this.viewBox.width / 2;
-                const targetViewBoxY = currentTaskCenterY - this.viewBox.height / 2;
+                // OLD approach (that worked): moved tasks by (home.centerX - currentCenter)
+                // NEW approach (correct): move viewBox by (currentCenter - home.centerX) for same visual
+                //
+                // Why: If tasks moved from 100 to 200, and should appear at 100:
+                //   OLD: tasks.x += (100 - 200) = -100 → tasks back at 100
+                //   NEW: viewBox.x += (200 - 100) = +100 → shows coordinates 100+ (tasks at 200 visible)
+                const dx = currentTaskCenterX - home.centerX;
+                const dy = currentTaskCenterY - home.centerY;
 
-                // Calculate how much to shift the viewBox
-                const dx = targetViewBoxX - this.viewBox.x;
-                const dy = targetViewBoxY - this.viewBox.y;
-
-                console.log(`  Target viewBox: x=${targetViewBoxX}, y=${targetViewBoxY}`);
-                console.log(`  Delta: dx=${dx}, dy=${dy}`);
-                console.log(`  After move, viewBox CENTER will be: (${targetViewBoxX + this.viewBox.width/2}, ${targetViewBoxY + this.viewBox.height/2})`);
+                console.log(`  Offset from saved position: dx=${dx}, dy=${dy}`);
+                console.log(`  Will apply this offset to viewBox (instead of to tasks)`);
                 console.log(`  Target zoom: ${home.zoomLevel}`);
 
                 if (animate) {
