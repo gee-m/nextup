@@ -5486,3 +5486,125 @@ This session addressed user-reported issues and added diagnostic tooling:
 
 **Version**: 1.14.6 (Zoom & Calibration)
 **Line Count**: ~6950 lines in task-tree.html (+50 lines for calibration)
+
+---
+
+### Session 20 Continued (9th): Auto-Calibration on Font Change
+
+**Date**: 2025-10-28
+**Focus**: Made charWidth calibration run automatically when font settings change
+
+#### Changes Made
+
+**Auto-Calibration Trigger**
+
+Added automatic charWidth calibration when font family or font weight changes in Settings.
+
+**applySettings() Enhancement** (Lines 3171-3220):
+```javascript
+applySettings() {
+    // Store old font settings to detect changes
+    const oldFontFamily = this.fontFamily;
+    const oldFontWeight = this.fontWeight;
+
+    // ... read form values and update app state
+
+    // Auto-calibrate charWidth if font settings changed
+    const fontChanged = (this.fontFamily !== oldFontFamily || this.fontWeight !== oldFontWeight);
+    if (fontChanged) {
+        // Calibrate before render/save so the new charWidth is applied
+        this.calibrateCharWidth(true); // true = automatic
+        // Note: calibrateCharWidth already calls render() and saveToStorage()
+    } else {
+        // Re-render to apply visual changes
+        this.render();
+        this.saveToStorage();
+    }
+
+    this.hideSettingsModal();
+    this.showToast('Settings applied successfully', 'success');
+}
+```
+
+**resetSettings() Enhancement** (Lines 3223-3246):
+```javascript
+resetSettings() {
+    this.showConfirm(
+        'Reset Settings',
+        'Are you sure you want to reset all settings to their default values?',
+        () => {
+            // Reset all config values to defaults
+            for (const [key, def] of Object.entries(this._configDefs)) {
+                this[key] = def.default;
+            }
+
+            // Auto-calibrate charWidth for default font settings
+            this.calibrateCharWidth(true); // true = automatic
+
+            this.hideSettingsModal();
+            this.showSettingsModal();
+            this.showToast('Settings reset to defaults', 'success');
+        }
+    );
+}
+```
+
+**calibrateCharWidth() Parameter** (Line 2435):
+```javascript
+calibrateCharWidth(isAutomatic = false) {
+    // ... measurement logic
+
+    // Show feedback (different message for automatic vs manual calibration)
+    if (!isAutomatic) {
+        this.showToast(
+            `Character width calibrated: ${oldCharWidth}px → ${this.charWidth}px`,
+            'success',
+            3000
+        );
+    } else {
+        this.showToast(
+            `Auto-calibrated for new font: ${this.charWidth}px`,
+            'info',
+            2000
+        );
+    }
+}
+```
+
+**Updated Description** (Line 2903):
+```javascript
+description: 'Pixels per character for node width calculation. Auto-calibrates when font changes, or click Calibrate to measure manually.'
+```
+
+**How It Works**:
+1. User changes Font Family or Font Weight in Settings
+2. Clicks Apply
+3. System detects font change by comparing old vs new values
+4. Automatically calls `calibrateCharWidth(true)`
+5. CharWidth measured for new font
+6. Nodes re-render with accurate measurements
+7. Toast shows "Auto-calibrated for new font: X.Xpx" (info style, 2s)
+
+**Manual vs Automatic Calibration**:
+- **Manual** (📏 Calibrate button): Shows detailed before/after, green success toast, 3s duration
+- **Automatic** (font change): Shows simple confirmation, blue info toast, 2s duration
+
+**Also Triggers On**:
+- Reset Settings (resets to default font, so auto-calibrate for defaults)
+
+**Benefits**:
+- ✅ No manual calibration needed after font changes
+- ✅ Always accurate charWidth for current font
+- ✅ Right padding automatically correct
+- ✅ Text wrapping immediately accurate
+- ✅ Seamless UX - happens behind the scenes
+
+**Testing**:
+- Change font family → Click Apply → See auto-calibration toast
+- Change font weight → Click Apply → See auto-calibration toast
+- Change other settings → No calibration (charWidth unchanged)
+- Reset Settings → Auto-calibrates for default font
+- Manual Calibrate button → Still works, shows detailed toast
+
+**Version**: 1.14.7 (Auto-Calibration)
+**Line Count**: ~7000 lines in task-tree.html

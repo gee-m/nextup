@@ -2432,7 +2432,7 @@
                 );
             },
 
-            calibrateCharWidth() {
+            calibrateCharWidth(isAutomatic = false) {
                 // Measure actual character width for current font settings
                 const svg = document.getElementById('canvas');
 
@@ -2471,12 +2471,20 @@
                 this.saveToStorage();
                 this.render();
 
-                // Show feedback
-                this.showToast(
-                    `Character width calibrated: ${oldCharWidth}px → ${this.charWidth}px`,
-                    'success',
-                    3000
-                );
+                // Show feedback (different message for automatic vs manual calibration)
+                if (!isAutomatic) {
+                    this.showToast(
+                        `Character width calibrated: ${oldCharWidth}px → ${this.charWidth}px`,
+                        'success',
+                        3000
+                    );
+                } else {
+                    this.showToast(
+                        `Auto-calibrated for new font: ${this.charWidth}px`,
+                        'info',
+                        2000
+                    );
+                }
             },
 
             startEditing(taskId) {
@@ -2892,7 +2900,7 @@
                         min: 4,
                         max: 15,
                         step: 0.5,
-                        description: 'Pixels per character for node width calculation. Use Calibrate button to auto-measure for current font.'
+                        description: 'Pixels per character for node width calculation. Auto-calibrates when font changes, or click Calibrate to measure manually.'
                     },
                     nodePadding: {
                         label: 'Node Padding (px)',
@@ -3161,6 +3169,10 @@
             },
 
             applySettings() {
+                // Store old font settings to detect changes
+                const oldFontFamily = this.fontFamily;
+                const oldFontWeight = this.fontWeight;
+
                 // Read values from form and update app state
                 for (const key of Object.keys(this._configDefs)) {
                     const input = document.getElementById(`setting-${key}`);
@@ -3187,11 +3199,19 @@
                 // Enforce undo limit if maxUndoSteps was changed
                 this.enforceUndoLimit();
 
-                // Re-render to apply visual changes
-                this.render();
+                // Auto-calibrate charWidth if font settings changed
+                const fontChanged = (this.fontFamily !== oldFontFamily || this.fontWeight !== oldFontWeight);
+                if (fontChanged) {
+                    // Calibrate before render/save so the new charWidth is applied
+                    this.calibrateCharWidth(true); // true = automatic
+                    // Note: calibrateCharWidth already calls render() and saveToStorage()
+                } else {
+                    // Re-render to apply visual changes
+                    this.render();
 
-                // Save to localStorage
-                this.saveToStorage();
+                    // Save to localStorage
+                    this.saveToStorage();
+                }
 
                 // Hide modal
                 this.hideSettingsModal();
@@ -3211,9 +3231,9 @@
                             this[key] = def.default;
                         }
 
-                        // Re-render and save
-                        this.render();
-                        this.saveToStorage();
+                        // Auto-calibrate charWidth for default font settings
+                        this.calibrateCharWidth(true); // true = automatic
+                        // Note: calibrateCharWidth already calls render() and saveToStorage()
 
                         // Re-populate form with new values
                         this.hideSettingsModal();
