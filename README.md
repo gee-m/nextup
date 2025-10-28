@@ -5642,3 +5642,214 @@ statusEmoji.style.opacity = '0.63'; // More transparent to be subtle
 
 **Version**: 1.14.8 (Subtle Status Indicators)
 **Line Count**: ~7000 lines in task-tree.html
+
+---
+
+### Session 20 Continued (11th): Smart Jump to Working with Dropdown
+
+**Date**: 2025-10-28
+**Focus**: Fixed Jump to Working to track last selected/cycled task, added dropdown for multiple working tasks
+
+#### Problems Solved
+
+**Problem 1: Jump Button Behavior Unclear**
+- Jump button used `.find()` which always jumped to FIRST working task
+- With multi-project support, could have multiple working tasks
+- No way to control which working task to jump to
+- User couldn't predict where Jump would go
+
+**Problem 2: No Way to Choose Between Multiple Working Tasks**
+- If working on multiple projects simultaneously
+- No UI to select which working task to navigate to
+
+#### Changes Made
+
+**1. Track Last Selected/Cycled Working Task**
+
+Added `lastWorkingTaskId` to track the most recently interacted working task:
+
+**App State** (Line 1308):
+```javascript
+lastWorkingTaskId: null,  // Track last selected/cycled working task for Jump button
+```
+
+**Updated cycleStatus()** (Lines 1838, 1869):
+```javascript
+// When marking task as working
+task.currentlyWorking = true;
+this.lastWorkingTaskId = taskId;  // ← Track for Jump button
+
+// When auto-starting parent as working
+parent.currentlyWorking = true;
+this.lastWorkingTaskId = parent.id;  // ← Track parent
+```
+
+**Updated toggleWorking()** (Line 1965):
+```javascript
+// When starting to work on task
+task.currentlyWorking = true;
+this.lastWorkingTaskId = taskId;  // ← Track for Jump button
+```
+
+**Updated selectNode()** (Lines 2012-2016):
+```javascript
+// If selecting a working task, track it for Jump button
+const task = this.tasks.find(t => t.id === taskId);
+if (task && task.currentlyWorking) {
+    this.lastWorkingTaskId = taskId;
+}
+```
+
+**2. Enhanced jumpToWorkingTask Logic**
+
+**Smart Prioritization** (Lines 6473-6496):
+```javascript
+jumpToWorkingTask(taskId = null, animate = true) {
+    let workingTask = null;
+
+    if (taskId) {
+        // 1. Specific task requested (from dropdown)
+        workingTask = this.tasks.find(t => t.id === taskId && t.currentlyWorking);
+    } else if (this.lastWorkingTaskId) {
+        // 2. Use last selected/cycled working task
+        workingTask = this.tasks.find(t => t.id === this.lastWorkingTaskId && t.currentlyWorking);
+    }
+
+    // 3. Fallback: If last working task no longer working, find any working task
+    if (!workingTask) {
+        workingTask = this.tasks.find(t => t.currentlyWorking);
+    }
+
+    if (!workingTask) {
+        this.showToast('No task is currently being worked on', 'warning');
+        return;
+    }
+
+    // ... rest of jump logic
+}
+```
+
+**Priority Order**:
+1. Specific task ID (from dropdown selection)
+2. Last selected/cycled working task (lastWorkingTaskId)
+3. Any working task (fallback)
+
+**3. Split Button UI**
+
+**HTML Structure** (Lines 1289-1296):
+```html
+<div style="display: flex; gap: 0;">
+    <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()"
+            style="border-radius: 4px 0 0 4px; padding-right: 8px;">
+        🎯 Jump
+    </button>
+    <button id="jump-dropdown-btn" class="status-btn" onclick="app.showWorkingTasksDropdown(event)"
+            style="border-radius: 0 4px 4px 0; padding: 4px 6px; border-left: 1px solid rgba(255,255,255,0.2); min-width: auto;"
+            title="Choose working task">
+        ▲
+    </button>
+</div>
+```
+
+**Design**:
+- Main button (left): 🎯 Jump - Jumps to last selected/cycled working task
+- Dropdown button (right): ▲ - Opens dropdown to choose from all working tasks
+- Seamless split: No gap, rounded corners on outer edges only
+- Separator: Subtle border between buttons
+
+**4. Working Tasks Dropdown**
+
+**showWorkingTasksDropdown()** (Lines 6621-6711):
+```javascript
+showWorkingTasksDropdown(event) {
+    // Get all currently working tasks
+    const workingTasks = this.tasks.filter(t => t.currentlyWorking);
+
+    // Single working task → Just jump to it
+    if (workingTasks.length === 1) {
+        this.jumpToWorkingTask();
+        return;
+    }
+
+    // Create dropdown menu
+    const dropdown = document.createElement('div');
+    // Positioned above status bar (bottom: 60px, right: 10px)
+
+    // Add header
+    header.textContent = 'Working On:';
+
+    // Add menu items
+    workingTasks.forEach(task => {
+        const item = document.createElement('div');
+        const isLast = task.id === this.lastWorkingTaskId;
+
+        // Visual indicators:
+        // - Last selected task: Blue background + blue left border + "(last)" label
+        // - Other tasks: Normal background
+        item.textContent = `🔄 ${truncatedTitle}${isLast ? ' (last)' : ''}`;
+
+        item.onclick = () => {
+            this.jumpToWorkingTask(task.id);
+            dropdown.remove();
+        };
+    });
+
+    // Close on click outside
+    document.addEventListener('click', closeDropdown);
+}
+```
+
+**Dropdown Features**:
+- **Position**: Fixed above status bar, aligned right
+- **Header**: "Working On:" label
+- **Items**: Show all working tasks with 🔄 emoji
+- **Last Indicator**: Blue highlight + "(last)" label for last selected task
+- **Hover**: Lighten background on hover
+- **Click**: Jump to selected task, close dropdown
+- **Auto-close**: Click outside or ESC to close
+- **Smart behavior**: If only 1 working task, skip dropdown and jump directly
+
+**Dark Mode Support**: Dropdown colors adapt to dark mode
+
+#### Behavior Examples
+
+**Scenario 1: Single Working Task**
+- Main button: Jumps to that task
+- Dropdown button: Skips dropdown, jumps directly
+
+**Scenario 2: Multiple Working Tasks, Recently Cycled**
+- User cycles Task A to working (middle-click)
+- `lastWorkingTaskId` = Task A
+- Main button: Jumps to Task A (last cycled)
+- Dropdown button: Shows all working tasks, Task A highlighted as "(last)"
+
+**Scenario 3: Multiple Working Tasks, Recently Selected**
+- User clicks on Task B (which is working)
+- `lastWorkingTaskId` = Task B
+- Main button: Jumps to Task B (last selected)
+- Dropdown button: Shows all working tasks, Task B highlighted as "(last)"
+
+**Scenario 4: Last Working Task Stopped**
+- User was working on Task A (`lastWorkingTaskId` = Task A)
+- User stops working on Task A
+- Main button: Falls back to first working task found
+- Dropdown button: Shows remaining working tasks
+
+#### Summary
+
+This update makes Jump to Working predictable and powerful:
+1. ✅ Tracks last selected/cycled working task
+2. ✅ Main button jumps to last interacted task (smart behavior)
+3. ✅ Dropdown button provides explicit control over multiple working tasks
+4. ✅ Visual indicator shows which task is "last" in dropdown
+5. ✅ Works seamlessly with multi-project support
+
+**Testing**:
+- Cycle task to working → Jump → Goes to that task ✓
+- Toggle multiple tasks to working → Dropdown shows all ✓
+- Select working task → Jump → Goes to selected task ✓
+- Last working task stopped → Jump falls back to any working ✓
+- Dropdown highlights last task with blue + "(last)" label ✓
+
+**Version**: 1.14.9 (Smart Jump with Dropdown)
+**Line Count**: ~7100 lines in task-tree.html (+100 lines for dropdown)

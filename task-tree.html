@@ -1286,9 +1286,14 @@
         <span class="status-label">Working on:</span>
         <span id="status-path"></span>
         <span class="status-detail" id="status-children"></span>
-        <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()">
-            🎯 Jump
-        </button>
+        <div style="display: flex; gap: 0;">
+            <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()" style="border-radius: 4px 0 0 4px; padding-right: 8px;">
+                🎯 Jump
+            </button>
+            <button id="jump-dropdown-btn" class="status-btn" onclick="app.showWorkingTasksDropdown(event)" style="border-radius: 0 4px 4px 0; padding: 4px 6px; border-left: 1px solid rgba(255,255,255,0.2); min-width: auto;" title="Choose working task">
+                ▲
+            </button>
+        </div>
     </div>
 
     <script>
@@ -1305,6 +1310,7 @@
             selectedTaskIds: new Set(),  // For multi-select (Set of task IDs)
             lastClickedTaskId: null,     // For Shift+Click range selection
             hoveredTaskId: null,         // For hover-based priority changes
+            lastWorkingTaskId: null,     // Track last selected/cycled working task for Jump button
             selectedLine: null,    // For line selection {type: 'parent'|'dependency', taskId, parentId/depId}
             // Box selection state
             boxSelectStart: null,  // {x, y} when Shift+Click+Drag starts
@@ -1833,6 +1839,8 @@
                     if (rootId) {
                         this.workingTasksByRoot[rootId] = taskId;
                     }
+                    // Track this as the last working task for Jump button
+                    this.lastWorkingTaskId = taskId;
                 } else if (task.currentlyWorking) {
                     // Working → Done
                     this.saveSnapshot(`Marked '${truncatedTitle}' as done`);
@@ -1862,6 +1870,8 @@
                             if (rootId) {
                                 this.workingTasksByRoot[rootId] = parent.id;
                             }
+                            // Track parent as the last working task for Jump button
+                            this.lastWorkingTaskId = parent.id;
                             const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
                             this.showToast(`⬆️ Now working on parent: ${parentTitle}`, 'info', 3000);
                         }
@@ -1956,6 +1966,8 @@
                     if (rootId) {
                         this.workingTasksByRoot[rootId] = taskId;
                     }
+                    // Track this as the last working task for Jump button
+                    this.lastWorkingTaskId = taskId;
                 }
                 this.saveToStorage();
                 this.updateStatusBar();
@@ -1996,6 +2008,13 @@
                 this.selectedTaskIds.clear();
                 this.selectedTaskIds.add(taskId);
                 this.lastClickedTaskId = taskId;
+
+                // If selecting a working task, track it for Jump button
+                const task = this.tasks.find(t => t.id === taskId);
+                if (task && task.currentlyWorking) {
+                    this.lastWorkingTaskId = taskId;
+                }
+
                 // Defer render to next frame to avoid breaking double-click
                 requestAnimationFrame(() => this.render());
             },
@@ -6463,11 +6482,26 @@
                 }
             },
 
-            jumpToWorkingTask(animate = true) {
+            jumpToWorkingTask(taskId = null, animate = true) {
                 // Navigate to the currently working task
                 // Centers the working task on screen with a focused zoom level
+                // If taskId provided, jump to that specific task
+                // Otherwise, use lastWorkingTaskId (last selected/cycled), or first working task
 
-                const workingTask = this.tasks.find(t => t.currentlyWorking);
+                let workingTask = null;
+                if (taskId) {
+                    // Specific task requested (from dropdown)
+                    workingTask = this.tasks.find(t => t.id === taskId && t.currentlyWorking);
+                } else if (this.lastWorkingTaskId) {
+                    // Use last selected/cycled working task
+                    workingTask = this.tasks.find(t => t.id === this.lastWorkingTaskId && t.currentlyWorking);
+                }
+
+                // Fallback: If last working task no longer working, find any working task
+                if (!workingTask) {
+                    workingTask = this.tasks.find(t => t.currentlyWorking);
+                }
+
                 if (!workingTask) {
                     this.showToast('No task is currently being worked on', 'warning');
                     return;
@@ -6589,6 +6623,98 @@
                     const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
                     this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
                 }
+            },
+
+            showWorkingTasksDropdown(event) {
+                // Show dropdown menu to choose which working task to jump to
+                event.stopPropagation();
+
+                // Get all currently working tasks
+                const workingTasks = this.tasks.filter(t => t.currentlyWorking);
+
+                if (workingTasks.length === 0) {
+                    this.showToast('No task is currently being worked on', 'warning');
+                    return;
+                }
+
+                if (workingTasks.length === 1) {
+                    // Only one working task, just jump to it
+                    this.jumpToWorkingTask();
+                    return;
+                }
+
+                // Create dropdown menu
+                const dropdown = document.createElement('div');
+                dropdown.id = 'working-tasks-dropdown';
+                dropdown.style.cssText = `
+                    position: fixed;
+                    bottom: 60px;
+                    right: 10px;
+                    background: ${this.darkMode ? '#1e293b' : 'white'};
+                    border: 1px solid ${this.darkMode ? '#475569' : '#ccc'};
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    z-index: 3000;
+                    min-width: 250px;
+                    max-height: 400px;
+                    overflow-y: auto;
+                `;
+
+                // Add header
+                const header = document.createElement('div');
+                header.style.cssText = `
+                    padding: 10px 12px;
+                    border-bottom: 1px solid ${this.darkMode ? '#475569' : '#ddd'};
+                    font-weight: 600;
+                    font-size: 13px;
+                    color: ${this.darkMode ? '#f1f5f9' : '#333'};
+                `;
+                header.textContent = 'Working On:';
+                dropdown.appendChild(header);
+
+                // Add menu items for each working task
+                workingTasks.forEach(task => {
+                    const item = document.createElement('div');
+                    const truncatedTitle = task.title.length > 40 ? task.title.substring(0, 37) + '...' : task.title;
+                    const isLast = task.id === this.lastWorkingTaskId;
+
+                    item.style.cssText = `
+                        padding: 10px 12px;
+                        cursor: pointer;
+                        font-size: 13px;
+                        color: ${this.darkMode ? '#e2e8f0' : '#333'};
+                        background: ${isLast ? (this.darkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(33, 150, 243, 0.1)') : 'transparent'};
+                        border-left: 3px solid ${isLast ? '#2196f3' : 'transparent'};
+                    `;
+                    item.textContent = `🔄 ${truncatedTitle}${isLast ? ' (last)' : ''}`;
+
+                    item.onmouseover = () => {
+                        item.style.background = this.darkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(33, 150, 243, 0.2)';
+                    };
+                    item.onmouseout = () => {
+                        item.style.background = isLast ? (this.darkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(33, 150, 243, 0.1)') : 'transparent';
+                    };
+                    item.onclick = () => {
+                        this.jumpToWorkingTask(task.id);
+                        dropdown.remove();
+                    };
+
+                    dropdown.appendChild(item);
+                });
+
+                // Close on click outside
+                const closeDropdown = (e) => {
+                    if (!dropdown.contains(e.target) && e.target.id !== 'jump-dropdown-btn') {
+                        dropdown.remove();
+                        document.removeEventListener('click', closeDropdown);
+                    }
+                };
+
+                // Add to page
+                document.body.appendChild(dropdown);
+                setTimeout(() => {
+                    document.addEventListener('click', closeDropdown);
+                }, 10);
             },
 
             updateHome(homeId) {
