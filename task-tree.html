@@ -6409,17 +6409,12 @@
                 const currentTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
                 console.log(`  Current TASK center: (${currentTaskCenterX}, ${currentTaskCenterY})`);
 
-                // OLD approach (that worked): moved tasks by (home.centerX - currentCenter)
-                // NEW approach (correct): move viewBox by (currentCenter - home.centerX) for same visual
-                //
-                // Why: If tasks moved from 100 to 200, and should appear at 100:
-                //   OLD: tasks.x += (100 - 200) = -100 → tasks back at 100
-                //   NEW: viewBox.x += (200 - 100) = +100 → shows coordinates 100+ (tasks at 200 visible)
-                const dx = currentTaskCenterX - home.centerX;
-                const dy = currentTaskCenterY - home.centerY;
+                // Simple approach: Center viewport on the saved home coordinates
+                // This shows the same area that was visible when home was saved
+                const targetViewBoxX = home.centerX - this.viewBox.width / 2;
+                const targetViewBoxY = home.centerY - this.viewBox.height / 2;
 
-                console.log(`  Offset from saved position: dx=${dx}, dy=${dy}`);
-                console.log(`  Will apply this offset to viewBox (instead of to tasks)`);
+                console.log(`  Target viewBox (absolute): x=${targetViewBoxX}, y=${targetViewBoxY}`);
                 console.log(`  Target zoom: ${home.zoomLevel}`);
 
                 if (animate) {
@@ -6455,11 +6450,11 @@
                             // Phase 2: Pan while zoomed out (300-800ms)
                             if (!panTriggered) {
                                 panTriggered = true;
-                                // Move the viewBox to show home position (don't move tasks!)
+                                // SET viewBox to target position (don't add, to avoid accumulation!)
                                 console.log(`[jumpToHome] APPLYING PAN at zoom ${this.zoomLevel}`);
                                 console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
-                                this.viewBox.x += dx;
-                                this.viewBox.y += dy;
+                                this.viewBox.x = targetViewBoxX;
+                                this.viewBox.y = targetViewBoxY;
                                 console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
                                 console.log(`  New viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
                                 const newTaskCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
@@ -6501,9 +6496,9 @@
                     this.showToast(`→ Jumped to "${home.name}"`, 'success');
                 } else {
                     // Instant jump (no animation)
-                    // Move the viewBox to show home position (don't move tasks!)
-                    this.viewBox.x += dx;
-                    this.viewBox.y += dy;
+                    // SET viewBox to target position (don't add, to avoid accumulation!)
+                    this.viewBox.x = targetViewBoxX;
+                    this.viewBox.y = targetViewBoxY;
 
                     this.zoomLevel = home.zoomLevel;
                     this.updateZoomDisplay();
