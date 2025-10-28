@@ -6550,6 +6550,12 @@
                 // We want: viewBox.x + viewBox.width/2 = workingTask.x
                 // Therefore: viewBox.x = workingTask.x - viewBox.width/2
 
+                console.log(`\n[jumpToWorkingTask] === JUMP CALCULATION ===`);
+                console.log(`  Target task: "${workingTask.title}" at (${workingTask.x}, ${workingTask.y})`);
+                console.log(`  Current viewBox: x=${this.viewBox.x}, y=${this.viewBox.y}, w=${this.viewBox.width}, h=${this.viewBox.height}`);
+                console.log(`  Current zoom: ${this.zoomLevel}`);
+                console.log(`  Current viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
+
                 // Calculate target viewBox position to center on working task
                 const targetViewBoxX = workingTask.x - this.viewBox.width / 2;
                 const targetViewBoxY = workingTask.y - this.viewBox.height / 2;
@@ -6558,7 +6564,12 @@
                 const dx = targetViewBoxX - this.viewBox.x;
                 const dy = targetViewBoxY - this.viewBox.y;
 
+                console.log(`  Target viewBox: x=${targetViewBoxX}, y=${targetViewBoxY}`);
+                console.log(`  Delta: dx=${dx}, dy=${dy}`);
+                console.log(`  After move, viewBox CENTER will be: (${targetViewBoxX + this.viewBox.width/2}, ${targetViewBoxY + this.viewBox.height/2})`);
+
                 const targetZoom = 1.2; // Focused view
+                console.log(`  Target zoom: ${targetZoom}`);
 
                 if (animate) {
                     // Cinematic 3-phase animation: zoom out → pan → zoom in
@@ -6594,8 +6605,12 @@
                             if (!panTriggered) {
                                 panTriggered = true;
                                 // Move the viewBox to center on working task (don't move tasks!)
+                                console.log(`[jumpToWorkingTask] APPLYING PAN at zoom ${this.zoomLevel}`);
+                                console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
                                 this.viewBox.x += dx;
                                 this.viewBox.y += dy;
+                                console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
+                                console.log(`  New CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
                             }
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
@@ -6632,12 +6647,15 @@
                 } else {
                     // Instant jump (no animation)
                     // Move the viewBox to center on working task (don't move tasks!)
+                    console.log(`[jumpToWorkingTask] INSTANT JUMP (no animation)`);
+                    console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y}), zoom = ${this.zoomLevel}`);
                     this.viewBox.x += dx;
                     this.viewBox.y += dy;
-
                     this.zoomLevel = targetZoom;
-                    this.updateZoomDisplay();
+                    console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y}), zoom = ${this.zoomLevel}`);
+                    console.log(`  Final CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
 
+                    this.updateZoomDisplay();
                     this.saveToStorage();
                     this.render();
 
