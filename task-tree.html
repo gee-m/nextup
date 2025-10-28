@@ -6530,14 +6530,18 @@
                     workingTask.hidden = false;
                 }
 
-                // The viewport center is the fixed point we want the working task to move to
-                // Use actual window dimensions (not viewBox which is the base coordinate space)
-                const viewportCenterX = window.innerWidth / 2;
-                const viewportCenterY = (window.innerHeight - 60) / 2; // -60 for status bar height
+                // To center the working task in the viewport, we need to position the viewBox
+                // so that the task is at the center of the visible area (in SVG coordinate space)
+                // The center of the viewBox is at: (viewBox.x + viewBox.width/2, viewBox.y + viewBox.height/2)
+                // We want this center to be at the working task's position
 
-                // Calculate offset to move working task to viewport center
-                const dx = viewportCenterX - workingTask.x;
-                const dy = viewportCenterY - workingTask.y;
+                // Calculate current center position in SVG coordinates
+                const currentCenterX = this.viewBox.x + this.viewBox.width / 2;
+                const currentCenterY = this.viewBox.y + this.viewBox.height / 2;
+
+                // Calculate how much to shift to center on working task
+                const dx = currentCenterX - workingTask.x;
+                const dy = currentCenterY - workingTask.y;
 
                 const targetZoom = 1.2; // Focused view
 
