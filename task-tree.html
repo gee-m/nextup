@@ -6396,13 +6396,16 @@
                     return;
                 }
 
-                // Calculate current center
-                const currentCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
-                const currentCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
+                // Calculate target viewBox position to show the home's saved center point
+                // home.centerX/centerY is the task centroid when home was created
+                // We want to center the viewport on that point (WITHOUT moving tasks!)
+                // Same math as jumpToWorkingTask: viewBox.x = centerPoint.x - viewBox.width/2
+                const targetViewBoxX = home.centerX - this.viewBox.width / 2;
+                const targetViewBoxY = home.centerY - this.viewBox.height / 2;
 
-                // Calculate offset to move current center to home position
-                const dx = home.centerX - currentCenterX;
-                const dy = home.centerY - currentCenterY;
+                // Calculate how much to shift the viewBox
+                const dx = targetViewBoxX - this.viewBox.x;
+                const dy = targetViewBoxY - this.viewBox.y;
 
                 if (animate) {
                     // Cinematic 3-phase animation: zoom out → pan → zoom in
@@ -6437,19 +6440,9 @@
                             // Phase 2: Pan while zoomed out (300-800ms)
                             if (!panTriggered) {
                                 panTriggered = true;
-                                // Update data model and trigger CSS transition for nodes
-                                this.tasks.forEach(task => {
-                                    task.x += dx;
-                                    task.y += dy;
-                                });
-
-                                // Update node transforms to trigger smooth CSS animation
-                                this.tasks.forEach(task => {
-                                    const node = document.querySelector(`.task-node[data-id="${task.id}"]`);
-                                    if (node) {
-                                        node.setAttribute('transform', `translate(${task.x}, ${task.y})`);
-                                    }
-                                });
+                                // Move the viewBox to show home position (don't move tasks!)
+                                this.viewBox.x += dx;
+                                this.viewBox.y += dy;
                             }
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
@@ -6473,7 +6466,7 @@
                             svg.classList.remove('animating-view');
                             this.render(); // Lines reappear with perfect edge-to-edge arrows
 
-                            // Save after animation completes to persist new positions and zoom
+                            // Save after animation completes to persist zoom
                             this.saveToStorage();
                         }
                     };
@@ -6486,10 +6479,9 @@
                     this.showToast(`→ Jumped to "${home.name}"`, 'success');
                 } else {
                     // Instant jump (no animation)
-                    this.tasks.forEach(task => {
-                        task.x += dx;
-                        task.y += dy;
-                    });
+                    // Move the viewBox to show home position (don't move tasks!)
+                    this.viewBox.x += dx;
+                    this.viewBox.y += dy;
 
                     this.zoomLevel = home.zoomLevel;
                     this.updateZoomDisplay();
