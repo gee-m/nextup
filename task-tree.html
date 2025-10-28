@@ -6349,19 +6349,20 @@
                     return false;
                 }
 
-                // Save current viewBox position (not task center - that approach moves tasks!)
-                // This ensures jumping to home just moves the viewport, not the content
-                const viewBoxCenterX = this.viewBox.x + this.viewBox.width / 2;
-                const viewBoxCenterY = this.viewBox.y + this.viewBox.height / 2;
+                // Calculate center of current view
+                const centerX = this.tasks.length > 0
+                    ? this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length
+                    : this.viewBox.width / 2;
+                const centerY = this.tasks.length > 0
+                    ? this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length
+                    : this.viewBox.height / 2;
 
                 // Create new home
                 const newHome = {
                     id: this.homeIdCounter++,
                     name: trimmedName,
-                    viewBoxCenterX: viewBoxCenterX,  // NEW: ViewBox center (correct approach)
-                    viewBoxCenterY: viewBoxCenterY,
-                    centerX: viewBoxCenterX,         // DEPRECATED: Keep for backwards compat
-                    centerY: viewBoxCenterY,
+                    centerX: centerX,
+                    centerY: centerY,
                     zoomLevel: this.zoomLevel,
                     timestamp: Date.now(),
                     keybind: null  // No keybind by default
@@ -6395,19 +6396,13 @@
                     return;
                 }
 
-                // Use new viewBoxCenter if available, otherwise fall back to old centerX/centerY
-                const homeCenterX = home.viewBoxCenterX !== undefined ? home.viewBoxCenterX : home.centerX;
-                const homeCenterY = home.viewBoxCenterY !== undefined ? home.viewBoxCenterY : home.centerY;
+                // Calculate current center
+                const currentCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
+                const currentCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
 
-                // Calculate target viewBox position to show home center
-                // We want: viewBox.x + viewBox.width/2 = homeCenterX
-                // Therefore: viewBox.x = homeCenterX - viewBox.width/2
-                const targetViewBoxX = homeCenterX - this.viewBox.width / 2;
-                const targetViewBoxY = homeCenterY - this.viewBox.height / 2;
-
-                // Calculate how much to shift the viewBox
-                const dx = targetViewBoxX - this.viewBox.x;
-                const dy = targetViewBoxY - this.viewBox.y;
+                // Calculate offset to move current center to home position
+                const dx = home.centerX - currentCenterX;
+                const dy = home.centerY - currentCenterY;
 
                 if (animate) {
                     // Cinematic 3-phase animation: zoom out → pan → zoom in
@@ -6442,9 +6437,19 @@
                             // Phase 2: Pan while zoomed out (300-800ms)
                             if (!panTriggered) {
                                 panTriggered = true;
-                                // Move the viewBox to show home position (don't move tasks!)
-                                this.viewBox.x += dx;
-                                this.viewBox.y += dy;
+                                // Update data model and trigger CSS transition for nodes
+                                this.tasks.forEach(task => {
+                                    task.x += dx;
+                                    task.y += dy;
+                                });
+
+                                // Update node transforms to trigger smooth CSS animation
+                                this.tasks.forEach(task => {
+                                    const node = document.querySelector(`.task-node[data-id="${task.id}"]`);
+                                    if (node) {
+                                        node.setAttribute('transform', `translate(${task.x}, ${task.y})`);
+                                    }
+                                });
                             }
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
@@ -6468,7 +6473,7 @@
                             svg.classList.remove('animating-view');
                             this.render(); // Lines reappear with perfect edge-to-edge arrows
 
-                            // Save after animation completes to persist zoom level
+                            // Save after animation completes to persist new positions and zoom
                             this.saveToStorage();
                         }
                     };
@@ -6481,9 +6486,10 @@
                     this.showToast(`→ Jumped to "${home.name}"`, 'success');
                 } else {
                     // Instant jump (no animation)
-                    // Move the viewBox to show home position (don't move tasks!)
-                    this.viewBox.x += dx;
-                    this.viewBox.y += dy;
+                    this.tasks.forEach(task => {
+                        task.x += dx;
+                        task.y += dy;
+                    });
 
                     this.zoomLevel = home.zoomLevel;
                     this.updateZoomDisplay();
@@ -6831,14 +6837,16 @@
                     return;
                 }
 
-                // Save current viewBox position (not task center!)
-                const viewBoxCenterX = this.viewBox.x + this.viewBox.width / 2;
-                const viewBoxCenterY = this.viewBox.y + this.viewBox.height / 2;
+                // Calculate center of current view
+                const centerX = this.tasks.length > 0
+                    ? this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length
+                    : this.viewBox.width / 2;
+                const centerY = this.tasks.length > 0
+                    ? this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length
+                    : this.viewBox.height / 2;
 
-                home.viewBoxCenterX = viewBoxCenterX;  // NEW: ViewBox center
-                home.viewBoxCenterY = viewBoxCenterY;
-                home.centerX = viewBoxCenterX;          // DEPRECATED: Keep for backwards compat
-                home.centerY = viewBoxCenterY;
+                home.centerX = centerX;
+                home.centerY = centerY;
                 home.zoomLevel = this.zoomLevel;
                 home.timestamp = Date.now();
 
