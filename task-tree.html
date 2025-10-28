@@ -6501,6 +6501,10 @@
                 if (taskId) {
                     // Specific task requested (from dropdown)
                     workingTask = this.tasks.find(t => t.id === taskId && t.currentlyWorking);
+                    // Update last working task - this becomes the new default for J+J
+                    if (workingTask) {
+                        this.lastWorkingTaskId = taskId;
+                    }
                 } else if (this.lastWorkingTaskId) {
                     // Use last selected/cycled working task
                     workingTask = this.tasks.find(t => t.id === this.lastWorkingTaskId && t.currentlyWorking);
@@ -6527,9 +6531,9 @@
                 }
 
                 // The viewport center is the fixed point we want the working task to move to
-                // This is the center of the viewBox (screen center in SVG coordinates)
-                const viewportCenterX = this.viewBox.width / 2;
-                const viewportCenterY = this.viewBox.height / 2;
+                // Use actual window dimensions (not viewBox which is the base coordinate space)
+                const viewportCenterX = window.innerWidth / 2;
+                const viewportCenterY = (window.innerHeight - 60) / 2; // -60 for status bar height
 
                 // Calculate offset to move working task to viewport center
                 const dx = viewportCenterX - workingTask.x;
