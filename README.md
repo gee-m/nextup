@@ -4939,8 +4939,133 @@ svg.addEventListener('wheel', (e) => {
 
 **Line Count**: ~6890 lines in task-tree.html (no line count change, replacement only)
 
+### Session 20 Continued (6th): Improve Node Padding & Status Emoji Positioning (2025-10-28)
+
+**Version**: 1.14.4 (Visual Polish)
+
+**Changes**:
+1. Reduced default node padding from 30px to 15px
+2. Moved status emojis from prepended text to left-positioned floating indicators
+3. Status emojis now hover 20px to the left of nodes
+4. Text alignment no longer disrupted by emoji characters
+
+**Problem**: Status emojis (🔄 working, ✅ done) were prepended to task text, causing:
+- Misalignment of text across nodes with/without emojis
+- Excessive horizontal padding making nodes wider than needed
+- Visual clutter with emojis mixed into text content
+- Inconsistent left edge alignment
+
+**Root Cause**:
+- Emojis were added as part of the text content: `emoji + lineText`
+- This made the first line different width from other lines
+- 30px padding was excessive for most task names
+- No visual separation between status indicator and task content
+
+**Solution**:
+1. Reduce padding for tighter, more compact nodes
+2. Render status emojis as separate SVG elements positioned outside the node rectangle
+
+**Implementation**:
+
+**1. Reduced Node Padding** (Lines 1323, 2832, 6117):
+```javascript
+// Before: nodePadding: 30
+// After: nodePadding: 15
+
+nodePadding: 15,   // Left/right padding inside rectangles (was 30)
+```
+- Changed in app state default
+- Changed in Settings configDefs default
+- Changed in loadFromStorage fallback
+- Results in 50% reduction in horizontal padding
+- Makes nodes more compact and space-efficient
+
+**2. Status Emoji Positioning** (Lines 5366-5379):
+```javascript
+// Removed: emoji prepended to text (was line 5367)
+// Before: tspan.textContent = (index === 0 ? emoji : '') + lineText;
+// After: tspan.textContent = lineText;
+
+// Added: Separate emoji element positioned to the left
+if (task.currentlyWorking || task.status === 'done') {
+    const statusEmoji = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    statusEmoji.textContent = task.currentlyWorking ? '🔄' : '✅';
+    // Position to the left of the rectangle
+    statusEmoji.setAttribute('x', -rectWidth / 2 - 20); // 20px left of node edge
+    statusEmoji.setAttribute('y', 0); // Vertically centered
+    statusEmoji.setAttribute('font-size', '16');
+    statusEmoji.setAttribute('text-anchor', 'middle');
+    statusEmoji.setAttribute('dominant-baseline', 'middle');
+    statusEmoji.setAttribute('pointer-events', 'none'); // Don't interfere with node clicks
+    statusEmoji.style.opacity = '0.9';
+    g.appendChild(statusEmoji);
+}
+```
+
+**Key Changes**:
+
+**Text Content** (Line 5358):
+- **Before**: `tspan.textContent = (index === 0 ? emoji : '') + lineText;`
+- **After**: `tspan.textContent = lineText;`
+- Emojis no longer part of text content
+- Clean, consistent text rendering
+
+**Emoji Element** (Lines 5366-5379):
+- Created as separate SVG `<text>` element
+- **Position**: 20px to the left of node left edge
+- **Vertical alignment**: Centered (`y = 0`, `dominant-baseline = 'middle'`)
+- **Font size**: 16px (slightly larger for visibility)
+- **Opacity**: 0.9 (subtle, not distracting)
+- **Pointer events**: None (doesn't interfere with node interactions)
+
+**Visual Layout**:
+```
+Before:
+┌─────────────────────────┐
+│ 🔄 Task name here       │  ← Emoji mixed with text
+└─────────────────────────┘
+
+After:
+    ┌────────────────────┐
+🔄  │ Task name here     │  ← Emoji floats to the left
+    └────────────────────┘
+```
+
+**Benefits**:
+- ✅ **Cleaner alignment** - All text starts at same left edge
+- ✅ **More compact nodes** - 15px padding vs 30px (50% reduction)
+- ✅ **Better visual hierarchy** - Status indicators separate from content
+- ✅ **Consistent width** - First line no longer wider due to emoji
+- ✅ **Easier to scan** - Eye doesn't have to skip over emoji to read text
+- ✅ **Floating indicator** - Status emoji "belongs to" the node visually
+
+**Positioning Details**:
+- **X position**: `-rectWidth / 2 - 20`
+  - `-rectWidth / 2` = left edge of rectangle
+  - `-20` = 20px further left
+  - Result: Emoji floats outside the node boundary
+- **Y position**: `0`
+  - Centered vertically in the group coordinate system
+  - Aligns with middle of node regardless of height
+- **Anchor**: `middle`
+  - Emoji centered on its position
+  - Consistent alignment even if emoji width varies
+
+**Testing**:
+- ✓ Working task (🔄) → Emoji appears to the left
+- ✓ Done task (✅) → Emoji appears to the left
+- ✓ Pending task → No emoji (clean)
+- ✓ Multi-line tasks → Emoji vertically centered
+- ✓ Small nodes → Emoji doesn't overlap
+- ✓ Large nodes → Emoji positioned correctly
+- ✓ Node interactions → Emoji doesn't interfere with clicks
+- ✓ Text alignment → All lines start at same left edge
+- ✓ Compact appearance → Less wasted space
+
+**Line Count**: ~6900 lines in task-tree.html (+10 lines for emoji rendering)
+
 ---
 
-**Last Updated**: 2025-10-28 (Session 20 Continued (5th): Fix Trackpad Zoom Sensitivity)
-**Current Line Count**: ~6890 lines in task-tree.html
-**Version**: 1.14.3 (UX Improvement)
+**Last Updated**: 2025-10-28 (Session 20 Continued (6th): Improve Node Padding & Status Emoji Positioning)
+**Current Line Count**: ~6900 lines in task-tree.html
+**Version**: 1.14.4 (Visual Polish)

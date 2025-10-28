@@ -1320,7 +1320,7 @@
             textLengthThreshold: 80,
             // Node sizing & typography configuration
             charWidth: 8.5,    // Pixels per character for width calculation
-            nodePadding: 30,   // Left/right padding inside rectangles
+            nodePadding: 15,   // Left/right padding inside rectangles
             minNodeWidth: 100, // Minimum rectangle width
             fontFamily: "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace",  // Font stack for task text
             fontWeight: 700,   // Font weight: 400=normal, 500=medium, 600=semibold, 700=bold
@@ -2829,7 +2829,7 @@
                     nodePadding: {
                         label: 'Node Padding (px)',
                         type: 'number',
-                        default: 30,
+                        default: 15,
                         min: 0,
                         max: 50,
                         description: 'Left/right padding inside rectangles'
@@ -5338,14 +5338,6 @@
                         text.style.fontFamily = this.fontFamily;
                         text.style.fontWeight = this.fontWeight;
 
-                        // Add emoji status indicators to first line
-                        let emoji = '';
-                        if (task.currentlyWorking) {
-                            emoji = '🔄 ';
-                        } else if (task.status === 'done') {
-                            emoji = '✅ ';
-                        }
-
                         // Calculate how many lines actually fit within rectHeight
                         const availableHeight = rectHeight - verticalPadding * 2;
                         const maxVisibleLines = Math.floor(availableHeight / this.lineHeight);
@@ -5363,13 +5355,27 @@
                             }
 
                             const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                            // Add emoji to first line only
-                            tspan.textContent = (index === 0 ? emoji : '') + lineText;
+                            tspan.textContent = lineText; // No emoji prepended - now positioned separately
                             tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
                             // Vertical position: start from top + verticalPadding, add lineHeight per line
                             const yOffset = -rectHeight / 2 + verticalPadding + this.lineHeight * (index + 0.75);
                             tspan.setAttribute('y', yOffset);
                             text.appendChild(tspan);
+                        }
+
+                        // Add status emoji indicator positioned to the left of the node
+                        if (task.currentlyWorking || task.status === 'done') {
+                            const statusEmoji = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            statusEmoji.textContent = task.currentlyWorking ? '🔄' : '✅';
+                            // Position to the left of the rectangle
+                            statusEmoji.setAttribute('x', -rectWidth / 2 - 20); // 20px left of node edge
+                            statusEmoji.setAttribute('y', 0); // Vertically centered
+                            statusEmoji.setAttribute('font-size', '16');
+                            statusEmoji.setAttribute('text-anchor', 'middle');
+                            statusEmoji.setAttribute('dominant-baseline', 'middle');
+                            statusEmoji.setAttribute('pointer-events', 'none'); // Don't interfere with node clicks
+                            statusEmoji.style.opacity = '0.9';
+                            g.appendChild(statusEmoji);
                         }
 
 
@@ -6114,7 +6120,7 @@
                     // User preferences & configuration (use ?? for proper defaults)
                     this.textLengthThreshold = parsed.textLengthThreshold ?? 80;
                     this.charWidth = parsed.charWidth ?? 8.5;
-                    this.nodePadding = parsed.nodePadding ?? 30;
+                    this.nodePadding = parsed.nodePadding ?? 15;
                     this.minNodeWidth = parsed.minNodeWidth ?? 100;
                     this.fontFamily = parsed.fontFamily ?? "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace";
                     this.fontWeight = parsed.fontWeight ?? 700;
