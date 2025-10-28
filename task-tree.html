@@ -1630,10 +1630,10 @@
                     delta = Math.max(-100, Math.min(100, delta));
 
                     // Scale zoom change proportionally to delta magnitude
-                    // Max 6% change per event for balanced speed and control
+                    // Max 12% change per event for faster zoom response
                     // Larger deltas (mouse wheels) = faster zoom
                     // Smaller deltas (trackpads) = slower, more controllable zoom
-                    const zoomChange = (delta / 100) * 0.06;
+                    const zoomChange = (delta / 100) * 0.12;
                     const zoomFactor = 1 + zoomChange;
 
                     this.zoomLevel = Math.max(
