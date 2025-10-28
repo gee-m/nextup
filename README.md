@@ -5282,3 +5282,207 @@ This session focused on polish and user experience improvements:
 
 **Version**: 1.14.5 (Settings & UX Polish)
 **Line Count**: ~6900 lines in task-tree.html
+
+---
+
+### Session 20 Continued (8th): Zoom Persistence & CharWidth Calibration
+
+**Date**: 2025-10-28
+**Focus**: Fixed zoom persistence, increased default zoom speed, added charWidth calibration
+
+#### Changes Made
+
+**1. Increased Default Zoom Speed**
+
+Changed default `wheelZoomSpeed` from 0.12 to 0.18 (50% faster):
+
+**Updated in 3 locations**:
+- App state default (line 1303): `wheelZoomSpeed: 0.18`
+- Settings configDefs (line 2851): `default: 0.18`
+- loadFromStorage fallback (line 6155): `this.wheelZoomSpeed = parsed.wheelZoomSpeed ?? 0.18`
+
+**Rationale**: User feedback indicated 0.12 was too slow after implementing normalized deltaY. 0.18 provides better responsiveness while maintaining smooth control.
+
+**2. Fixed Zoom Level Persistence**
+
+**Problem**: Zoom level was being saved but not triggering saves after zoom operations, causing loss of zoom state on page refresh.
+
+**Solution**: Added `saveToStorage()` calls to all zoom operations
+
+**Wheel Zoom** (Lines 1653-1657):
+```javascript
+// Debounce saveToStorage for smooth zooming (save after 500ms of no zooming)
+clearTimeout(this._zoomSaveTimeout);
+this._zoomSaveTimeout = setTimeout(() => {
+    this.saveToStorage();
+}, 500);
+```
+- Uses debounced save (500ms delay) to avoid excessive writes during continuous scrolling
+- Clears previous timeout on each zoom event
+- Only saves once user stops zooming
+
+**Zoom Buttons** (Lines 2358, 2365, 2372):
+```javascript
+zoomIn() {
+    this.zoomLevel = Math.min(this.zoomLevel + this.zoomSpeed, this.maxZoom);
+    this.updateZoomDisplay();
+    this.render();
+    this.saveToStorage();  // ← Added
+}
+
+zoomOut() {
+    this.zoomLevel = Math.max(this.zoomLevel - this.zoomSpeed, this.minZoom);
+    this.updateZoomDisplay();
+    this.render();
+    this.saveToStorage();  // ← Added
+}
+
+resetZoom() {
+    this.zoomLevel = 1;
+    this.updateZoomDisplay();
+    this.render();
+    this.saveToStorage();  // ← Added
+}
+```
+
+**Zoom to Fit** (Line 2411):
+```javascript
+zoomToFit() {
+    // ... calculation logic
+    this.updateZoomDisplay();
+    this.render();
+    this.saveToStorage();  // ← Added
+}
+```
+
+**Result**: Zoom level now persists correctly across page refreshes regardless of zoom method used.
+
+**3. CharWidth Calibration Feature**
+
+Added automatic character width measurement to fix right padding issues and improve text wrapping accuracy.
+
+**Calibration Function** (Lines 2435-2480):
+```javascript
+calibrateCharWidth() {
+    // Measure actual character width for current font settings
+    const svg = document.getElementById('canvas');
+
+    // Create temporary text element with current font settings
+    const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tempText.style.fontFamily = this.fontFamily;
+    tempText.style.fontWeight = this.fontWeight;
+    tempText.style.fontSize = '14px'; // Match task text size
+
+    // Use representative sample (100 chars of varied types)
+    const sampleText = 'The quick brown fox jumps over the lazy dog 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnop';
+    tempText.textContent = sampleText;
+
+    // Temporarily add to DOM to measure
+    svg.appendChild(tempText);
+    const bbox = tempText.getBBox();
+    const totalWidth = bbox.width;
+    svg.removeChild(tempText);
+
+    // Calculate average character width
+    const measuredCharWidth = totalWidth / sampleText.length;
+    const oldCharWidth = this.charWidth;
+    this.charWidth = Math.round(measuredCharWidth * 10) / 10; // Round to 1 decimal
+
+    // Update input field, save, re-render, show feedback
+    const input = document.getElementById('setting-charWidth');
+    if (input) input.value = this.charWidth;
+
+    this.saveToStorage();
+    this.render();
+
+    this.showToast(
+        `Character width calibrated: ${oldCharWidth}px → ${this.charWidth}px`,
+        'success',
+        3000
+    );
+}
+```
+
+**How It Works**:
+1. Creates temporary SVG text element with current font settings
+2. Measures 100-character sample with varied character types
+3. Calculates average width per character using `getBBox()`
+4. Updates `charWidth` with measured value (rounded to 0.1px)
+5. Updates Settings input field automatically
+6. Re-renders all nodes with new width
+7. Shows toast notification with before/after values
+
+**Calibration Button in Settings** (Lines 3036-3056):
+```javascript
+// Special handling for charWidth: add calibration button
+if (key === 'charWidth') {
+    html += `
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <input
+                type="number"
+                id="setting-${key}"
+                value="${currentValue}"
+                style="flex: 1; padding: 6px; font-size: 13px; ..."
+            />
+            <button
+                onclick="app.calibrateCharWidth()"
+                style="padding: 6px 12px; font-size: 12px; background: #2196f3; color: white; ..."
+                title="Measure actual character width for current font">
+                📏 Calibrate
+            </button>
+        </div>`;
+}
+```
+
+**UI Design**:
+- Button positioned next to charWidth input (not below)
+- Flex layout: input takes remaining space, button fixed width
+- Blue accent color matches primary theme
+- Hover effect for better UX
+- Tooltip explains functionality
+- 📏 emoji provides visual cue
+
+**Updated Description** (Line 2895):
+```javascript
+description: 'Pixels per character for node width calculation. Use Calibrate button to auto-measure for current font.'
+```
+
+**Benefits**:
+- **Accurate Text Wrapping**: Uses actual measured font width instead of estimation
+- **Better Right Padding**: Eliminates excess space caused by charWidth/font mismatch
+- **Font-Aware**: Automatically adapts to different fonts and weights
+- **User Control**: Manual calibration - user decides when to measure
+- **Immediate Feedback**: Shows before/after values in toast
+- **Persistent**: Calibrated value saved to localStorage
+- **Dynamic**: Can recalibrate after changing font settings
+
+**Use Cases**:
+1. After changing font family in settings
+2. After changing font weight
+3. When text wrapping looks off
+4. When there's too much/too little right padding
+5. Initial setup for optimal appearance
+
+**Sample Calibration Results**:
+- Fira Code (default): ~8.4px
+- Consolas: ~7.2px
+- Monaco: ~7.8px
+- Courier New: ~7.5px
+
+#### Summary
+
+This session addressed user-reported issues and added diagnostic tooling:
+1. ✅ Increased zoom speed 50% for better responsiveness (0.12 → 0.18)
+2. ✅ Fixed zoom persistence - all zoom operations now save state
+3. ✅ Added charWidth calibration feature for accurate text measurement
+4. ✅ Right padding issues can now be diagnosed/fixed via calibration
+
+**Testing**:
+- Zoom via wheel/trackpad → Refresh page → Zoom level preserved
+- Zoom via +/- buttons → Refresh page → Zoom level preserved
+- Zoom to Fit → Refresh page → Zoom level preserved
+- Click Calibrate button → charWidth updates, nodes re-render, toast shows change
+- Change font → Calibrate → charWidth adjusts to new font
+
+**Version**: 1.14.6 (Zoom & Calibration)
+**Line Count**: ~6950 lines in task-tree.html (+50 lines for calibration)

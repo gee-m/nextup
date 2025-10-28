@@ -1300,7 +1300,7 @@
             minZoom: 0.2,
             maxZoom: 4,
             zoomSpeed: 0.1,  // Keyboard zoom speed (Ctrl+/-)
-            wheelZoomSpeed: 0.12,  // Wheel/trackpad zoom speed
+            wheelZoomSpeed: 0.18,  // Wheel/trackpad zoom speed
             selectedNode: null,
             selectedTaskIds: new Set(),  // For multi-select (Set of task IDs)
             lastClickedTaskId: null,     // For Shift+Click range selection
@@ -1649,6 +1649,12 @@
 
                     this.updateZoomDisplay();
                     this.render();
+
+                    // Debounce saveToStorage for smooth zooming (save after 500ms of no zooming)
+                    clearTimeout(this._zoomSaveTimeout);
+                    this._zoomSaveTimeout = setTimeout(() => {
+                        this.saveToStorage();
+                    }, 500);
                 }, { passive: false });
 
                 // Zoom with keyboard shortcuts
@@ -2349,18 +2355,21 @@
                 this.zoomLevel = Math.min(this.zoomLevel + this.zoomSpeed, this.maxZoom);
                 this.updateZoomDisplay();
                 this.render();
+                this.saveToStorage();
             },
 
             zoomOut() {
                 this.zoomLevel = Math.max(this.zoomLevel - this.zoomSpeed, this.minZoom);
                 this.updateZoomDisplay();
                 this.render();
+                this.saveToStorage();
             },
 
             resetZoom() {
                 this.zoomLevel = 1;
                 this.updateZoomDisplay();
                 this.render();
+                this.saveToStorage();
             },
 
             zoomToFit() {
@@ -2399,6 +2408,7 @@
 
                 this.updateZoomDisplay();
                 this.render();
+                this.saveToStorage();
             },
 
             updateZoomDisplay() {
@@ -2419,6 +2429,53 @@
                     `${this.viewBox.x - (viewBoxWidth - this.viewBox.width) / 2} ` +
                     `${this.viewBox.y - (viewBoxHeight - this.viewBox.height) / 2} ` +
                     `${viewBoxWidth} ${viewBoxHeight}`
+                );
+            },
+
+            calibrateCharWidth() {
+                // Measure actual character width for current font settings
+                const svg = document.getElementById('canvas');
+
+                // Create temporary text element with current font settings
+                const tempText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                tempText.style.fontFamily = this.fontFamily;
+                tempText.style.fontWeight = this.fontWeight;
+                tempText.style.fontSize = '14px'; // Match task text size
+
+                // Use a representative sample of characters (100 chars of varied types)
+                const sampleText = 'The quick brown fox jumps over the lazy dog 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnop';
+                tempText.textContent = sampleText;
+                tempText.setAttribute('x', 0);
+                tempText.setAttribute('y', 0);
+
+                // Temporarily add to DOM to measure
+                svg.appendChild(tempText);
+                const bbox = tempText.getBBox();
+                const totalWidth = bbox.width;
+                svg.removeChild(tempText);
+
+                // Calculate average character width
+                const measuredCharWidth = totalWidth / sampleText.length;
+
+                // Update charWidth
+                const oldCharWidth = this.charWidth;
+                this.charWidth = Math.round(measuredCharWidth * 10) / 10; // Round to 1 decimal
+
+                // Update the input field in settings modal
+                const input = document.getElementById('setting-charWidth');
+                if (input) {
+                    input.value = this.charWidth;
+                }
+
+                // Save and re-render
+                this.saveToStorage();
+                this.render();
+
+                // Show feedback
+                this.showToast(
+                    `Character width calibrated: ${oldCharWidth}px → ${this.charWidth}px`,
+                    'success',
+                    3000
                 );
             },
 
@@ -2835,7 +2892,7 @@
                         min: 4,
                         max: 15,
                         step: 0.5,
-                        description: 'Pixels per character for node width calculation'
+                        description: 'Pixels per character for node width calculation. Use Calibrate button to auto-measure for current font.'
                     },
                     nodePadding: {
                         label: 'Node Padding (px)',
@@ -2848,7 +2905,7 @@
                     wheelZoomSpeed: {
                         label: 'Wheel/Trackpad Zoom Speed',
                         type: 'number',
-                        default: 0.12,
+                        default: 0.18,
                         min: 0.01,
                         max: 0.5,
                         step: 0.01,
@@ -2975,16 +3032,40 @@
                             </div>`;
 
                     if (def.type === 'number') {
-                        html += `
-                            <input
-                                type="number"
-                                id="setting-${key}"
-                                value="${currentValue}"
-                                min="${def.min || ''}"
-                                max="${def.max || ''}"
-                                step="${def.step || 1}"
-                                style="width: 100%; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"
-                            />`;
+                        // Special handling for charWidth: add calibration button
+                        if (key === 'charWidth') {
+                            html += `
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <input
+                                        type="number"
+                                        id="setting-${key}"
+                                        value="${currentValue}"
+                                        min="${def.min || ''}"
+                                        max="${def.max || ''}"
+                                        step="${def.step || 1}"
+                                        style="flex: 1; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"
+                                    />
+                                    <button
+                                        onclick="app.calibrateCharWidth()"
+                                        style="padding: 6px 12px; font-size: 12px; white-space: nowrap; background: #2196f3; color: white; border: 1px solid #1976d2; border-radius: 4px; cursor: pointer;"
+                                        onmouseover="this.style.background='#1976d2'"
+                                        onmouseout="this.style.background='#2196f3'"
+                                        title="Measure actual character width for current font">
+                                        📏 Calibrate
+                                    </button>
+                                </div>`;
+                        } else {
+                            html += `
+                                <input
+                                    type="number"
+                                    id="setting-${key}"
+                                    value="${currentValue}"
+                                    min="${def.min || ''}"
+                                    max="${def.max || ''}"
+                                    step="${def.step || 1}"
+                                    style="width: 100%; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"
+                                />`;
+                        }
                     } else if (def.type === 'text') {
                         html += `
                             <input
@@ -6152,7 +6233,7 @@
                     this.textLengthThreshold = parsed.textLengthThreshold ?? 80;
                     this.charWidth = parsed.charWidth ?? 8.5;
                     this.nodePadding = parsed.nodePadding ?? 15;
-                    this.wheelZoomSpeed = parsed.wheelZoomSpeed ?? 0.12;
+                    this.wheelZoomSpeed = parsed.wheelZoomSpeed ?? 0.18;
                     this.minNodeWidth = parsed.minNodeWidth ?? 100;
                     this.fontFamily = parsed.fontFamily ?? "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace";
                     this.fontWeight = parsed.fontWeight ?? 700;
