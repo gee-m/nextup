@@ -5853,3 +5853,228 @@ This update makes Jump to Working predictable and powerful:
 
 **Version**: 1.14.9 (Smart Jump with Dropdown)
 **Line Count**: ~7100 lines in task-tree.html (+100 lines for dropdown)
+
+---
+
+### Session 20 Continued (12th): Keyboard-First Jump Navigation
+
+**Date**: 2025-10-28
+**Focus**: Enhanced jump navigation with keyboard shortcuts, right alignment, and navigation philosophy
+
+#### Changes Made
+
+**1. Right-Aligned Jump Button**
+
+Moved jump buttons to the right side of status bar:
+
+**HTML** (Line 1289):
+```html
+<div style="display: flex; gap: 0; margin-left: auto;">
+    <button id="jump-to-working-btn" ...>🎯 Jump</button>
+    <button id="jump-dropdown-btn" ...>▲</button>
+</div>
+```
+- Added `margin-left: auto` to button container
+- Pushes buttons to right edge of status bar
+- Better visual hierarchy - actions on the right
+
+**2. J Key Opens Dropdown Menu (Not Direct Jump)**
+
+Changed keyboard behavior for smarter workflow:
+
+**Before**:
+- **J** → Jumps directly to first working task (unpredictable)
+
+**After** (Lines 1724-1737):
+```javascript
+// J = show working tasks menu
+if ((e.key === 'j' || e.key === 'J') && this.editingTaskId === null && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    const existingDropdown = document.getElementById('working-tasks-dropdown');
+    if (existingDropdown) {
+        // J pressed again while menu open → jump to default (last working task)
+        this.jumpToWorkingTask();
+        existingDropdown.remove();
+    } else {
+        // Open the dropdown menu
+        this.showWorkingTasksDropdown(null, true); // true = keyboard mode
+    }
+}
+```
+
+**Behavior**:
+- **First J**: Opens dropdown menu
+- **Second J**: Jumps to last selected/cycled working task (closes menu)
+- **ESC**: Closes menu without jumping
+
+**3. Number Keys (1-9) in Dropdown Menu**
+
+Added keyboard navigation with number badges:
+
+**Visual Updates** (Lines 6687-6738):
+```javascript
+// Add number badge to each menu item
+workingTasks.forEach((task, index) => {
+    const number = index + 1; // 1-based numbering
+
+    // Number badge with blue background
+    const badge = document.createElement('span');
+    badge.textContent = number;
+    // Badge styled with blue background, min-width for alignment
+
+    // Display: [1] 🔄 Task name (last)
+    item.appendChild(badge);
+    item.appendChild(text);
+});
+```
+
+**Keyboard Handler** (Lines 6741-6765):
+```javascript
+const keyboardHandler = (e) => {
+    // ESC to close
+    if (e.key === 'Escape') {
+        dropdown.remove();
+        // Clean up event listeners
+        return;
+    }
+
+    // Number keys 1-9 to jump to specific task
+    if (/^[1-9]$/.test(e.key)) {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+        if (index < workingTasks.length) {
+            this.jumpToWorkingTask(workingTasks[index].id);
+            dropdown.remove();
+        }
+        return;
+    }
+};
+```
+
+**4. Header with Keyboard Hints**
+
+Added instructional header to dropdown:
+
+**Header Structure** (Lines 6674-6701):
+```javascript
+// Split header into title and hint
+const header = document.createElement('div');
+// Display: flex, space-between
+
+const headerTitle = document.createElement('span');
+headerTitle.textContent = 'Working On:';
+
+const headerHint = document.createElement('span');
+headerHint.textContent = 'Press 1-9 or J';
+headerHint.style.fontSize = '11px';
+headerHint.style.color = '#999';
+
+header.appendChild(headerTitle);
+header.appendChild(headerHint);
+```
+
+**5. Navigation Philosophy in CLAUDE.md**
+
+Added comprehensive navigation design guidelines:
+
+**New Section** (Lines 463-551):
+- **Core Principles**: Keyboard-first, context-aware, layered patterns
+- **Layered Navigation Pattern**: `<Key>` → menu → `<Key>` again → default → `<Number>` → specific
+- **Implementation Checklist**: For adding new navigation features
+- **Examples**: Jump to working, home navigation
+- **Anti-Patterns**: What to avoid
+- **Future Ideas**: Jump to parent, dependency, blocking tasks, recent edits
+
+**Key Guidelines**:
+- Single memorable keys (J, P, H, etc.)
+- Track last interactions for smart defaults
+- Number badges (1-9) for keyboard selection
+- Progressive disclosure (skip menu if single option)
+- Always show keyboard hints
+- Toast notifications confirm actions
+
+#### Complete Keyboard Flow
+
+**Scenario: Jump to Working Task**
+
+**Single Working Task**:
+1. Press **J**
+2. Menu opens, shows task with badge **[1]**
+3. Press **J** again → Jumps to that task
+4. Alternative: Press **1** → Same result
+
+**Multiple Working Tasks**:
+1. Press **J**
+2. Menu opens, shows tasks with badges **[1]** **[2]** **[3]**
+3. Last selected task highlighted with blue background + "(last)" label
+4. Options:
+   - Press **J** → Jumps to last selected (default)
+   - Press **1** → Jumps to first task
+   - Press **2** → Jumps to second task
+   - Press **3** → Jumps to third task
+   - Press **ESC** → Closes menu without jumping
+
+**After Cycling Task to Working**:
+1. Middle-click Task A → Marks as working
+2. `lastWorkingTaskId` = Task A
+3. Press **J** → Menu opens, Task A highlighted as "(last)"
+4. Press **J** again → Jumps to Task A
+
+**After Selecting Working Task**:
+1. Click on Task B (which is working)
+2. `lastWorkingTaskId` = Task B
+3. Press **J** → Menu opens, Task B highlighted as "(last)"
+4. Press **J** again → Jumps to Task B
+
+#### Visual Design
+
+**Menu Appearance**:
+```
+┌─────────────────────────────────┐
+│ Working On:      Press 1-9 or J │ ← Header with hint
+├─────────────────────────────────┤
+│ [1]  🔄 First task name          │
+│ [2]  🔄 Second task (last)       │ ← Blue highlight + "(last)"
+│ [3]  🔄 Third task               │
+└─────────────────────────────────┘
+```
+
+**Number Badges**:
+- Blue background: `rgba(33, 150, 243, 0.2)`
+- Blue text: `#1565c0`
+- Min-width for alignment
+- Bold font weight
+
+**Last Indicator**:
+- Blue background: `rgba(33, 150, 243, 0.1)`
+- Blue left border (3px): `#2196f3`
+- "(last)" suffix on text
+
+#### Summary
+
+This update transforms jump navigation into a keyboard-first, context-aware system:
+1. ✅ Jump buttons aligned to right of status bar
+2. ✅ **J** key opens dropdown menu (not direct jump)
+3. ✅ **J+J** (pressing J twice) jumps to last selected task
+4. ✅ **1-9** keys jump to numbered tasks in menu
+5. ✅ **ESC** closes menu
+6. ✅ Number badges on all menu items
+7. ✅ Keyboard hints in header ("Press 1-9 or J")
+8. ✅ Blue highlight shows last selected task
+9. ✅ Navigation philosophy documented in CLAUDE.md
+
+**Philosophy**: Fast navigation is not a luxury - it's essential for productivity. Every action should have a keyboard shortcut. Track user intent. Show visual feedback. Make it fast.
+
+**Testing**:
+- Press J → Menu opens with numbers ✓
+- Press J again → Jumps to last selected ✓
+- Press 1-9 → Jumps to numbered task ✓
+- Press ESC → Closes menu ✓
+- Cycle task to working → J → Highlights that task ✓
+- Select working task → J → Highlights that task ✓
+- Number badges visible on all items ✓
+- Header shows keyboard hint ✓
+- Buttons aligned to right ✓
+
+**Version**: 1.15.0 (Keyboard-First Navigation)
+**Line Count**: ~7200 lines in task-tree.html (+100 lines for enhanced dropdown)

@@ -1286,11 +1286,11 @@
         <span class="status-label">Working on:</span>
         <span id="status-path"></span>
         <span class="status-detail" id="status-children"></span>
-        <div style="display: flex; gap: 0;">
-            <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()" style="border-radius: 4px 0 0 4px; padding-right: 8px;">
+        <div style="display: flex; gap: 0; margin-left: auto;">
+            <button id="jump-to-working-btn" class="status-btn" onclick="app.jumpToWorkingTask()" style="border-radius: 4px 0 0 4px; padding-right: 8px; margin-left: 0;">
                 🎯 Jump
             </button>
-            <button id="jump-dropdown-btn" class="status-btn" onclick="app.showWorkingTasksDropdown(event)" style="border-radius: 0 4px 4px 0; padding: 4px 6px; border-left: 1px solid rgba(255,255,255,0.2); min-width: auto;" title="Choose working task">
+            <button id="jump-dropdown-btn" class="status-btn" onclick="app.showWorkingTasksDropdown(event)" style="border-radius: 0 4px 4px 0; padding: 4px 6px; border-left: 1px solid rgba(255,255,255,0.2); min-width: auto; margin-left: 0;" title="Choose working task">
                 ▲
             </button>
         </div>
@@ -1721,10 +1721,19 @@
                         }
                     }
 
-                    // J = jump to working task (only when not editing and not modifying with Ctrl/Cmd/Alt)
+                    // J = show working tasks menu (only when not editing and not modifying with Ctrl/Cmd/Alt)
                     if ((e.key === 'j' || e.key === 'J') && this.editingTaskId === null && !e.ctrlKey && !e.metaKey && !e.altKey) {
                         e.preventDefault();
-                        this.jumpToWorkingTask();
+                        // Check if dropdown is already open
+                        const existingDropdown = document.getElementById('working-tasks-dropdown');
+                        if (existingDropdown) {
+                            // J pressed again while menu open → jump to default (last working task)
+                            this.jumpToWorkingTask();
+                            existingDropdown.remove();
+                        } else {
+                            // Open the dropdown menu
+                            this.showWorkingTasksDropdown(null, true); // true = keyboard mode
+                        }
                     }
 
                     // Number keys (0-9) = jump to home with that keybind (only when not modifying with Ctrl/Cmd/Alt)
@@ -6625,9 +6634,11 @@
                 }
             },
 
-            showWorkingTasksDropdown(event) {
+            showWorkingTasksDropdown(event, keyboardMode = false) {
                 // Show dropdown menu to choose which working task to jump to
-                event.stopPropagation();
+                if (event) {
+                    event.stopPropagation();
+                }
 
                 // Get all currently working tasks
                 const workingTasks = this.tasks.filter(t => t.currentlyWorking);
@@ -6637,8 +6648,8 @@
                     return;
                 }
 
-                if (workingTasks.length === 1) {
-                    // Only one working task, just jump to it
+                if (workingTasks.length === 1 && !keyboardMode) {
+                    // Only one working task and not keyboard mode, just jump to it
                     this.jumpToWorkingTask();
                     return;
                 }
@@ -6665,18 +6676,36 @@
                 header.style.cssText = `
                     padding: 10px 12px;
                     border-bottom: 1px solid ${this.darkMode ? '#475569' : '#ddd'};
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                `;
+                const headerTitle = document.createElement('span');
+                headerTitle.style.cssText = `
                     font-weight: 600;
                     font-size: 13px;
                     color: ${this.darkMode ? '#f1f5f9' : '#333'};
                 `;
-                header.textContent = 'Working On:';
+                headerTitle.textContent = 'Working On:';
+
+                const headerHint = document.createElement('span');
+                headerHint.style.cssText = `
+                    font-size: 11px;
+                    color: ${this.darkMode ? '#94a3b8' : '#999'};
+                    font-weight: 400;
+                `;
+                headerHint.textContent = 'Press 1-9 or J';
+
+                header.appendChild(headerTitle);
+                header.appendChild(headerHint);
                 dropdown.appendChild(header);
 
                 // Add menu items for each working task
-                workingTasks.forEach(task => {
+                workingTasks.forEach((task, index) => {
                     const item = document.createElement('div');
-                    const truncatedTitle = task.title.length > 40 ? task.title.substring(0, 37) + '...' : task.title;
+                    const truncatedTitle = task.title.length > 35 ? task.title.substring(0, 32) + '...' : task.title;
                     const isLast = task.id === this.lastWorkingTaskId;
+                    const number = index + 1; // 1-based numbering
 
                     item.style.cssText = `
                         padding: 10px 12px;
@@ -6685,8 +6714,31 @@
                         color: ${this.darkMode ? '#e2e8f0' : '#333'};
                         background: ${isLast ? (this.darkMode ? 'rgba(59, 130, 246, 0.2)' : 'rgba(33, 150, 243, 0.1)') : 'transparent'};
                         border-left: 3px solid ${isLast ? '#2196f3' : 'transparent'};
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
                     `;
-                    item.textContent = `🔄 ${truncatedTitle}${isLast ? ' (last)' : ''}`;
+
+                    // Number badge
+                    const badge = document.createElement('span');
+                    badge.style.cssText = `
+                        background: ${this.darkMode ? 'rgba(59, 130, 246, 0.4)' : 'rgba(33, 150, 243, 0.2)'};
+                        color: ${this.darkMode ? '#93c5fd' : '#1565c0'};
+                        padding: 2px 7px;
+                        border-radius: 3px;
+                        font-size: 11px;
+                        font-weight: 600;
+                        min-width: 18px;
+                        text-align: center;
+                    `;
+                    badge.textContent = number;
+
+                    // Text content
+                    const text = document.createElement('span');
+                    text.textContent = `🔄 ${truncatedTitle}${isLast ? ' (last)' : ''}`;
+
+                    item.appendChild(badge);
+                    item.appendChild(text);
 
                     item.onmouseover = () => {
                         item.style.background = this.darkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(33, 150, 243, 0.2)';
@@ -6702,11 +6754,39 @@
                     dropdown.appendChild(item);
                 });
 
+                // Keyboard navigation
+                const keyboardHandler = (e) => {
+                    // ESC to close
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        dropdown.remove();
+                        document.removeEventListener('keydown', keyboardHandler);
+                        document.removeEventListener('click', closeDropdown);
+                        return;
+                    }
+
+                    // Number keys 1-9 to jump to specific task
+                    if (/^[1-9]$/.test(e.key)) {
+                        e.preventDefault();
+                        const index = parseInt(e.key) - 1;
+                        if (index < workingTasks.length) {
+                            this.jumpToWorkingTask(workingTasks[index].id);
+                            dropdown.remove();
+                            document.removeEventListener('keydown', keyboardHandler);
+                            document.removeEventListener('click', closeDropdown);
+                        }
+                        return;
+                    }
+
+                    // J to jump to default (last working task) - handled in main keydown listener
+                };
+
                 // Close on click outside
                 const closeDropdown = (e) => {
                     if (!dropdown.contains(e.target) && e.target.id !== 'jump-dropdown-btn') {
                         dropdown.remove();
                         document.removeEventListener('click', closeDropdown);
+                        document.removeEventListener('keydown', keyboardHandler);
                     }
                 };
 
@@ -6714,6 +6794,7 @@
                 document.body.appendChild(dropdown);
                 setTimeout(() => {
                     document.addEventListener('click', closeDropdown);
+                    document.addEventListener('keydown', keyboardHandler);
                 }, 10);
             },
 

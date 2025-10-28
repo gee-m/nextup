@@ -460,6 +460,96 @@ Use the built-in test checklist system:
 3. Mark test tasks as done after verifying functionality
 4. Export/import JSON to save/restore known-good states during testing
 
+## 🚀 Navigation Philosophy: Always Propose Clever Ways to Jump Around Fast
+
+**IMPORTANT**: When implementing ANY navigation feature or shortcut, always think about speed and efficiency.
+
+### Core Principles
+
+**1. Keyboard-First Design**
+- Every navigation action should have a keyboard shortcut
+- Keyboard shortcuts should be memorable and logical
+- Multi-step shortcuts should be composable (e.g., J to open menu, then 1-9 to select)
+
+**2. Smart Context Awareness**
+- Track user intent and last interactions (e.g., `lastWorkingTaskId` for jump target)
+- Default to the most likely destination based on recent behavior
+- Provide explicit control via dropdowns/menus when multiple options exist
+
+**3. Layered Navigation Patterns**
+
+**Pattern**: `<Key>` opens menu → `<Key>` again executes default → `<Number>` selects specific
+- Example: Press **J** → Opens working tasks menu → Press **J** again → Jumps to last selected → Press **1-9** → Jumps to specific numbered task
+- Example: Press **number key** → Jumps to home with that keybind
+
+**4. Visual Feedback is Essential**
+- Number badges on menu items (1, 2, 3...)
+- Keyboard hints in headers ("Press 1-9 or J")
+- Highlight default/last-used option with visual indicator
+- Toast notifications confirm actions ("🎯 Jumped to Task Name")
+
+**5. Progressive Disclosure**
+- Single option? Skip menu, execute directly
+- Multiple options? Show menu with keyboard navigation
+- Smart behavior adapts to context
+
+### Implementation Checklist for New Navigation Features
+
+When adding a new way to navigate (e.g., "Jump to parent", "Jump to dependency", etc.):
+
+- [ ] Add keyboard shortcut (single key preferred)
+- [ ] Track "last selected" for smart defaults
+- [ ] If multiple destinations possible, create dropdown menu with:
+  - [ ] Number badges (1-9) for keyboard selection
+  - [ ] Keyboard hint in header
+  - [ ] Highlight last/default option
+  - [ ] ESC to close
+- [ ] Pressing shortcut key twice jumps to default
+- [ ] Toast notification on successful navigation
+- [ ] Test with single destination (should skip menu)
+- [ ] Test with multiple destinations (should show menu)
+- [ ] Update shortcuts modal with new keybind
+- [ ] Document in README
+
+### Examples of Good Navigation Design
+
+**Jump to Working Task** (Current Implementation):
+- **J** → Opens dropdown of all working tasks
+- **J** again → Jumps to last selected/cycled working task
+- **1-9** → Jumps to specific numbered task
+- **ESC** → Closes menu
+- Tracks `lastWorkingTaskId` for smart defaults
+- Visual: Number badges, "(last)" indicator, keyboard hint
+
+**Home Navigation** (Current Implementation):
+- **0-9** → Jumps directly to home with that keybind
+- Single key press, instant navigation
+- No menu needed (keybinds are unambiguous)
+
+### Anti-Patterns to Avoid
+
+❌ **Don't**: Require multiple key presses for common actions (e.g., Ctrl+Shift+Alt+J)
+✅ **Do**: Use single memorable keys (J, P, H, etc.)
+
+❌ **Don't**: Always show menu even for single option
+✅ **Do**: Smart behavior - skip menu if only one destination
+
+❌ **Don't**: Use generic `.find()` that always picks first item
+✅ **Do**: Track user intent and last interactions
+
+❌ **Don't**: Hide keyboard shortcuts from users
+✅ **Do**: Show keyboard hints, number badges, shortcuts modal
+
+### Future Navigation Ideas to Consider
+
+- **Jump to parent**: P key → If multiple parents (via other-parents), show menu
+- **Jump to dependency**: D key → Show all dependencies in numbered menu
+- **Jump to blocking tasks**: B key → Show incomplete children/dependencies
+- **Jump to recently edited**: R key → Show recent edit history
+- **Jump to search results**: / key → Quick search, number selection
+
+**Remember**: Fast navigation is not a luxury - it's essential for productivity. Always ask: "How can I make this navigation action faster with fewer keystrokes?"
+
 ## Technical Details
 
 ### SVG Rendering
