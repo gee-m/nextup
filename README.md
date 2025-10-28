@@ -5624,19 +5624,19 @@ description: 'Pixels per character for node width calculation. Auto-calibrates w
 statusEmoji.style.opacity = '0.9';
 
 // After:
-statusEmoji.style.opacity = '0.5'; // More transparent to be subtle
+statusEmoji.style.opacity = '0.63'; // More transparent to be subtle
 ```
 
 **Visual Impact**:
-- 🔄 (Working) emoji: Now 50% transparent instead of 90% opaque
-- ✅ (Done) emoji: Now 50% transparent instead of 90% opaque
+- 🔄 (Working) emoji: Now 63% transparent instead of 90% opaque
+- ✅ (Done) emoji: Now 63% transparent instead of 90% opaque
 - More subtle visual indicator
 - Less visually intrusive while still visible
 - Maintains functionality without dominating the visual hierarchy
 
 **Rationale**:
 - Original 0.9 opacity made emojis too prominent
-- 0.5 opacity provides better visual balance
+- 0.63 opacity provides better visual balance (adjusted from initial 0.5)
 - Emojis serve as subtle status indicators, not primary content
 - Allows focus to remain on task text
 
