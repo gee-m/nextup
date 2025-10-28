@@ -5066,6 +5066,219 @@ After:
 
 ---
 
-**Last Updated**: 2025-10-28 (Session 20 Continued (6th): Improve Node Padding & Status Emoji Positioning)
+**Last Updated**: 2025-10-28 (Session 20 Continued (7th): Settings & UX Polish)
 **Current Line Count**: ~6900 lines in task-tree.html
-**Version**: 1.14.4 (Visual Polish)
+**Version**: 1.14.5 (Settings & UX Polish)
+
+---
+
+### Session 20 Continued (7th): Settings & UX Polish
+
+**Date**: 2025-10-28
+**Focus**: Added zoom speed configuration, fixed padding issues, optimized settings modal layout
+
+#### Changes Made
+
+**1. Wheel Zoom Speed Configuration**
+
+Added user-configurable zoom speed for wheel/trackpad input:
+
+**App State** (Line 1302):
+```javascript
+wheelZoomSpeed: 0.12,  // Wheel/trackpad zoom speed (configurable)
+```
+
+**Wheel Handler** (Line 1641):
+```javascript
+const zoomChange = (delta / 100) * this.wheelZoomSpeed;  // Was hardcoded 0.12
+```
+
+**Settings Definition** (Lines 2846-2854):
+```javascript
+wheelZoomSpeed: {
+    label: 'Wheel/Trackpad Zoom Speed',
+    type: 'number',
+    default: 0.12,
+    min: 0.01,
+    max: 0.5,
+    step: 0.01,
+    description: 'Adjust mouse wheel / trackpad zoom speed (higher = faster)'
+}
+```
+
+**Persistence**:
+- Added to `saveToStorage()` (lines 6049, 6084)
+- Added to `loadFromStorage()` (line 6145)
+- Added to `exportSettings()` (line 3145)
+
+**Benefits**:
+- Users can adjust zoom sensitivity to their preference
+- Fixes issues with trackpads being too fast/slow
+- Default 0.12 maintains current behavior
+- Range 0.01-0.5 provides wide customization
+
+**2. Zoom Level Persistence**
+
+Zoom level already being saved/restored:
+- Saved in `saveToStorage()` at lines 6031, 6067
+- Loaded in `loadFromStorage()` at line 6107
+- No changes needed - feature already working!
+
+**3. Fixed Right Padding Issue**
+
+**Problem**: Text wrapping didn't account for node padding, causing text to extend too far right and not respect right padding.
+
+**Root Cause**:
+- `wrapText()` was called with full `maxNodeWidth` (e.g., 600px)
+- After wrapping, width calculated as: `line.length * charWidth + padding * 2`
+- Result: Text wrapped to full width, then padding added on top
+- Right padding appeared insufficient or missing
+
+**Solution**: Subtract padding before wrapping text
+
+**getTaskDimensions()** (Lines 2496-2498):
+```javascript
+// Before:
+const lines = this.wrapText(text, this.maxNodeWidth, charWidth, this.wordWrap);
+
+// After:
+const availableWidth = this.maxNodeWidth - padding * 2;
+const lines = this.wrapText(text, availableWidth, charWidth, this.wordWrap);
+```
+
+**Applied in 3 locations**:
+1. `getTaskDimensions()` - Lines 2496-2498
+2. `render()` - Lines 5201-5203
+3. `calculateTaskDimensions()` - Lines 5591-5593
+
+**Result**:
+- Text now wraps within available space after padding
+- Right padding properly respected
+- Node padding setting now affects both left AND right sides equally
+
+**4. Settings Modal Scroll Reset**
+
+Added automatic scroll reset when hiding settings modal:
+
+**hideSettingsModal()** (Lines 3064-3068):
+```javascript
+// Reset scroll position for next time modal is opened
+const modalContent = modal.querySelector('.modal-content');
+if (modalContent) {
+    modalContent.scrollTop = 0;
+}
+```
+
+**Behavior**:
+- When user clicks Apply or Cancel, modal closes
+- Scroll position resets to top
+- Next time modal opens, user starts at top (not scrolled down)
+- Improves UX - user always sees settings from beginning
+
+**5. Optimized Settings Modal Layout**
+
+Made settings modal more compact to fit on single screen without scrolling:
+
+**Modal Container** (Line 1200):
+```javascript
+// Before: max-height: 80vh; padding: 24px
+// After: max-height: 85vh; padding: 16px
+style="max-width: 600px; max-height: 85vh; overflow-y: auto; padding: 16px;"
+```
+
+**Modal Header** (Lines 1201-1202):
+```javascript
+// Before: margin-bottom: 20px on description
+<h2 style="margin-bottom: 8px;">⚙️ Settings</h2>  // Was margin implied
+<p style="font-size: 12px; margin-bottom: 12px;">  // Was 13px, 20px margin
+```
+
+**Form Fields** (Lines 2963-2974):
+```javascript
+// Before: gap: 20px
+let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';  // Was 20px
+
+// Label:
+// Before: margin-bottom: 5px
+<label style="font-size: 13px; margin-bottom: 3px;">  // Added font-size, reduced margin
+
+// Description:
+// Before: font-size: 12px; margin-bottom: 8px
+<div style="font-size: 11px; margin-bottom: 5px;">  // Reduced both
+```
+
+**Input Fields** (Lines 2985, 2993, 2996):
+```javascript
+// Before: padding: 8px; font-size: 14px
+// After: padding: 6px; font-size: 13px
+style="padding: 6px; font-size: 13px;"
+```
+
+**History Section** (Lines 1206-1207):
+```javascript
+// Before: margin-top: 30px; padding-top: 20px; margin-bottom: 15px; font-size: 16px
+// After: margin-top: 20px; padding-top: 12px; margin-bottom: 10px; font-size: 15px
+<div style="margin-top: 20px; padding-top: 12px;">
+<h3 style="margin-bottom: 10px; font-size: 15px;">
+```
+
+**History Stats** (Lines 1208-1212):
+```javascript
+// Before: padding: 12px; margin-bottom: 15px; font-size: 13px
+// After: padding: 10px; margin-bottom: 10px; font-size: 12px
+<div style="padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px;">
+    <ul style="font-size: 11px;">  // Added explicit font-size
+```
+
+**Clear History Button** (Lines 1218-1220):
+```javascript
+// Before: padding: 10px 16px; font-size: 14px
+// After: padding: 8px 12px; font-size: 13px
+style="padding: 8px 12px; font-size: 13px;"
+```
+
+**Button Container** (Lines 626-631):
+```javascript
+// Before: gap: 12px
+.modal-buttons {
+    gap: 8px;           // Reduced from 12px
+    margin-top: 16px;   // Added explicit margin
+}
+```
+
+**Space Savings**:
+- Modal padding: -8px top/bottom = -16px total height
+- Max height: +5vh = more screen space
+- Form field gaps: -8px × ~15 fields = -120px
+- Label margins: -2px × 15 = -30px
+- Description margins: -3px × 15 = -45px
+- Input padding: -4px × 15 = -60px (visual)
+- History section: -10px top, -5px in various places = -30px
+- Button gaps: -4px × 3 = -12px
+- **Total saved**: ~250px+ of vertical space
+
+**Result**:
+- Most settings now fit on screen without scrolling on typical displays
+- More compact, professional appearance
+- Faster to scan and modify settings
+- Maintains readability with 11-13px fonts
+
+#### Summary
+
+This session focused on polish and user experience improvements:
+1. ✅ Made zoom speed configurable (addresses trackpad issues)
+2. ✅ Confirmed zoom level persistence working
+3. ✅ Fixed right padding calculation bug
+4. ✅ Added settings modal scroll reset
+5. ✅ Optimized settings layout for single-screen display
+
+**Testing**:
+- Zoom speed setting appears in Settings modal
+- Adjusting zoom speed changes wheel/trackpad behavior
+- Zoom level persists across page refreshes
+- Text wrapping respects padding on both sides equally
+- Settings modal scrolls to top when reopened
+- Settings modal more compact, fits more on screen
+
+**Version**: 1.14.5 (Settings & UX Polish)
+**Line Count**: ~6900 lines in task-tree.html
