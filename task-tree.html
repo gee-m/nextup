@@ -5651,17 +5651,24 @@
                         g.appendChild(badgeGroup);
                     }
 
-                    // Add click handler on node to expand text (if long and truncated)
-                    if (isLongText && !shouldExpand) {
-                        g.style.cursor = 'pointer';
-                        g.addEventListener('click', (e) => {
-                            // Only expand if not clicking on other interactive elements
-                            if (e.target.closest('.lock-button') || e.target.closest('.hidden-indicator')) {
-                                return;
-                            }
+                    // Add general click handler on node for selection
+                    g.style.cursor = 'pointer';
+                    g.addEventListener('click', (e) => {
+                        // Don't handle clicks on interactive elements
+                        if (e.target.closest('.lock-button') ||
+                            e.target.closest('.hidden-indicator') ||
+                            e.target.closest('.link-badge')) {
+                            return;
+                        }
+
+                        // Select the node (this updates lastWorkingTaskId if task is working)
+                        this.selectNode(task.id);
+
+                        // Also expand text if truncated
+                        if (isLongText && !shouldExpand) {
                             this.expandText(task.id);
-                        });
-                    }
+                        }
+                    });
 
                     // Track hover for priority changes with P key
                     g.addEventListener('mouseenter', () => {
@@ -6540,15 +6547,16 @@
                 // To center the working task in the viewport, we need to position the viewBox
                 // so that the task is at the center of the visible area (in SVG coordinate space)
                 // The center of the viewBox is at: (viewBox.x + viewBox.width/2, viewBox.y + viewBox.height/2)
-                // We want this center to be at the working task's position
+                // We want: viewBox.x + viewBox.width/2 = workingTask.x
+                // Therefore: viewBox.x = workingTask.x - viewBox.width/2
 
-                // Calculate current center position in SVG coordinates
-                const currentCenterX = this.viewBox.x + this.viewBox.width / 2;
-                const currentCenterY = this.viewBox.y + this.viewBox.height / 2;
+                // Calculate target viewBox position to center on working task
+                const targetViewBoxX = workingTask.x - this.viewBox.width / 2;
+                const targetViewBoxY = workingTask.y - this.viewBox.height / 2;
 
-                // Calculate how much to shift to center on working task
-                const dx = currentCenterX - workingTask.x;
-                const dy = currentCenterY - workingTask.y;
+                // Calculate how much to shift the viewBox
+                const dx = targetViewBoxX - this.viewBox.x;
+                const dy = targetViewBoxY - this.viewBox.y;
 
                 const targetZoom = 1.2; // Focused view
 
@@ -6585,19 +6593,9 @@
                             // Phase 2: Pan while zoomed out (300-800ms)
                             if (!panTriggered) {
                                 panTriggered = true;
-                                // Update data model and trigger CSS transition for nodes
-                                this.tasks.forEach(task => {
-                                    task.x += dx;
-                                    task.y += dy;
-                                });
-
-                                // Update node transforms to trigger smooth CSS animation
-                                this.tasks.forEach(task => {
-                                    const node = document.querySelector(`.task-node[data-id="${task.id}"]`);
-                                    if (node) {
-                                        node.setAttribute('transform', `translate(${task.x}, ${task.y})`);
-                                    }
-                                });
+                                // Move the viewBox to center on working task (don't move tasks!)
+                                this.viewBox.x += dx;
+                                this.viewBox.y += dy;
                             }
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
@@ -6628,15 +6626,14 @@
                     };
 
                     requestAnimationFrame(animatePhases);
-                    // Don't re-render during animation - nodes animate via CSS transforms
-                    // They'll be re-rendered perfectly after animation completes
+                    // Don't re-render during animation - viewBox moves, tasks stay in place
+                    // Full render happens after animation completes
 
                 } else {
                     // Instant jump (no animation)
-                    this.tasks.forEach(task => {
-                        task.x += dx;
-                        task.y += dy;
-                    });
+                    // Move the viewBox to center on working task (don't move tasks!)
+                    this.viewBox.x += dx;
+                    this.viewBox.y += dy;
 
                     this.zoomLevel = targetZoom;
                     this.updateZoomDisplay();
