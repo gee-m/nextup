@@ -4660,8 +4660,169 @@ User closes modal → hideShortcutsModal()
 
 **Line Count**: ~6830 lines in task-tree.html (+40 lines)
 
+### Session 20 Continued (4th): Fix Ctrl+K Link Attachment (2025-10-28)
+
+**Version**: 1.14.2 (Critical Bug Fix)
+
+**Changes**:
+1. Implemented missing `showPrompt()` function for user input
+2. Added prompt modal HTML with input field
+3. Added dark mode styling for prompt input
+4. Added feedback message when Ctrl+K pressed with no task selected
+
+**Problem**: Pressing Ctrl+K to attach a link caused a JavaScript error: "this.showPrompt is not a function". The function was being called but never implemented, making link attachment via keyboard shortcut completely broken.
+
+**Root Cause**: The `attachLink()` function (line 4482) called `this.showPrompt()`, but this function didn't exist. The app runs in a sandboxed iframe that blocks native `prompt()`, `confirm()`, and `alert()` functions, so custom modals are required. While `showConfirm()` and `showAlert()` were implemented, `showPrompt()` was missing.
+
+**Solution**: Implement a custom prompt modal following the same pattern as the existing confirm and alert modals.
+
+**Implementation**:
+
+**1. Prompt Modal HTML** (Lines 1181-1191):
+```html
+<div id="prompt-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="prompt-title"></h2>
+        <p id="prompt-message"></p>
+        <input type="text" id="prompt-input" placeholder=""
+               style="width: 100%; padding: 8px; margin: 10px 0;
+                      font-size: 14px; border: 1px solid #ccc;
+                      border-radius: 4px;">
+        <div class="modal-buttons">
+            <button id="prompt-ok">OK</button>
+            <button class="secondary" id="prompt-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+```
+- Follows same structure as confirm and alert modals
+- Full-width text input with inline styling
+- OK and Cancel buttons for user choice
+
+**2. showPrompt() Function** (Lines 2740-2782):
+```javascript
+showPrompt(title, message, defaultValue, onConfirm) {
+    document.getElementById('prompt-title').textContent = title;
+    document.getElementById('prompt-message').textContent = message;
+    const input = document.getElementById('prompt-input');
+    input.value = defaultValue || '';
+
+    const modal = document.getElementById('prompt-modal');
+    modal.classList.add('show');
+
+    // Focus input after modal shows
+    setTimeout(() => input.focus(), 100);
+
+    // Clone buttons to remove old event listeners
+    const okBtn = document.getElementById('prompt-ok');
+    const cancelBtn = document.getElementById('prompt-cancel');
+    const newOkBtn = okBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    okBtn.replaceWith(newOkBtn);
+    cancelBtn.replaceWith(newCancelBtn);
+
+    newOkBtn.onclick = () => {
+        const value = input.value;
+        this.hidePrompt();
+        if (onConfirm) onConfirm(value);
+    };
+
+    newCancelBtn.onclick = () => {
+        this.hidePrompt();
+    };
+
+    // Enter key submits, Escape cancels
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const value = input.value;
+            this.hidePrompt();
+            if (onConfirm) onConfirm(value);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            this.hidePrompt();
+        }
+    };
+}
+```
+- Parameters: title, message, defaultValue, onConfirm callback
+- Auto-focuses input field for immediate typing
+- Clones buttons to remove stale event listeners (same pattern as other modals)
+- Enter key submits, Escape cancels
+- Calls onConfirm callback with input value
+
+**3. hidePrompt() Function** (Lines 2784-2787):
+```javascript
+hidePrompt() {
+    const modal = document.getElementById('prompt-modal');
+    modal.classList.remove('show');
+}
+```
+- Simple modal hide function
+
+**4. Dark Mode Styling** (Lines 907-911):
+```css
+body.dark-mode #prompt-input {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+```
+- Matches dark mode styling of import-textarea
+- Dark background with light text
+- Subtle border color
+
+**5. No Selection Feedback** (Lines 1665-1667):
+```javascript
+// In Ctrl+K handler
+else {
+    this.showToast('⚠️ Select a task first to attach a link', 'warning');
+}
+```
+- Previously: preventDefault() with no feedback
+- Now: Clear warning toast message
+
+**Keyboard Shortcuts in Prompt Modal**:
+- **Enter** → Submits input and calls onConfirm callback
+- **Escape** → Cancels and closes modal without calling callback
+- Both keys prevent default browser behavior
+
+**How to Use Ctrl+K**:
+1. Click a task to select it (turns blue)
+2. Press Ctrl+K (or Cmd+K on Mac)
+3. Prompt modal appears: "Enter URL:"
+4. Type or paste URL
+5. Press Enter or click OK
+6. Link is validated and attached to task
+
+**Error Handling**:
+- No task selected → Shows warning toast
+- Multiple tasks selected → Shows warning toast (line 1664)
+- Invalid URL → Shows error toast (line 4488 in attachLink)
+- Duplicate URL → Shows warning toast (line 4500)
+
+**Benefits**:
+- ✅ **Ctrl+K works** - No more JavaScript errors
+- ✅ **Keyboard-friendly** - Enter to submit, Escape to cancel
+- ✅ **Auto-focus** - Can start typing immediately
+- ✅ **Dark mode support** - Input field styled correctly
+- ✅ **Consistent pattern** - Matches other modal implementations
+- ✅ **Better feedback** - Warning when no task selected
+
+**Testing**:
+- ✓ Ctrl+K with no selection → shows warning
+- ✓ Ctrl+K with one task → prompt opens
+- ✓ Input auto-focuses → can type immediately
+- ✓ Enter key → submits and attaches link
+- ✓ Escape key → cancels without attaching
+- ✓ Dark mode → input styled correctly
+- ✓ Invalid URL → error toast
+- ✓ Valid URL → link attached with success toast
+
+**Line Count**: ~6890 lines in task-tree.html (+60 lines)
+
 ---
 
-**Last Updated**: 2025-10-28 (Session 20 Continued (3rd): Shortcuts Modal UX Improvements)
-**Current Line Count**: ~6830 lines in task-tree.html
-**Version**: 1.14.1 (UX Polish)
+**Last Updated**: 2025-10-28 (Session 20 Continued (4th): Fix Ctrl+K Link Attachment)
+**Current Line Count**: ~6890 lines in task-tree.html
+**Version**: 1.14.2 (Critical Bug Fix)

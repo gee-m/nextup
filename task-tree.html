@@ -904,6 +904,12 @@
             border-color: #475569;
         }
 
+        body.dark-mode #prompt-input {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-color: #475569;
+        }
+
         body.dark-mode .node-menu {
             background: #1e293b;
             border: 1px solid #475569;
@@ -1174,6 +1180,18 @@
             <p id="alert-message"></p>
             <div class="modal-buttons">
                 <button id="alert-ok">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="prompt-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="prompt-title"></h2>
+            <p id="prompt-message"></p>
+            <input type="text" id="prompt-input" placeholder="" style="width: 100%; padding: 8px; margin: 10px 0; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;">
+            <div class="modal-buttons">
+                <button id="prompt-ok">OK</button>
+                <button class="secondary" id="prompt-cancel">Cancel</button>
             </div>
         </div>
     </div>
@@ -2722,6 +2740,55 @@
 
             hideAlert() {
                 const modal = document.getElementById('alert-modal');
+                modal.classList.remove('show');
+            },
+
+            showPrompt(title, message, defaultValue, onConfirm) {
+                document.getElementById('prompt-title').textContent = title;
+                document.getElementById('prompt-message').textContent = message;
+                const input = document.getElementById('prompt-input');
+                input.value = defaultValue || '';
+
+                const modal = document.getElementById('prompt-modal');
+                modal.classList.add('show');
+
+                // Focus input after modal shows
+                setTimeout(() => input.focus(), 100);
+
+                // Clone buttons to remove old event listeners
+                const okBtn = document.getElementById('prompt-ok');
+                const cancelBtn = document.getElementById('prompt-cancel');
+                const newOkBtn = okBtn.cloneNode(true);
+                const newCancelBtn = cancelBtn.cloneNode(true);
+                okBtn.replaceWith(newOkBtn);
+                cancelBtn.replaceWith(newCancelBtn);
+
+                newOkBtn.onclick = () => {
+                    const value = input.value;
+                    this.hidePrompt();
+                    if (onConfirm) onConfirm(value);
+                };
+
+                newCancelBtn.onclick = () => {
+                    this.hidePrompt();
+                };
+
+                // Enter key submits
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const value = input.value;
+                        this.hidePrompt();
+                        if (onConfirm) onConfirm(value);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        this.hidePrompt();
+                    }
+                };
+            },
+
+            hidePrompt() {
+                const modal = document.getElementById('prompt-modal');
                 modal.classList.remove('show');
             },
 
