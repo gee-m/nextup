@@ -1529,6 +1529,10 @@
 
                 // Backspace to delete selected node(s) or line
                 document.addEventListener('keydown', (e) => {
+                    // Don't trigger shortcuts when modal is open (let modal handle keys)
+                    const anyModalOpen = document.querySelector('.modal.show');
+                    if (anyModalOpen) return;
+
                     if (e.key === 'Backspace' && this.editingTaskId === null) {
                         if (this.selectedTaskIds.size > 0) {
                             e.preventDefault();
@@ -1647,6 +1651,10 @@
 
                 // Zoom with keyboard shortcuts
                 document.addEventListener('keydown', (e) => {
+                    // Don't trigger shortcuts when modal is open (let modal handle keys)
+                    const anyModalOpen = document.querySelector('.modal.show');
+                    if (anyModalOpen) return;
+
                     if (this.editingTaskId !== null) return; // Don't zoom while editing text
 
                     // Ctrl/Cmd + Plus/Equals = zoom in
