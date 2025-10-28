@@ -5608,3 +5608,37 @@ description: 'Pixels per character for node width calculation. Auto-calibrates w
 
 **Version**: 1.14.7 (Auto-Calibration)
 **Line Count**: ~7000 lines in task-tree.html
+
+---
+
+### Session 20 Continued (10th): Status Emoji Transparency
+
+**Date**: 2025-10-28
+**Focus**: Increased transparency of status emojis for more subtle appearance
+
+#### Changes Made
+
+**Status Emoji Opacity Adjustment** (Line 5506):
+```javascript
+// Before:
+statusEmoji.style.opacity = '0.9';
+
+// After:
+statusEmoji.style.opacity = '0.5'; // More transparent to be subtle
+```
+
+**Visual Impact**:
+- 🔄 (Working) emoji: Now 50% transparent instead of 90% opaque
+- ✅ (Done) emoji: Now 50% transparent instead of 90% opaque
+- More subtle visual indicator
+- Less visually intrusive while still visible
+- Maintains functionality without dominating the visual hierarchy
+
+**Rationale**:
+- Original 0.9 opacity made emojis too prominent
+- 0.5 opacity provides better visual balance
+- Emojis serve as subtle status indicators, not primary content
+- Allows focus to remain on task text
+
+**Version**: 1.14.8 (Subtle Status Indicators)
+**Line Count**: ~7000 lines in task-tree.html
