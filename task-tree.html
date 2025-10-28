@@ -1527,14 +1527,11 @@
                         }
                     }
 
-                    // Escape to close shortcuts modal or clear selection
+                    // Escape to clear selection (only if no modal is open)
                     if (e.key === 'Escape' && this.editingTaskId === null) {
-                        const shortcutsModal = document.getElementById('shortcuts-modal');
-                        if (shortcutsModal && shortcutsModal.classList.contains('show')) {
-                            // Close shortcuts modal first
-                            this.hideShortcutsModal();
-                        } else if (this.selectedTaskIds.size > 0 || this.selectedLine) {
-                            // Clear selection if no modal is open
+                        // Check if any modal is open - if so, let the modal's handler handle it
+                        const anyModalOpen = document.querySelector('.modal.show');
+                        if (!anyModalOpen && (this.selectedTaskIds.size > 0 || this.selectedLine)) {
                             this.selectedTaskIds.clear();
                             this.selectedLine = null;
                             this.render();
@@ -4718,7 +4715,8 @@
                         items: [
                             { keys: `${modSymbol}+K`, description: 'Attach URL to selected task' },
                             { keys: 'Click 🔗', description: 'Open attached link in new tab' }
-                        ]
+                        ],
+                        tip: '💡 <strong>Pro Tip:</strong> Paste a URL as the last text in a task - it will be automatically detected, removed from the task name, and added as a link!'
                     },
                     {
                         category: '⏮️ Undo/Redo',
@@ -4743,17 +4741,45 @@
                                     </tr>
                                 `).join('')}
                             </table>
+                            ${section.tip ? `<div style="margin-top: 12px; padding: 10px; background: ${this.darkMode ? 'rgba(76, 195, 247, 0.1)' : 'rgba(25, 118, 210, 0.05)'}; border-left: 3px solid ${this.darkMode ? '#4fc3f7' : '#1976d2'}; border-radius: 4px; font-size: 13px; color: ${this.darkMode ? '#ccc' : '#666'};">${section.tip}</div>` : ''}
                         </div>
                     `;
                 });
 
                 content.innerHTML = html;
+
+                // Add ESC key handler
+                this._shortcutsEscHandler = (e) => {
+                    if (e.key === 'Escape') {
+                        this.hideShortcutsModal();
+                    }
+                };
+                document.addEventListener('keydown', this._shortcutsEscHandler);
+
+                // Add click-outside handler
+                this._shortcutsClickHandler = (e) => {
+                    if (e.target === modal) {
+                        this.hideShortcutsModal();
+                    }
+                };
+                modal.addEventListener('click', this._shortcutsClickHandler);
+
                 modal.classList.add('show');
             },
 
             hideShortcutsModal() {
                 const modal = document.getElementById('shortcuts-modal');
                 modal.classList.remove('show');
+
+                // Remove event listeners
+                if (this._shortcutsEscHandler) {
+                    document.removeEventListener('keydown', this._shortcutsEscHandler);
+                    this._shortcutsEscHandler = null;
+                }
+                if (this._shortcutsClickHandler) {
+                    modal.removeEventListener('click', this._shortcutsClickHandler);
+                    this._shortcutsClickHandler = null;
+                }
             },
 
             getWorkingTaskPath() {

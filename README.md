@@ -4526,8 +4526,142 @@ No changes needed to actual keyboard handling - just documentation and UI!
 
 **Line Count**: ~6790 lines in task-tree.html (+105 lines)
 
+### Session 20 Continued (3rd): Shortcuts Modal UX Improvements (2025-10-28)
+
+**Version**: 1.14.1 (UX Polish)
+
+**Changes**:
+1. Added click-outside-to-close functionality to shortcuts modal
+2. Added Pro Tips section with link auto-detection tip
+3. Improved modal ESC handling to prevent conflicts
+4. Added CRITICAL requirement to CLAUDE.md: always update shortcuts modal when adding shortcuts
+
+**Problem**: Shortcuts modal couldn't be closed by clicking outside, and users weren't aware of helpful productivity tips like automatic link detection.
+
+**Solution**: Implement proper modal event handling patterns and add contextual Pro Tips.
+
+**Implementation**:
+
+**1. Click-Outside-to-Close** (Lines 4762-4768):
+```javascript
+// Add click-outside handler in showShortcutsModal()
+this._shortcutsClickHandler = (e) => {
+    if (e.target === modal) {
+        this.hideShortcutsModal();
+    }
+};
+modal.addEventListener('click', this._shortcutsClickHandler);
+```
+- Matches settings modal pattern for consistency
+- Clicking modal backdrop (outside content) closes modal
+- Stored as `_shortcutsClickHandler` for proper cleanup
+
+**2. Modal ESC Handler** (Lines 4754-4760):
+```javascript
+// Add ESC key handler in showShortcutsModal()
+this._shortcutsEscHandler = (e) => {
+    if (e.key === 'Escape') {
+        this.hideShortcutsModal();
+    }
+};
+document.addEventListener('keydown', this._shortcutsEscHandler);
+```
+- Modal-specific ESC handler for clean separation
+- Removed shortcuts check from main ESC handler
+- Updated main handler to check `document.querySelector('.modal.show')` (Line 1533)
+
+**3. Event Listener Cleanup** (Lines 4777-4785):
+```javascript
+hideShortcutsModal() {
+    const modal = document.getElementById('shortcuts-modal');
+    modal.classList.remove('show');
+
+    // Remove event listeners
+    if (this._shortcutsEscHandler) {
+        document.removeEventListener('keydown', this._shortcutsEscHandler);
+        this._shortcutsEscHandler = null;
+    }
+    if (this._shortcutsClickHandler) {
+        modal.removeEventListener('click', this._shortcutsClickHandler);
+        this._shortcutsClickHandler = null;
+    }
+}
+```
+- Properly removes handlers when modal closes
+- Prevents memory leaks from stale event listeners
+- Sets handlers to null for garbage collection
+
+**4. Pro Tips Section** (Line 4722):
+```javascript
+{
+    category: '🔗 Links',
+    items: [...],
+    tip: '💡 <strong>Pro Tip:</strong> Paste a URL as the last text in a task - it will be automatically detected, removed from the task name, and added as a link!'
+}
+```
+- Added `tip` property to shortcut categories
+- Rendered as styled callout box below category shortcuts (Line 4747)
+- Light blue background with left border accent
+- Dark mode support with adjusted colors
+
+**5. CLAUDE.md Documentation Update**:
+- Added "⚠️ SHORTCUTS MODAL - CRITICAL REQUIREMENT" section
+- Documents process for updating shortcuts modal when adding new shortcuts
+- Lists all 7 categories with descriptions
+- Includes example of adding shortcuts and Pro Tips
+- Emphasizes this is a critical workflow requirement
+
+**Modal Event Handling Pattern**:
+```
+User opens modal → showShortcutsModal()
+├─ Render content
+├─ Register ESC handler (document-level)
+├─ Register click-outside handler (modal-level)
+└─ Show modal
+
+User closes modal → hideShortcutsModal()
+├─ Hide modal
+├─ Remove ESC handler
+└─ Remove click-outside handler
+```
+
+**Main ESC Handler Update** (Lines 1530-1539):
+- Changed from checking specific modal to `document.querySelector('.modal.show')`
+- More generic approach - works for all modals
+- Prevents clearing selection when modal is open
+
+**Pro Tip Format**:
+- Styled with light background and colored left border
+- Uses `<strong>` tags for emphasis
+- Positioned below shortcuts table with margin-top
+- Colors adapt to dark mode
+
+**Benefits**:
+- ✅ **Consistent UX** - Click-outside works like all modern modals
+- ✅ **ESC works properly** - No conflicts between handlers
+- ✅ **Clean code** - Proper event listener lifecycle management
+- ✅ **Discoverable tips** - Users learn about hidden productivity features
+- ✅ **Process documented** - CLAUDE.md ensures shortcuts modal stays updated
+
+**Critical Workflow Requirement**:
+- **ALWAYS update shortcuts modal** when adding/modifying/removing shortcuts
+- See CLAUDE.md "⚠️ SHORTCUTS MODAL - CRITICAL REQUIREMENT" section
+- Missing shortcuts = users can't discover features
+- Add Pro Tips to help users learn non-obvious workflows
+
+**Testing**:
+- ✓ Click outside modal → closes
+- ✓ ESC key → closes modal
+- ✓ Close button → closes modal
+- ✓ No memory leaks from repeated open/close
+- ✓ Main ESC handler doesn't interfere with modal ESC
+- ✓ Pro Tip displays correctly in light and dark mode
+- ✓ Pro Tip box has proper styling with left border accent
+
+**Line Count**: ~6830 lines in task-tree.html (+40 lines)
+
 ---
 
-**Last Updated**: 2025-10-27 (Session 20 Continued (2nd): Mac Keyboard Compatibility)
-**Current Line Count**: ~6790 lines in task-tree.html
-**Version**: 1.14.0 (Platform Compatibility)
+**Last Updated**: 2025-10-28 (Session 20 Continued (3rd): Shortcuts Modal UX Improvements)
+**Current Line Count**: ~6830 lines in task-tree.html
+**Version**: 1.14.1 (UX Polish)

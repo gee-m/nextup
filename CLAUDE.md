@@ -71,6 +71,62 @@ Always update the README when you:
 
 ---
 
+## ⚠️ SHORTCUTS MODAL - CRITICAL REQUIREMENT
+
+**WHENEVER you add, modify, or remove a keyboard shortcut or quick action, you MUST update the shortcuts modal.**
+
+**Location**: `task-tree.html` - `showShortcutsModal()` function (around line 4651)
+
+**What to update**:
+1. **Add new shortcut** to the appropriate category in the `shortcuts` array:
+   - ✏️ Editing - Task creation, editing, deletion
+   - 🎯 Selection - Selecting, multi-selecting, clearing
+   - 📊 Status & Priority - Status changes, priority cycling
+   - 🔗 Relationships - Reparenting, dependencies, subtree movement
+   - 🚀 Navigation - Movement, zooming, jumping, collapsing
+   - 🔗 Links - Link attachment, opening links
+   - ⏮️ Undo/Redo - Undo and redo operations
+
+2. **Add Pro Tips** (optional but encouraged):
+   - If the shortcut has non-obvious behavior or helpful workflows
+   - Add a `tip` property to the category object
+   - Format: `tip: '💡 <strong>Pro Tip:</strong> Your helpful tip here!'`
+   - Example: Link auto-detection tip in 🔗 Links category
+
+3. **Update help text** (if major shortcut):
+   - Update `updateShortcutsHelp()` function (around line 1348)
+   - Keep help text concise - only include most important shortcuts
+
+**Why this is critical**:
+- The shortcuts modal is the user's reference for discovering features
+- Missing shortcuts = users won't discover the feature
+- Outdated shortcuts = user confusion and frustration
+- Pro Tips = better user education and productivity
+
+**Process**:
+1. Implement the new shortcut/feature
+2. Test that it works
+3. Update `showShortcutsModal()` with the new shortcut
+4. Test that modal displays correctly
+5. Update README.md with the change
+6. Commit and push
+
+**Example**:
+```javascript
+{
+    category: '🎯 Selection',
+    items: [
+        { keys: 'Click node', description: 'Select task (clears other selections)' },
+        { keys: `${shiftSymbol}+Click node`, description: 'Add/remove task from selection' },
+        { keys: 'Escape', description: 'Clear all selections' },
+        { keys: 'Your new shortcut', description: 'What it does' }  // ← ADD HERE
+    ],
+    tip: '💡 <strong>Pro Tip:</strong> Helpful workflow tip!'  // ← OPTIONAL
+}
+```
+
+---
+
 ## Project Overview
 
 **Task Tree** is a single-file web application for hierarchical task management with dependency tracking. It visualizes todos as an interactive graph where tasks have parent-child relationships, dependencies, and work-in-progress states.
