@@ -1662,6 +1662,8 @@
                             this.attachLink(taskId);
                         } else if (this.selectedTaskIds.size > 1) {
                             this.showToast('⚠️ Select a single node to attach a link', 'warning');
+                        } else {
+                            this.showToast('⚠️ Select a task first to attach a link', 'warning');
                         }
                     }
 
