@@ -2022,6 +2022,9 @@
                 const task = this.tasks.find(t => t.id === taskId);
                 if (task && task.currentlyWorking) {
                     this.lastWorkingTaskId = taskId;
+                    console.log(`[selectNode] Updated lastWorkingTaskId to ${taskId} (${task.title})`);
+                } else if (task) {
+                    console.log(`[selectNode] Task ${taskId} (${task.title}) is not working, not updating lastWorkingTaskId`);
                 }
 
                 // Defer render to next frame to avoid breaking double-click
@@ -6497,6 +6500,8 @@
                 // If taskId provided, jump to that specific task
                 // Otherwise, use lastWorkingTaskId (last selected/cycled), or first working task
 
+                console.log(`[jumpToWorkingTask] Called with taskId=${taskId}, lastWorkingTaskId=${this.lastWorkingTaskId}`);
+
                 let workingTask = null;
                 if (taskId) {
                     // Specific task requested (from dropdown)
@@ -6504,10 +6509,12 @@
                     // Update last working task - this becomes the new default for J+J
                     if (workingTask) {
                         this.lastWorkingTaskId = taskId;
+                        console.log(`[jumpToWorkingTask] Updated lastWorkingTaskId to ${taskId} (${workingTask.title})`);
                     }
                 } else if (this.lastWorkingTaskId) {
                     // Use last selected/cycled working task
                     workingTask = this.tasks.find(t => t.id === this.lastWorkingTaskId && t.currentlyWorking);
+                    console.log(`[jumpToWorkingTask] Using lastWorkingTaskId ${this.lastWorkingTaskId}, found: ${workingTask ? workingTask.title : 'NOT FOUND'}`);
                 }
 
                 // Fallback: If last working task no longer working, find any working task
