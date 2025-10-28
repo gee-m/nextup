@@ -6404,17 +6404,17 @@
                 console.log(`  Current zoom: ${this.zoomLevel}`);
                 console.log(`  Current viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
 
-                // Calculate current task center for comparison
+                // Calculate current task center
                 const currentTaskCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
                 const currentTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
                 console.log(`  Current TASK center: (${currentTaskCenterX}, ${currentTaskCenterY})`);
 
-                // Calculate target viewBox position to show the home's saved center point
-                // home.centerX/centerY is the task centroid when home was created
-                // We want to center the viewport on that point (WITHOUT moving tasks!)
-                // Same math as jumpToWorkingTask: viewBox.x = centerPoint.x - viewBox.width/2
-                const targetViewBoxX = home.centerX - this.viewBox.width / 2;
-                const targetViewBoxY = home.centerY - this.viewBox.height / 2;
+                // IMPORTANT: Use CURRENT task center, not saved home.centerX/Y!
+                // Old homes have obsolete centerX/Y because tasks were moved by previous buggy code.
+                // We want to show where tasks ARE NOW, not where they were when home was created.
+                // This makes homes work like "zoom presets" rather than "position bookmarks".
+                const targetViewBoxX = currentTaskCenterX - this.viewBox.width / 2;
+                const targetViewBoxY = currentTaskCenterY - this.viewBox.height / 2;
 
                 // Calculate how much to shift the viewBox
                 const dx = targetViewBoxX - this.viewBox.x;
