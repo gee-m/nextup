@@ -6396,6 +6396,19 @@
                     return;
                 }
 
+                console.log(`\n[jumpToHome] === HOME JUMP CALCULATION ===`);
+                console.log(`  Home: "${home.name}"`);
+                console.log(`  Home saved centerX/Y: (${home.centerX}, ${home.centerY})`);
+                console.log(`  Home saved zoom: ${home.zoomLevel}`);
+                console.log(`  Current viewBox: x=${this.viewBox.x}, y=${this.viewBox.y}, w=${this.viewBox.width}, h=${this.viewBox.height}`);
+                console.log(`  Current zoom: ${this.zoomLevel}`);
+                console.log(`  Current viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
+
+                // Calculate current task center for comparison
+                const currentTaskCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
+                const currentTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
+                console.log(`  Current TASK center: (${currentTaskCenterX}, ${currentTaskCenterY})`);
+
                 // Calculate target viewBox position to show the home's saved center point
                 // home.centerX/centerY is the task centroid when home was created
                 // We want to center the viewport on that point (WITHOUT moving tasks!)
@@ -6406,6 +6419,11 @@
                 // Calculate how much to shift the viewBox
                 const dx = targetViewBoxX - this.viewBox.x;
                 const dy = targetViewBoxY - this.viewBox.y;
+
+                console.log(`  Target viewBox: x=${targetViewBoxX}, y=${targetViewBoxY}`);
+                console.log(`  Delta: dx=${dx}, dy=${dy}`);
+                console.log(`  After move, viewBox CENTER will be: (${targetViewBoxX + this.viewBox.width/2}, ${targetViewBoxY + this.viewBox.height/2})`);
+                console.log(`  Target zoom: ${home.zoomLevel}`);
 
                 if (animate) {
                     // Cinematic 3-phase animation: zoom out → pan → zoom in
@@ -6441,8 +6459,15 @@
                             if (!panTriggered) {
                                 panTriggered = true;
                                 // Move the viewBox to show home position (don't move tasks!)
+                                console.log(`[jumpToHome] APPLYING PAN at zoom ${this.zoomLevel}`);
+                                console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
                                 this.viewBox.x += dx;
                                 this.viewBox.y += dy;
+                                console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
+                                console.log(`  New viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
+                                const newTaskCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
+                                const newTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
+                                console.log(`  Task center (should be unchanged): (${newTaskCenterX}, ${newTaskCenterY})`);
                             }
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
