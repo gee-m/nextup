@@ -1615,12 +1615,26 @@
                     }
                 });
 
-                // Zoom with mouse wheel
+                // Zoom with mouse wheel / trackpad
                 svg.addEventListener('wheel', (e) => {
                     e.preventDefault();
 
-                    const scrollDirection = e.deltaY > 0 ? -1 : 1;
-                    const zoomFactor = 1 + (this.zoomSpeed * scrollDirection);
+                    // Normalize deltaY based on deltaMode
+                    // deltaMode: 0 = pixels, 1 = lines, 2 = pages
+                    let delta = e.deltaY;
+                    if (e.deltaMode === 1) delta *= 33;  // Lines to pixels (typical line height)
+                    if (e.deltaMode === 2) delta *= 100; // Pages to pixels
+
+                    // Clamp to prevent extreme jumps (-100 to +100)
+                    // This handles high-frequency trackpad events gracefully
+                    delta = Math.max(-100, Math.min(100, delta));
+
+                    // Scale zoom change proportionally to delta magnitude
+                    // Max 3% change per event (down from 10%) for better trackpad control
+                    // Larger deltas (mouse wheels) = faster zoom
+                    // Smaller deltas (trackpads) = slower, more controllable zoom
+                    const zoomChange = (delta / 100) * 0.03;
+                    const zoomFactor = 1 + zoomChange;
 
                     this.zoomLevel = Math.max(
                         this.minZoom,
