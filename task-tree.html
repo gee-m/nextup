@@ -3990,28 +3990,13 @@
                                 this.tempLine.setAttribute('y2', task.y);
                             }
                         } else if (e.shiftKey) {
-                            // Start subtree drag
-                            this.dragMode = 'subtree';
+                            // Prepare for potential subtree drag (will activate on mousemove >5px)
+                            // This allows shift+click to work for multi-select when not dragging
+                            this.dragMode = 'subtree-pending';
                             this.selectedNode = taskId;
-
-                            // Get all descendants
-                            this.draggedSubtree = [taskId, ...this.getDescendants(taskId)];
-
-                            // Store original positions
-                            this.subtreeOriginalPositions = {};
-                            this.draggedSubtree.forEach(id => {
-                                const t = this.tasks.find(t => t.id === id);
-                                this.subtreeOriginalPositions[id] = { x: t.x, y: t.y };
-                            });
-
-                            const task = this.tasks.find(t => t.id === taskId);
                             const pt = this.getSVGPoint(e);
-                            this.dragStart = { x: pt.x - task.x, y: pt.y - task.y };
-                            this.dragOriginalPos = { x: task.x, y: task.y };
-
-                            // Save snapshot BEFORE drag starts (captures original position)
-                            const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
-                            this.saveSnapshot(`Move subtree '${truncatedTitle}'`);
+                            this.dragStart = { x: pt.x, y: pt.y };
+                            this.dragStartOriginal = { x: pt.x, y: pt.y };
                         } else {
                             // Start node drag
                             this.dragMode = 'node';
@@ -4144,6 +4129,36 @@
                             task.vy = 0;
                         }
                         this.render();
+                    }
+                } else if (this.dragMode === 'subtree-pending' && this.selectedNode !== null) {
+                    // Check if moved >5px to activate subtree drag (vs shift+click for selection)
+                    const distance = Math.sqrt(
+                        Math.pow(pt.x - this.dragStartOriginal.x, 2) +
+                        Math.pow(pt.y - this.dragStartOriginal.y, 2)
+                    );
+
+                    if (distance >= 5) {
+                        // Activate full subtree drag
+                        this.dragMode = 'subtree';
+                        const taskId = this.selectedNode;
+
+                        // Get all descendants
+                        this.draggedSubtree = [taskId, ...this.getDescendants(taskId)];
+
+                        // Store original positions
+                        this.subtreeOriginalPositions = {};
+                        this.draggedSubtree.forEach(id => {
+                            const t = this.tasks.find(t => t.id === id);
+                            this.subtreeOriginalPositions[id] = { x: t.x, y: t.y };
+                        });
+
+                        const task = this.tasks.find(t => t.id === taskId);
+                        this.dragStart = { x: pt.x - task.x, y: pt.y - task.y };
+                        this.dragOriginalPos = { x: task.x, y: task.y };
+
+                        // Save snapshot BEFORE drag starts (captures original position)
+                        const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+                        this.saveSnapshot(`Move subtree '${truncatedTitle}'`);
                     }
                 } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
                     // Calculate offset from original root position
@@ -4384,6 +4399,9 @@
                         }
                     }
                     this.removeTempLine();
+                } else if (this.dragMode === 'subtree-pending') {
+                    // Shift+click without dragging - clear pending mode and let click event handle selection
+                    // Don't do anything here, just clear the dragMode
                 } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
                     const task = this.tasks.find(t => t.id === this.selectedNode);
                     if (task) {
