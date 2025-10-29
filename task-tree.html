@@ -5498,7 +5498,7 @@
                         // Badge text (just emoji, no background or count)
                         const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         badgeText.setAttribute('x', badgeX + badgeWidth / 2);
-                        badgeText.setAttribute('y', badgeY + 10);
+                        badgeText.setAttribute('y', badgeY + 12);  // 2px lower for better visual alignment
                         badgeText.setAttribute('fill', '#2196f3');  // Blue color for link
                         badgeText.setAttribute('font-size', '12');  // Slightly larger since no background
                         badgeText.setAttribute('text-anchor', 'middle');
