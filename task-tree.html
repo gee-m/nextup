@@ -1435,6 +1435,7 @@
             // Copy/paste subtree
             copiedSubtree: null,  // Clipboard for copying/pasting subtrees (not persisted to localStorage)
             lastMousePosition: { x: 0, y: 0 },  // Track last mouse position for Ctrl+V paste
+            shiftWasPressedOnMouseDown: false,  // Track shift state for shift+click selection
 
             init() {
                 const data = localStorage.getItem('taskTree');
@@ -1549,7 +1550,11 @@
 
                         // Left-click: Select node (with Shift for multi-select)
                         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-                            if (e.shiftKey) {
+                            // Check if shift was pressed (either still held OR was pressed on mousedown)
+                            const shiftSelection = e.shiftKey || this.shiftWasPressedOnMouseDown;
+                            this.shiftWasPressedOnMouseDown = false;  // Reset flag after use
+
+                            if (shiftSelection) {
                                 // Shift+Click: Toggle selection (multi-select mode)
                                 if (this.selectedTaskIds.has(taskId)) {
                                     this.selectedTaskIds.delete(taskId);
@@ -3994,6 +3999,7 @@
                             // This allows shift+click to work for multi-select when not dragging
                             this.dragMode = 'subtree-pending';
                             this.selectedNode = taskId;
+                            this.shiftWasPressedOnMouseDown = true;  // Track for click handler
                             const pt = this.getSVGPoint(e);
                             this.dragStart = { x: pt.x, y: pt.y };
                             this.dragStartOriginal = { x: pt.x, y: pt.y };
@@ -4402,7 +4408,10 @@
                 } else if (this.dragMode === 'subtree-pending') {
                     // Shift+click without dragging - clear pending mode and let click event handle selection
                     // Don't do anything here, just clear the dragMode
+                    // Note: shiftWasPressedOnMouseDown will be used by click handler
                 } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
+                    // Full subtree drag happened - reset shift flag since click won't fire
+                    this.shiftWasPressedOnMouseDown = false;
                     const task = this.tasks.find(t => t.id === this.selectedNode);
                     if (task) {
                         const movedDistance = Math.sqrt(
