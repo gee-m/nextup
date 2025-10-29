@@ -622,7 +622,7 @@ Stored in localStorage as:
 **Paste**:
 - **Right-click empty space**: "📋 Paste Subtree Here (N nodes)" - pastes at cursor position
 - **Right-click node**: "📋 Paste as Child (N nodes)" - pastes as child of clicked node
-- **Keyboard**: Press Ctrl+V (⌘+V on Mac) - pastes at viewport center
+- **Keyboard**: Press Ctrl+V (⌘+V on Mac) - pastes at cursor position (where mouse last was)
 - **Smart positioning**: Children maintain relative positions from original
 
 **Sharing with Peers**:
@@ -632,7 +632,10 @@ Stored in localStorage as:
 4. Colleague opens Task Tree → Right-click empty space → "📋 Paste from Clipboard"
 5. Subtree appears perfectly!
 
-**Note**: The "Paste from Clipboard" option reads JSON directly from your system clipboard and validates it. If the JSON is invalid or not in subtree format, you'll see a helpful error message. The regular "Paste Subtree Here" option only appears if you've copied something in the current session.
+**Notes**:
+- The "Paste from Clipboard" option reads JSON directly from your system clipboard and validates it. If the JSON is invalid or not in subtree format, you'll see a helpful error message.
+- The regular "Paste Subtree Here" option only appears if you've copied something in the current session.
+- **Browser Permissions**: Your browser may ask for clipboard permission when using "Paste from Clipboard". This is a security feature. The browser typically remembers your choice for the session. To avoid permission prompts, use the regular paste options (which work with internal clipboard) or Ctrl+V after copying within the app.
 
 #### Clipboard Format
 
@@ -6547,3 +6550,31 @@ User B (receiver):
 **Version**: 1.17.1 (Foreign JSON Import Enhancement)
 **Files Modified**: task-tree.html, README.md
 **Line Count**: ~7470 lines in task-tree.html (+70 lines for clipboard import)
+
+### UX Improvement: Paste at Cursor Position
+
+**Date**: 2025-10-29 (same session)
+
+#### Enhancement: Ctrl+V Pastes at Cursor
+
+**Problem**: Ctrl+V was pasting at viewport center, which felt disconnected from where the user was working.
+
+**Solution**: Track mouse position and paste at cursor location.
+
+**Changes**:
+1. Added `lastMousePosition: { x, y }` to app state (line ~1437)
+2. Track mouse position in `onCanvasMouseMove()` (line ~4086)
+   - Updates `lastMousePosition` on every mouse move
+   - Works even when not dragging
+3. Updated Ctrl+V handler to use cursor position (line ~1820)
+   - Changed from: `pasteSubtree(null, centerX, centerY)`
+   - Changed to: `pasteSubtree(null, this.lastMousePosition.x, this.lastMousePosition.y)`
+
+**User Experience**:
+- Before: Ctrl+V → subtree appears in center of screen (wherever you're viewing)
+- After: Ctrl+V → subtree appears exactly where your mouse cursor is
+- More intuitive and spatial - paste happens where you're looking
+- Consistent with right-click "Paste Subtree Here" behavior
+
+**Version**: 1.17.2 (Cursor-Based Paste)
+**Lines Changed**: ~5 lines

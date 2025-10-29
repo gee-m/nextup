@@ -1434,6 +1434,7 @@
             workingTasksByRoot: {},  // { [rootTaskId]: workingTaskId } - one working task per project/root
             // Copy/paste subtree
             copiedSubtree: null,  // Clipboard for copying/pasting subtrees (not persisted to localStorage)
+            lastMousePosition: { x: 0, y: 0 },  // Track last mouse position for Ctrl+V paste
 
             init() {
                 const data = localStorage.getItem('taskTree');
@@ -1810,16 +1811,14 @@
                         }
                     }
 
-                    // Ctrl/Cmd + V = paste subtree at viewport center
+                    // Ctrl/Cmd + V = paste subtree at cursor position
                     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
                         e.preventDefault();
                         if (!this.copiedSubtree) {
                             this.showToast('❌ Clipboard empty - copy a subtree first (Ctrl+C)', 'error', 2000);
                         } else {
-                            // Paste at center of current viewport
-                            const centerX = this.viewBox.x + (window.innerWidth / this.zoomLevel) / 2;
-                            const centerY = this.viewBox.y + ((window.innerHeight - 60) / this.zoomLevel) / 2;
-                            this.pasteSubtree(null, centerX, centerY);
+                            // Paste at last known mouse position (cursor)
+                            this.pasteSubtree(null, this.lastMousePosition.x, this.lastMousePosition.y);
                         }
                     }
 
@@ -4082,10 +4081,13 @@
             },
 
             onCanvasMouseMove(e) {
+                // Always track mouse position for Ctrl+V paste at cursor
+                const pt = this.getSVGPoint(e);
+                this.lastMousePosition = { x: pt.x, y: pt.y };
+
                 if (!this.dragMode) return;
 
                 e.preventDefault();
-                const pt = this.getSVGPoint(e);
 
                 if (this.dragMode === 'box-select' && this.boxSelectStart) {
                     // Draw visual feedback for box selection
