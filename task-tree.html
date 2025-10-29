@@ -1171,6 +1171,7 @@
         <button class="secondary" onclick="app.exportData()">Export JSON</button>
         <button class="secondary" onclick="app.copyDataToClipboard(event)">Copy JSON</button>
         <button class="secondary" onclick="app.showImportModal()">Import JSON</button>
+        <button class="secondary" onclick="app.repairWorkingTasks()">🔧 Repair Data</button>
         <button class="secondary" onclick="app.clearAllData()">Clear All Data</button>
         <div class="info">
             <span id="shortcuts-help"></span>
@@ -1438,6 +1439,9 @@
                 const hasStoredViewBox = parsed && parsed.viewBoxX !== undefined && parsed.viewBoxY !== undefined;
 
                 this.loadFromStorage();
+
+                // Auto-repair any corrupted working task states on load (silent mode)
+                this.repairWorkingTasks(true);
 
                 // Center viewBox on tasks ONLY if no saved viewBox position exists
                 // (for first-time users or migrating from old version)
@@ -2885,6 +2889,78 @@
                         this.render();
                     }
                 );
+            },
+
+            repairWorkingTasks(silent = false) {
+                // Detect and fix data corruption where multiple tasks are marked as working
+                const workingTasks = this.tasks.filter(t => t.currentlyWorking);
+
+                if (workingTasks.length === 0) {
+                    if (!silent) {
+                        this.showToast('✓ No issues found - data is clean', 'success', 2000);
+                    }
+                    return;
+                }
+
+                if (workingTasks.length === 1) {
+                    // Single working task - just verify workingTasksByRoot is correct
+                    const task = workingTasks[0];
+                    const root = this.getRootTask(task.id);
+                    const rootId = root ? root.id : null;
+
+                    if (rootId && this.workingTasksByRoot[rootId] !== task.id) {
+                        this.workingTasksByRoot[rootId] = task.id;
+                        this.saveToStorage();
+                        if (!silent) {
+                            this.showToast('✓ Fixed working task tracking', 'success', 2000);
+                        }
+                    } else if (!silent) {
+                        this.showToast('✓ No issues found - data is clean', 'success', 2000);
+                    }
+                    return;
+                }
+
+                // Multiple working tasks - this is the bug!
+                this.saveSnapshot('Repaired multiple working tasks');
+
+                // Group working tasks by root
+                const workingByRoot = {};
+                for (const task of workingTasks) {
+                    const root = this.getRootTask(task.id);
+                    const rootId = root ? root.id : null;
+                    if (!workingByRoot[rootId]) {
+                        workingByRoot[rootId] = [];
+                    }
+                    workingByRoot[rootId].push(task);
+                }
+
+                let fixedCount = 0;
+
+                // For each root tree, keep only the first working task
+                for (const rootId in workingByRoot) {
+                    const tasksInRoot = workingByRoot[rootId];
+                    if (tasksInRoot.length > 1) {
+                        // Keep first, clear the rest
+                        for (let i = 1; i < tasksInRoot.length; i++) {
+                            tasksInRoot[i].currentlyWorking = false;
+                            if (!tasksInRoot[i].textLocked) {
+                                tasksInRoot[i].textExpanded = false;
+                            }
+                            fixedCount++;
+                        }
+                        // Update workingTasksByRoot to point to the kept task
+                        this.workingTasksByRoot[rootId] = tasksInRoot[0].id;
+                    }
+                }
+
+                this.saveToStorage();
+                this.updateStatusBar();
+                this.render();
+
+                if (!silent) {
+                    const taskWord = fixedCount === 1 ? 'task' : 'tasks';
+                    this.showToast(`✓ Fixed ${fixedCount} ${taskWord} marked as working`, 'success', 3000);
+                }
             },
 
             exportData() {

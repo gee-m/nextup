@@ -547,6 +547,7 @@ Always visible at bottom of screen.
 - **Export JSON**: Download complete data as timestamped file
 - **Copy JSON**: Copy data to clipboard
 - **Import JSON**: Paste JSON data via textarea modal
+- **🔧 Repair Data**: Fix corrupted working task states (automatically runs on load)
 - **Clear All**: Delete everything (with confirmation)
 
 #### Data Structure
@@ -6236,3 +6237,80 @@ This update fixes two critical issues with jump navigation:
 
 **Version**: 1.15.1 (Jump Accuracy Fix)
 **Line Count**: ~7200 lines in task-tree.html (no new features, just fixes)
+
+
+### Session N: Flow State Bug Fix & Data Repair
+
+**Date**: 2025-10-29
+
+#### 🐛 Critical Bug Fix: Multiple Working Tasks
+
+**Problem**: Flow State feature was causing data corruption - multiple tasks could be marked as `currentlyWorking: true` simultaneously.
+
+**Root Cause**:
+- When marking a task as done, the app auto-starts the parent task (Flow State feature)
+- The auto-start code directly set `parent.currentlyWorking = true` without clearing previous working tasks
+- This violated the "single working task" constraint, allowing multiple tasks to be marked as working
+
+**Fixed Locations**:
+- `cycleStatus()` - Line ~1960 (middle-click status cycling)
+- `toggleDone()` - Line ~2023 (context menu mark done)
+
+**Solution**:
+```javascript
+// Before auto-starting parent, clear any previous working task
+const previousWorkingId = this.workingTasksByRoot[rootId];
+if (previousWorkingId && previousWorkingId !== parent.id) {
+    const prevTask = this.tasks.find(t => t.id === previousWorkingId);
+    if (prevTask) {
+        prevTask.currentlyWorking = false;
+        if (!prevTask.textLocked) {
+            prevTask.textExpanded = false;
+        }
+    }
+}
+parent.currentlyWorking = true;
+```
+
+#### 🔧 New Feature: Data Repair Tool
+
+**Purpose**: Fix corrupted data from the bug on existing user systems without losing information.
+
+**Implementation**:
+- `repairWorkingTasks(silent)` - Line ~2891
+  - Detects multiple tasks marked as working
+  - Groups by root tree (respects multi-project support)
+  - Keeps first working task per tree, clears the rest
+  - Rebuilds `workingTasksByRoot` correctly
+  - Shows toast notification with count fixed
+  - Can run silently (no toast) for auto-repair
+
+- **UI Button**: "🔧 Repair Data" in data management controls
+  - Manual trigger for users to fix their data
+  - Shows detailed feedback of what was fixed
+
+- **Auto-Repair on Load**: Line ~1444 in `init()`
+  - Automatically runs in silent mode when app loads
+  - Fixes corruption transparently without user intervention
+  - No toast spam - only shown if user clicks button manually
+
+**User Impact**:
+- ✅ Prevents new corruption from occurring
+- ✅ Auto-fixes existing corruption on load
+- ✅ Manual repair button for explicit fixing
+- ✅ Preserves all task data (no information loss)
+- ✅ Works with exported/imported JSON from other computers
+
+**Testing Scenarios**:
+```
+1. Multiple working tasks → Load app → Auto-repaired silently
+2. Click "🔧 Repair Data" on clean data → "No issues found"
+3. Click "🔧 Repair Data" on corrupted data → "Fixed N tasks marked as working"
+4. Import corrupted JSON → Load app → Auto-repaired on next render
+```
+
+**Version**: 1.16.0 (Flow State Bug Fix & Data Repair)
+**Files Modified**: task-tree.html, fixed-tasks.json (example repair), README.md
+**Line Count**: ~7270 lines in task-tree.html (+70 lines for repair function)
+
+
