@@ -1957,6 +1957,18 @@
                     if (task.mainParent !== null) {
                         const parent = this.tasks.find(t => t.id === task.mainParent);
                         if (parent && parent.status !== 'done') {
+                            // Clear any previous working task in same root tree
+                            const previousWorkingId = this.workingTasksByRoot[rootId];
+                            if (previousWorkingId && previousWorkingId !== parent.id) {
+                                const prevTask = this.tasks.find(t => t.id === previousWorkingId);
+                                if (prevTask) {
+                                    prevTask.currentlyWorking = false;
+                                    if (!prevTask.textLocked) {
+                                        prevTask.textExpanded = false;
+                                    }
+                                }
+                            }
+
                             parent.currentlyWorking = true;
                             // Update working log for parent
                             if (rootId) {
@@ -2008,6 +2020,18 @@
                     if (wasWorking && task.mainParent !== null) {
                         const parent = this.tasks.find(t => t.id === task.mainParent);
                         if (parent && parent.status !== 'done') {
+                            // Clear any previous working task in same root tree
+                            const previousWorkingId = this.workingTasksByRoot[rootId];
+                            if (previousWorkingId && previousWorkingId !== parent.id) {
+                                const prevTask = this.tasks.find(t => t.id === previousWorkingId);
+                                if (prevTask) {
+                                    prevTask.currentlyWorking = false;
+                                    if (!prevTask.textLocked) {
+                                        prevTask.textExpanded = false;
+                                    }
+                                }
+                            }
+
                             parent.currentlyWorking = true;
                             // Update working log for parent
                             if (rootId) {
