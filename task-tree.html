@@ -1432,6 +1432,8 @@
             autoHideCompletedNodes: true,  // Auto-hide nodes when task and parent are done
             // Multi-project working task tracking
             workingTasksByRoot: {},  // { [rootTaskId]: workingTaskId } - one working task per project/root
+            // Copy/paste subtree
+            copiedSubtree: null,  // Clipboard for copying/pasting subtrees (not persisted to localStorage)
 
             init() {
                 const data = localStorage.getItem('taskTree');
@@ -1465,7 +1467,7 @@
 
                 const helpElement = document.getElementById('shortcuts-help');
                 if (helpElement) {
-                    helpElement.textContent = `Double-click: edit | ${shift}+Double-click: hide/show | Right-click: menu | Left-click: select | ${shift}+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | ${mod}+Click: create task | ${mod}+K: attach link | P: priority | J: jump to working | ${shift}+Drag: subtree | Scroll/${mod}+±: zoom | ${mod}+Z: undo | ${mod}+${shift}+Z: redo`;
+                    helpElement.textContent = `Double-click: edit | ${shift}+Double-click: hide/show | Right-click: menu | Left-click: select | ${shift}+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | ${mod}+Click: create task | ${mod}+K: attach link | P: priority | J: jump to working | ${shift}+Drag: subtree | Scroll/${mod}+±: zoom | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo | ${mod}+${shift}+Z: redo`;
                 }
 
                 // Update tooltips with platform-specific text
@@ -1793,6 +1795,32 @@
                         (e.ctrlKey && e.key.toLowerCase() === 'y')) {
                         e.preventDefault();
                         this.redo();
+                    }
+
+                    // Ctrl/Cmd + C = copy subtree
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+                        e.preventDefault();
+                        if (this.selectedTaskIds.size === 1) {
+                            const taskId = Array.from(this.selectedTaskIds)[0];
+                            this.copySubtree(taskId);
+                        } else if (this.selectedTaskIds.size > 1) {
+                            this.showToast('⚠️ Select a single node to copy its subtree', 'warning', 2000);
+                        } else {
+                            this.showToast('⚠️ Select a task first to copy', 'warning', 2000);
+                        }
+                    }
+
+                    // Ctrl/Cmd + V = paste subtree at viewport center
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                        e.preventDefault();
+                        if (!this.copiedSubtree) {
+                            this.showToast('❌ Clipboard empty - copy a subtree first (Ctrl+C)', 'error', 2000);
+                        } else {
+                            // Paste at center of current viewport
+                            const centerX = this.viewBox.x + (window.innerWidth / this.zoomLevel) / 2;
+                            const centerY = this.viewBox.y + ((window.innerHeight - 60) / this.zoomLevel) / 2;
+                            this.pasteSubtree(null, centerX, centerY);
+                        }
                     }
 
                     // Ctrl/Cmd + K = attach link to selected node
@@ -2961,6 +2989,189 @@
                     const taskWord = fixedCount === 1 ? 'task' : 'tasks';
                     this.showToast(`✓ Fixed ${fixedCount} ${taskWord} marked as working`, 'success', 3000);
                 }
+            },
+
+            getSubtreeSize(taskId) {
+                // Count the number of nodes in a subtree (including root)
+                let count = 0;
+                const counted = new Set();
+
+                const countNode = (id) => {
+                    if (counted.has(id)) return;
+                    const task = this.tasks.find(t => t.id === id);
+                    if (!task) return;
+
+                    counted.add(id);
+                    count++;
+                    task.children.forEach(childId => countNode(childId));
+                };
+
+                countNode(taskId);
+                return count;
+            },
+
+            copySubtree(taskId) {
+                const rootTask = this.tasks.find(t => t.id === taskId);
+                if (!rootTask) return;
+
+                // 1. Collect all descendants recursively
+                const subtreeTasks = [];
+                const subtreeIds = new Set();
+
+                const collectNode = (id) => {
+                    if (subtreeIds.has(id)) return;
+
+                    const task = this.tasks.find(t => t.id === id);
+                    if (!task) return;
+
+                    subtreeIds.add(id);
+                    subtreeTasks.push(task);
+
+                    // Recurse into children
+                    task.children.forEach(childId => collectNode(childId));
+                };
+
+                collectNode(taskId);
+
+                // 2. Clean and prepare tasks for clipboard
+                const cleanedTasks = subtreeTasks.map(task => {
+                    const cleaned = JSON.parse(JSON.stringify(task));  // Deep clone
+
+                    // Clean external references
+                    cleaned.mainParent = task.id === taskId ? null : task.mainParent;
+                    cleaned.otherParents = cleaned.otherParents.filter(id => subtreeIds.has(id));
+                    cleaned.dependencies = cleaned.dependencies.filter(id => subtreeIds.has(id));
+                    cleaned.currentlyWorking = false;  // Never copy working state
+                    cleaned.hidden = false;  // Reset hidden state
+
+                    // Remove runtime velocity properties
+                    delete cleaned.vx;
+                    delete cleaned.vy;
+
+                    return cleaned;
+                });
+
+                // 3. Create clipboard object
+                const clipboard = {
+                    version: "1.0",
+                    subtree: cleanedTasks,
+                    rootId: taskId,
+                    metadata: {
+                        copiedAt: Date.now(),
+                        nodeCount: cleanedTasks.length,
+                        originalRoot: rootTask.title,
+                        appVersion: "1.16.0"
+                    }
+                };
+
+                // 4. Store internally + copy to system clipboard
+                this.copiedSubtree = clipboard;
+
+                const jsonString = JSON.stringify(clipboard, null, 2);
+                navigator.clipboard.writeText(jsonString).then(() => {
+                    const nodeWord = clipboard.metadata.nodeCount === 1 ? 'node' : 'nodes';
+                    const rootTitle = clipboard.metadata.originalRoot.length > 30
+                        ? clipboard.metadata.originalRoot.substring(0, 27) + '...'
+                        : clipboard.metadata.originalRoot;
+                    this.showToast(`📋 Copied "${rootTitle}" (${clipboard.metadata.nodeCount} ${nodeWord})`, 'success', 3000);
+                }).catch(err => {
+                    // Clipboard API failed, but internal copy still works
+                    this.showToast(`📋 Copied ${clipboard.metadata.nodeCount} nodes (clipboard API unavailable)`, 'info', 3000);
+                });
+            },
+
+            pasteSubtree(parentId = null, x = null, y = null) {
+                if (!this.copiedSubtree) {
+                    this.showToast('❌ Clipboard empty - copy a subtree first', 'error', 2000);
+                    return;
+                }
+
+                const clipboard = this.copiedSubtree;
+                const oldRootId = clipboard.rootId;
+
+                this.saveSnapshot(`Pasted subtree (${clipboard.metadata.nodeCount} nodes)`);
+
+                // 1. Create ID mapping (oldId → newId)
+                const idMap = new Map();
+                clipboard.subtree.forEach(task => {
+                    idMap.set(task.id, this.taskIdCounter++);
+                });
+
+                // 2. Find root task to calculate position offset
+                const oldRoot = clipboard.subtree.find(t => t.id === oldRootId);
+
+                // Determine paste position
+                let newRootX, newRootY;
+                if (x !== null && y !== null) {
+                    // Explicit position provided
+                    newRootX = x;
+                    newRootY = y;
+                } else {
+                    // Auto-offset: place 300px right, 100px down from original
+                    newRootX = oldRoot.x + 300;
+                    newRootY = oldRoot.y + 100;
+                }
+
+                const deltaX = newRootX - oldRoot.x;
+                const deltaY = newRootY - oldRoot.y;
+
+                // 3. Clone, remap IDs, and adjust positions
+                const newTasks = clipboard.subtree.map(oldTask => {
+                    const newTask = { ...oldTask };
+
+                    // Remap ID
+                    newTask.id = idMap.get(oldTask.id);
+
+                    // Remap relationships
+                    newTask.children = newTask.children
+                        .map(id => idMap.get(id))
+                        .filter(id => id !== undefined);
+                    newTask.otherParents = newTask.otherParents
+                        .map(id => idMap.get(id))
+                        .filter(id => id !== undefined);
+                    newTask.dependencies = newTask.dependencies
+                        .map(id => idMap.get(id))
+                        .filter(id => id !== undefined);
+
+                    // Handle mainParent and position
+                    if (oldTask.id === oldRootId) {
+                        // This is the root of the pasted subtree
+                        newTask.mainParent = parentId;
+                        newTask.x = newRootX;
+                        newTask.y = newRootY;
+                    } else {
+                        // Descendant - remap parent and adjust position
+                        newTask.mainParent = idMap.get(oldTask.mainParent);
+                        newTask.x = oldTask.x + deltaX;
+                        newTask.y = oldTask.y + deltaY;
+                    }
+
+                    // Reset runtime state
+                    newTask.currentlyWorking = false;
+                    newTask.hidden = false;
+                    delete newTask.vx;
+                    delete newTask.vy;
+
+                    return newTask;
+                });
+
+                // 4. Add to tasks array
+                this.tasks.push(...newTasks);
+
+                // 5. If pasting as child, update parent
+                if (parentId !== null) {
+                    const parent = this.tasks.find(t => t.id === parentId);
+                    if (parent) {
+                        parent.children.push(idMap.get(oldRootId));
+                    }
+                }
+
+                this.saveToStorage();
+                this.updateStatusBar();
+                this.render();
+
+                const nodeWord = newTasks.length === 1 ? 'node' : 'nodes';
+                this.showToast(`✓ Pasted ${newTasks.length} ${nodeWord}`, 'success', 2000);
             },
 
             exportData() {
@@ -4515,6 +4726,16 @@
 
                     buttons.push({ label: '📋 Copy Text', action: () => this.copyTaskText(task.title) });
 
+                    // Copy/paste subtree options
+                    const subtreeSize = this.getSubtreeSize(taskId);
+                    const subtreeLabel = subtreeSize === 1 ? '📋 Copy Subtree' : `📋 Copy Subtree (${subtreeSize} nodes)`;
+                    buttons.push({ label: subtreeLabel, action: () => this.copySubtree(taskId) });
+
+                    if (this.copiedSubtree) {
+                        const pasteLabel = `📋 Paste as Child (${this.copiedSubtree.metadata.nodeCount} nodes)`;
+                        buttons.push({ label: pasteLabel, action: () => this.pasteSubtree(taskId) });
+                    }
+
                     // Link management options
                     if (!task.links) task.links = [];
 
@@ -4718,10 +4939,20 @@
                             this.saveToStorage();
                             this.render();
                         }
-                    },
-                    { label: '🔍 Zoom to Fit', action: () => this.zoomToFit() },
-                    { label: '🎯 Mark Origin', action: () => this.markOrigin() }
+                    }
                 ];
+
+                // Add paste option if clipboard has data
+                if (this.copiedSubtree) {
+                    const pt = this.getSVGPoint(e);
+                    buttons.push({
+                        label: `📋 Paste Subtree Here (${this.copiedSubtree.metadata.nodeCount} nodes)`,
+                        action: () => this.pasteSubtree(null, pt.x, pt.y)
+                    });
+                }
+
+                buttons.push({ label: '🔍 Zoom to Fit', action: () => this.zoomToFit() });
+                buttons.push({ label: '🎯 Mark Origin', action: () => this.markOrigin() });
 
                 buttons.forEach(({ label, action }) => {
                     const btn = document.createElement('button');

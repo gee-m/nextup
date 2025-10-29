@@ -606,6 +606,77 @@ Stored in localStorage as:
 }
 ```
 
+### 📋 Copy/Paste Subtree
+
+**Duplicate**, **share**, and **reuse** task structures with full copy/paste support.
+
+#### How It Works
+
+**Copy**:
+- **Right-click menu**: Select "📋 Copy Subtree (N nodes)"
+- **Keyboard**: Select task + press Ctrl+C (⌘+C on Mac)
+- **Includes**: Selected task + ALL descendants (preserves hierarchy, relationships, positions)
+- **Excludes**: External dependencies, working state, hidden state
+- **Automatic**: JSON copied to system clipboard for easy sharing
+
+**Paste**:
+- **Right-click empty space**: "📋 Paste Subtree Here (N nodes)" - pastes at cursor position
+- **Right-click node**: "📋 Paste as Child (N nodes)" - pastes as child of clicked node
+- **Keyboard**: Press Ctrl+V (⌘+V on Mac) - pastes at viewport center
+- **Smart positioning**: Children maintain relative positions from original
+
+**Sharing with Peers**:
+1. Copy subtree (JSON automatically in system clipboard)
+2. Paste into Slack, email, or text file
+3. Colleague copies JSON
+4. Colleague opens Task Tree → Right-click empty space → "Paste Subtree Here"
+5. Subtree appears perfectly!
+
+#### Clipboard Format
+
+```javascript
+{
+    version: "1.0",           // Format version for future compatibility
+    subtree: [                // Array of task objects
+        {
+            id: 5,            // Original ID (remapped on paste)
+            title: "Task",
+            x: 100, y: 200,   // Relative positions
+            mainParent: null, // null for subtree root
+            children: [6, 7], // IDs within subtree
+            dependencies: [], // Only internal dependencies
+            status: "pending",
+            currentlyWorking: false,  // Always false
+            // ... other properties
+        }
+        // ... more tasks
+    ],
+    rootId: 5,               // Which task is the subtree root
+    metadata: {
+        copiedAt: 1234567890,    // Timestamp
+        nodeCount: 5,             // Total nodes
+        originalRoot: "Task Name", // For display
+        appVersion: "1.16.0"      // App version
+    }
+}
+```
+
+#### Features
+
+- **ID Remapping**: All task IDs are regenerated on paste to avoid conflicts
+- **Relationship Preservation**: Parent-child links, dependencies maintained within subtree
+- **External Cleanup**: Dependencies to external tasks are removed
+- **Undo/Redo Support**: Copy/paste operations fully undoable
+- **Multiple Paste**: Paste same subtree multiple times with unique IDs
+- **Working State Protection**: Never copies `currentlyWorking: true` (prevents corruption)
+
+#### Use Cases
+
+1. **Templating**: Copy common task structures (e.g., "Sprint Planning" → paste for each sprint)
+2. **Team Sharing**: Share project templates via Slack/email
+3. **Duplication**: Duplicate complex subtrees instead of recreating manually
+4. **Reorganization**: Copy subtree → paste in new location → delete original
+
 ### 🎯 Advanced Features
 
 #### Smart Behaviors
@@ -649,6 +720,9 @@ Stored in localStorage as:
 | Collapse/expand | ⇧+Double-click | Shift+Double-click | Toggle subtree visibility |
 | **Links** |
 | Attach link | ⌘+K | Ctrl+K | Add URL to selected task |
+| **Copy/Paste** |
+| Copy subtree | ⌘+C | Ctrl+C | Copy selected task + all descendants |
+| Paste subtree | ⌘+V | Ctrl+V | Paste at viewport center |
 | **Undo/Redo** |
 | Undo | ⌘+Z | Ctrl+Z | Undo last action |
 | Redo | ⌘+⇧+Z | Ctrl+Shift+Z | Redo previously undone action |
@@ -680,6 +754,7 @@ Stored in localStorage as:
   - Hide/show children
   - Drag operations (move task, move subtree) - NOT canvas panning
   - Dependencies (add/remove with both task names)
+  - Copy/paste subtree (shows node count)
   - Import JSON (shows task count)
   - Clear All Data
 - **Viewport vs Content**: Canvas panning is NOT undoable - it's viewport navigation, not content modification
@@ -6314,3 +6389,93 @@ parent.currentlyWorking = true;
 **Line Count**: ~7270 lines in task-tree.html (+70 lines for repair function)
 
 
+
+### Session N+1: Copy/Paste Subtree Feature
+
+**Date**: 2025-10-29
+
+#### 📋 New Feature: Copy/Paste Subtree
+
+**Problem**: Users wanted to:
+- Duplicate complex task structures
+- Share templates with team members
+- Reuse common patterns across projects
+
+**Solution**: Implemented full copy/paste system with peer-to-peer sharing.
+
+**Core Functions**:
+- `getSubtreeSize(taskId)` - Line ~2968: Counts nodes in subtree
+- `copySubtree(taskId)` - Line ~2987: Recursively collects and cleans subtree
+  - Collects all descendants recursively
+  - Cleans external relationships (dependencies, parents)
+  - Strips working state to prevent corruption
+  - Creates versioned clipboard object
+  - Copies JSON to system clipboard automatically
+  
+- `pasteSubtree(parentId, x, y)` - Line ~3038: Pastes with ID remapping
+  - Creates ID mapping (old → new) using Map
+  - Remaps all relationships (children, parents, dependencies)
+  - Adjusts positions relative to root
+  - Supports three modes: paste at cursor, paste as child, paste at viewport center
+  - Fully undoable via saveSnapshot
+
+**UI Integration**:
+- **Context menu on node**: 
+  - "📋 Copy Subtree (N nodes)"
+  - "📋 Paste as Child (N nodes)" (only if clipboard has data)
+- **Context menu on empty space**:
+  - "📋 Paste Subtree Here (N nodes)" (only if clipboard has data)
+- **Keyboard shortcuts**:
+  - Ctrl+C / ⌘+C: Copy selected task's subtree
+  - Ctrl+V / ⌘+V: Paste at viewport center
+  - Added to shortcuts help text in status bar
+
+**Clipboard Format**:
+```javascript
+{
+    version: "1.0",
+    subtree: [...],           // Array of cleaned task objects
+    rootId: number,           // Root task ID
+    metadata: {
+        copiedAt: timestamp,
+        nodeCount: number,
+        originalRoot: string,  // For display
+        appVersion: "1.16.0"
+    }
+}
+```
+
+**Features**:
+- ✅ Recursive descendant collection
+- ✅ External reference cleanup (dependencies, parents outside subtree)
+- ✅ ID remapping to avoid conflicts
+- ✅ Relative position preservation
+- ✅ Working state protection (never copies currentlyWorking: true)
+- ✅ System clipboard integration
+- ✅ Toast notifications with node counts
+- ✅ Undo/redo support
+- ✅ Multiple paste support (unique IDs each time)
+- ✅ Peer-to-peer sharing via JSON
+
+**Use Cases**:
+1. **Templating**: Copy "Sprint Planning" structure → paste for each sprint
+2. **Team Sharing**: Export subtree JSON → send via Slack → teammate imports
+3. **Duplication**: Duplicate complex subtrees without manual recreation
+4. **Reorganization**: Copy → paste elsewhere → delete original
+
+**Testing Scenarios**:
+```
+1. Copy single node → Paste → Verify correct
+2. Copy 5-node subtree → Paste → Verify all nodes + relationships
+3. Copy with dependencies → Verify external deps removed, internal preserved
+4. Paste as child → Verify parent link created
+5. Paste in empty space → Verify positioned at cursor
+6. Ctrl+V → Verify centered in viewport
+7. Copy → Paste twice → Verify separate ID sets (no conflicts)
+8. Undo copy/paste → Verify works correctly
+```
+
+**Version**: 1.17.0 (Copy/Paste Subtree)
+**Files Modified**: task-tree.html, README.md
+**Line Count**: ~7400 lines in task-tree.html (+220 lines for copy/paste system)
+**Implementation Time**: ~3 hours
