@@ -5495,15 +5495,25 @@
                         const badgeX = rectWidth / 2 - badgeWidth - 1;  // 1px margin from right edge
                         const badgeY = -rectHeight / 2 + 3;              // 3px margin from top edge
 
-                        // Badge text (just emoji, no background or count)
+                        // Invisible clickable area behind the emoji
+                        const clickArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        clickArea.setAttribute('x', badgeX);
+                        clickArea.setAttribute('y', badgeY);
+                        clickArea.setAttribute('width', badgeWidth);
+                        clickArea.setAttribute('height', badgeHeight);
+                        clickArea.setAttribute('fill', 'transparent');
+                        clickArea.style.cursor = 'pointer';
+                        badgeGroup.appendChild(clickArea);
+
+                        // Badge text (just emoji, no visible background or count)
                         const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         badgeText.setAttribute('x', badgeX + badgeWidth / 2);
                         badgeText.setAttribute('y', badgeY + 12);  // 2px lower for better visual alignment
                         badgeText.setAttribute('fill', '#2196f3');  // Blue color for link
                         badgeText.setAttribute('font-size', '12');  // Slightly larger since no background
                         badgeText.setAttribute('text-anchor', 'middle');
+                        badgeText.setAttribute('pointer-events', 'none');  // Let clicks pass through to clickArea
                         badgeText.setAttribute('filter', 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))');
-                        badgeText.style.cursor = 'pointer';
                         badgeText.textContent = '🔗';
                         badgeGroup.appendChild(badgeText);
 
@@ -5526,7 +5536,7 @@
                                 this.openLink(task.links[0]);
                             } else {
                                 // Multiple links - show dropdown menu at badge location
-                                const rect = badgeText.getBoundingClientRect();
+                                const rect = clickArea.getBoundingClientRect();
                                 this.showLinksDropdown(task.id, rect.left, rect.bottom);
                             }
                         };
