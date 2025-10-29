@@ -442,6 +442,50 @@
             filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
         }
 
+        /* Off-screen indicators for working tasks */
+        .offscreen-indicators {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .offscreen-indicator {
+            position: absolute;
+            background: rgba(255, 213, 79, 0.85);
+            border: 2px solid rgba(255, 160, 0, 0.7);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+            transition: all 0.2s;
+            backdrop-filter: blur(2px);
+        }
+
+        .offscreen-indicator:hover {
+            background: rgba(255, 193, 7, 0.95);
+            filter: brightness(1.1);
+        }
+
+        .offscreen-indicator.home {
+            background: rgba(33, 150, 243, 0.85);
+            border-color: rgba(25, 118, 210, 0.7);
+        }
+
+        .offscreen-indicator.home:hover {
+            background: rgba(33, 150, 243, 0.95);
+            filter: brightness(1.1);
+        }
+
         .link {
             stroke: #90a4ae;
             stroke-width: 2;
@@ -1150,6 +1194,9 @@
             <g id="links"></g>
             <g id="nodes"></g>
         </svg>
+
+        <!-- Off-screen indicators for working tasks and homes -->
+        <div class="offscreen-indicators" id="offscreen-indicators"></div>
     </div>
 
     <div id="import-modal" class="modal">
@@ -1364,7 +1411,21 @@
             workingTasksByRoot: {},  // { [rootTaskId]: workingTaskId } - one working task per project/root
 
             init() {
+                const data = localStorage.getItem('taskTree');
+                const parsed = data ? JSON.parse(data) : null;
+                const hasStoredViewBox = parsed && parsed.viewBoxX !== undefined && parsed.viewBoxY !== undefined;
+
                 this.loadFromStorage();
+
+                // Center viewBox on tasks ONLY if no saved viewBox position exists
+                // (for first-time users or migrating from old version)
+                if (!hasStoredViewBox && this.tasks.length > 0) {
+                    const centerX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
+                    const centerY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
+                    this.viewBox.x = centerX - this.viewBox.width / 2;
+                    this.viewBox.y = centerY - this.viewBox.height / 2;
+                }
+
                 this.setupEventListeners();
                 this.updateShortcutsHelp();
                 this.updateStatusBar();
@@ -3615,11 +3676,11 @@
                         this.isBoxSelecting = true;
                         e.preventDefault();
                     } else {
-                        // Pan canvas
+                        // Pan canvas - use screen coordinates (stable, unlike SVG coords which change with viewBox)
                         this.dragMode = 'canvas';
+                        this.dragStart = { x: e.clientX, y: e.clientY };
                         const pt = this.getSVGPoint(e);
-                        this.dragStart = { x: pt.x, y: pt.y };
-                        this.dragStartOriginal = { x: pt.x, y: pt.y }; // Track original for click detection
+                        this.dragStartOriginal = { x: pt.x, y: pt.y }; // Track original for click detection (SVG coords)
                         document.getElementById('canvas-container').classList.add('dragging');
                         e.preventDefault();
                     }
@@ -3839,13 +3900,25 @@
                     this.tempLine.setAttribute('x1', pt.x);
                     this.tempLine.setAttribute('y1', pt.y);
                 } else if (this.dragMode === 'canvas') {
-                    const dx = pt.x - this.dragStart.x;
-                    const dy = pt.y - this.dragStart.y;
-                    this.tasks.forEach(task => {
-                        task.x += dx;
-                        task.y += dy;
-                    });
-                    this.dragStart = { x: pt.x, y: pt.y };
+                    // Calculate delta in screen coordinates (stable)
+                    const screenDx = e.clientX - this.dragStart.x;
+                    const screenDy = e.clientY - this.dragStart.y;
+
+                    // Convert screen pixels to SVG units for viewBox movement
+                    // Account for zoom: when zoomed in, panning is slower (more precise)
+                    // when zoomed out, panning is faster (cover more ground)
+                    const svg = document.getElementById('canvas');
+                    const actualViewBoxWidth = this.viewBox.width / this.zoomLevel; // Current rendered viewBox size
+                    const scale = actualViewBoxWidth / svg.clientWidth; // SVG units per screen pixel
+                    const svgDx = screenDx * scale;
+                    const svgDy = screenDy * scale;
+
+                    // Move viewBox (opposite direction: drag right = look left)
+                    this.viewBox.x -= svgDx;
+                    this.viewBox.y -= svgDy;
+
+                    // Update dragStart for next frame (screen coords)
+                    this.dragStart = { x: e.clientX, y: e.clientY };
                     this.render();
                 }
             },
@@ -5717,6 +5790,139 @@
 
                     nodesGroup.appendChild(g);
                 }
+
+                // Render off-screen indicators for working tasks
+                this.renderOffscreenIndicators();
+            },
+
+            renderOffscreenIndicators() {
+                // Show arrows on screen edges pointing to off-screen targets (working tasks and homes)
+                const container = document.getElementById('offscreen-indicators');
+                if (!container) return;
+
+                // Clear existing indicators
+                container.innerHTML = '';
+
+                // Calculate visible viewport bounds in SVG coordinates
+                const svg = document.getElementById('canvas');
+                const actualViewBoxWidth = this.viewBox.width / this.zoomLevel;
+                const actualViewBoxHeight = this.viewBox.height / this.zoomLevel;
+                const viewportLeft = this.viewBox.x - (actualViewBoxWidth - this.viewBox.width) / 2;
+                const viewportRight = viewportLeft + actualViewBoxWidth;
+                const viewportTop = this.viewBox.y - (actualViewBoxHeight - this.viewBox.height) / 2;
+                const viewportBottom = viewportTop + actualViewBoxHeight;
+                const viewportCenterX = (viewportLeft + viewportRight) / 2;
+                const viewportCenterY = (viewportTop + viewportBottom) / 2;
+
+                // Get all working tasks
+                const workingTasks = this.tasks.filter(t => t.currentlyWorking && !t.hidden);
+
+                // Find off-screen working tasks
+                const offscreenTasks = workingTasks.filter(task => {
+                    return task.x < viewportLeft || task.x > viewportRight ||
+                           task.y < viewportTop || task.y > viewportBottom;
+                });
+
+                // Find off-screen homes
+                const offscreenHomes = this.homes.filter(home => {
+                    return home.centerX < viewportLeft || home.centerX > viewportRight ||
+                           home.centerY < viewportTop || home.centerY > viewportBottom;
+                });
+
+                // Use canvas-container dimensions (not window, to avoid overlapping buttons)
+                const canvasContainer = document.getElementById('canvas-container');
+                const screenWidth = canvasContainer.clientWidth;
+                const screenHeight = canvasContainer.clientHeight;
+                const margin = 20; // Pixels from edge
+                const topMargin = 75; // Extra margin from top to avoid header overlap (includes button text + extra clearance)
+
+                // Render indicators for each off-screen working task
+                offscreenTasks.forEach(task => {
+                    this.createDirectionalIndicator({
+                        container,
+                        targetX: task.x,
+                        targetY: task.y,
+                        viewportCenterX,
+                        viewportCenterY,
+                        screenWidth,
+                        screenHeight,
+                        margin,
+                        topMargin,
+                        type: 'task',
+                        title: task.title,
+                        onClick: () => this.jumpToWorkingTask(task.id)
+                    });
+                });
+
+                // Render indicators for each off-screen home
+                offscreenHomes.forEach(home => {
+                    this.createDirectionalIndicator({
+                        container,
+                        targetX: home.centerX,
+                        targetY: home.centerY,
+                        viewportCenterX,
+                        viewportCenterY,
+                        screenWidth,
+                        screenHeight,
+                        margin,
+                        topMargin,
+                        type: 'home',
+                        title: home.name,
+                        onClick: () => this.jumpToHome(home.id)
+                    });
+                });
+            },
+
+            createDirectionalIndicator({ container, targetX, targetY, viewportCenterX, viewportCenterY, screenWidth, screenHeight, margin, topMargin, type, title, onClick }) {
+                // Calculate angle from viewport center to target
+                const dx = targetX - viewportCenterX;
+                const dy = targetY - viewportCenterY;
+                const angle = Math.atan2(dy, dx); // Radians
+
+                // Screen center
+                const screenCenterX = screenWidth / 2;
+                const screenCenterY = screenHeight / 2;
+
+                // Find intersection with screen rectangle
+                // Ray from center: (screenCenterX + t*cos(angle), screenCenterY + t*sin(angle))
+                const cosAngle = Math.cos(angle);
+                const sinAngle = Math.sin(angle);
+
+                // Calculate t for each edge intersection (use topMargin for top edge to avoid header)
+                const tRight = cosAngle > 0 ? (screenWidth - margin - screenCenterX) / cosAngle : Infinity;
+                const tLeft = cosAngle < 0 ? (margin - screenCenterX) / cosAngle : Infinity;
+                const tBottom = sinAngle > 0 ? (screenHeight - margin - screenCenterY) / sinAngle : Infinity;
+                const tTop = sinAngle < 0 ? (topMargin - screenCenterY) / sinAngle : Infinity;
+
+                // Find minimum positive t (closest intersection)
+                const t = Math.min(tRight, tLeft, tBottom, tTop);
+
+                // Calculate intersection point
+                const edgeX = screenCenterX + t * cosAngle;
+                const edgeY = screenCenterY + t * sinAngle;
+
+                // Create indicator
+                const indicator = document.createElement('div');
+                indicator.className = 'offscreen-indicator' + (type === 'home' ? ' home' : '');
+                indicator.style.left = `${edgeX}px`;
+                indicator.style.top = `${edgeY}px`;
+
+                // Convert radians to degrees
+                const rotation = angle * (180 / Math.PI);
+
+                // For homes: add 90 degrees so the roof points in the direction (not the side)
+                const finalRotation = type === 'home' ? rotation + 90 : rotation;
+
+                // Rotate arrows and homes to point toward target
+                indicator.style.transform = `translate(-50%, -50%) rotate(${finalRotation}deg)`;
+
+                // Use different emojis: arrow for tasks, house for homes
+                indicator.innerHTML = type === 'home' ? '🏠' : '➤';
+
+                indicator.title = title;
+                indicator.onclick = onClick;
+
+                container.appendChild(indicator);
             },
 
             // Helper: Calculate task dimensions with multiline support
@@ -6188,6 +6394,8 @@
                         // View state
                         darkMode: this.darkMode,
                         zoomLevel: this.zoomLevel,
+                        viewBoxX: this.viewBox.x,
+                        viewBoxY: this.viewBox.y,
                         // Homes - named bookmarks
                         homes: this.homes,
                         homeIdCounter: this.homeIdCounter,
@@ -6225,6 +6433,8 @@
                                 workingTasksByRoot: this.workingTasksByRoot,
                                 darkMode: this.darkMode,
                                 zoomLevel: this.zoomLevel,
+                                viewBoxX: this.viewBox.x,
+                                viewBoxY: this.viewBox.y,
                                 homes: this.homes,
                                 homeIdCounter: this.homeIdCounter,
                                 textLengthThreshold: this.textLengthThreshold,
@@ -6266,6 +6476,11 @@
                     // View state
                     this.darkMode = parsed.darkMode || false;
                     this.zoomLevel = parsed.zoomLevel || 1;
+                    // Restore viewBox position if saved
+                    if (parsed.viewBoxX !== undefined && parsed.viewBoxY !== undefined) {
+                        this.viewBox.x = parsed.viewBoxX;
+                        this.viewBox.y = parsed.viewBoxY;
+                    }
                     // Homes - load and migrate from old origin system
                     this.homes = parsed.homes || [];
                     this.homeIdCounter = parsed.homeIdCounter || 1;
@@ -6349,13 +6564,9 @@
                     return false;
                 }
 
-                // Calculate center of current view
-                const centerX = this.tasks.length > 0
-                    ? this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length
-                    : this.viewBox.width / 2;
-                const centerY = this.tasks.length > 0
-                    ? this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length
-                    : this.viewBox.height / 2;
+                // Calculate center of current viewport (where user is currently looking)
+                const centerX = this.viewBox.x + this.viewBox.width / 2;
+                const centerY = this.viewBox.y + this.viewBox.height / 2;
 
                 // Create new home
                 const newHome = {
@@ -6396,26 +6607,11 @@
                     return;
                 }
 
-                console.log(`\n[jumpToHome] === HOME JUMP CALCULATION ===`);
-                console.log(`  Home: "${home.name}"`);
-                console.log(`  Home saved centerX/Y: (${home.centerX}, ${home.centerY})`);
-                console.log(`  Home saved zoom: ${home.zoomLevel}`);
-                console.log(`  Current viewBox: x=${this.viewBox.x}, y=${this.viewBox.y}, w=${this.viewBox.width}, h=${this.viewBox.height}`);
-                console.log(`  Current zoom: ${this.zoomLevel}`);
-                console.log(`  Current viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
-
-                // Calculate current task center
-                const currentTaskCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
-                const currentTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
-                console.log(`  Current TASK center: (${currentTaskCenterX}, ${currentTaskCenterY})`);
-
-                // Simple approach: Center viewport on the saved home coordinates
-                // This shows the same area that was visible when home was saved
+                // Calculate absolute viewBox position to center on saved home coordinates
+                // viewBox.x + viewBox.width/2 = home.centerX
+                // Therefore: viewBox.x = home.centerX - viewBox.width/2
                 const targetViewBoxX = home.centerX - this.viewBox.width / 2;
                 const targetViewBoxY = home.centerY - this.viewBox.height / 2;
-
-                console.log(`  Target viewBox (absolute): x=${targetViewBoxX}, y=${targetViewBoxY}`);
-                console.log(`  Target zoom: ${home.zoomLevel}`);
 
                 if (animate) {
                     // Cinematic 3-phase animation: zoom out → pan → zoom in
@@ -6426,12 +6622,15 @@
                     const endZoom = home.zoomLevel;
                     const overviewZoom = Math.min(startZoom, endZoom) * 0.5; // Zoom out to 50% of minimum
 
+                    // Store starting viewBox position for smooth pan interpolation
+                    const startViewBoxX = this.viewBox.x;
+                    const startViewBoxY = this.viewBox.y;
+
                     const totalDuration = 1300; // ms
                     const zoomOutDuration = 300;
                     const panDuration = 500;
                     const zoomInDuration = 500;
                     const startTime = performance.now();
-                    let panTriggered = false;
 
                     // Animation phases
                     const animatePhases = (currentTime) => {
@@ -6447,20 +6646,14 @@
                             requestAnimationFrame(animatePhases);
 
                         } else if (elapsed < zoomOutDuration + panDuration) {
-                            // Phase 2: Pan while zoomed out (300-800ms)
-                            if (!panTriggered) {
-                                panTriggered = true;
-                                // SET viewBox to target position (don't add, to avoid accumulation!)
-                                console.log(`[jumpToHome] APPLYING PAN at zoom ${this.zoomLevel}`);
-                                console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
-                                this.viewBox.x = targetViewBoxX;
-                                this.viewBox.y = targetViewBoxY;
-                                console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
-                                console.log(`  New viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
-                                const newTaskCenterX = this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length;
-                                const newTaskCenterY = this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length;
-                                console.log(`  Task center (should be unchanged): (${newTaskCenterX}, ${newTaskCenterY})`);
-                            }
+                            // Phase 2: Smoothly pan while zoomed out (300-800ms)
+                            const panProgress = (elapsed - zoomOutDuration) / panDuration;
+                            const panEased = 1 - Math.pow(1 - panProgress, 3); // ease-out
+
+                            // Progressively interpolate viewBox position
+                            this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
+                            this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
+
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
                             this.updateZoomDisplay();
@@ -6516,8 +6709,6 @@
                 // If taskId provided, jump to that specific task
                 // Otherwise, use lastWorkingTaskId (last selected/cycled), or first working task
 
-                console.log(`[jumpToWorkingTask] Called with taskId=${taskId}, lastWorkingTaskId=${this.lastWorkingTaskId}`);
-
                 let workingTask = null;
                 if (taskId) {
                     // Specific task requested (from dropdown)
@@ -6525,12 +6716,10 @@
                     // Update last working task - this becomes the new default for J+J
                     if (workingTask) {
                         this.lastWorkingTaskId = taskId;
-                        console.log(`[jumpToWorkingTask] Updated lastWorkingTaskId to ${taskId} (${workingTask.title})`);
                     }
                 } else if (this.lastWorkingTaskId) {
                     // Use last selected/cycled working task
                     workingTask = this.tasks.find(t => t.id === this.lastWorkingTaskId && t.currentlyWorking);
-                    console.log(`[jumpToWorkingTask] Using lastWorkingTaskId ${this.lastWorkingTaskId}, found: ${workingTask ? workingTask.title : 'NOT FOUND'}`);
                 }
 
                 // Fallback: If last working task no longer working, find any working task
@@ -6553,32 +6742,13 @@
                     workingTask.hidden = false;
                 }
 
-                // To center the working task in the viewport, we need to position the viewBox
-                // so that the task is at the center of the visible area (in SVG coordinate space)
-                // The center of the viewBox is at: (viewBox.x + viewBox.width/2, viewBox.y + viewBox.height/2)
-                // We want: viewBox.x + viewBox.width/2 = workingTask.x
+                // Calculate absolute viewBox position to center on working task
+                // viewBox.x + viewBox.width/2 = workingTask.x
                 // Therefore: viewBox.x = workingTask.x - viewBox.width/2
-
-                console.log(`\n[jumpToWorkingTask] === JUMP CALCULATION ===`);
-                console.log(`  Target task: "${workingTask.title}" at (${workingTask.x}, ${workingTask.y})`);
-                console.log(`  Current viewBox: x=${this.viewBox.x}, y=${this.viewBox.y}, w=${this.viewBox.width}, h=${this.viewBox.height}`);
-                console.log(`  Current zoom: ${this.zoomLevel}`);
-                console.log(`  Current viewBox CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
-
-                // Calculate target viewBox position to center on working task
                 const targetViewBoxX = workingTask.x - this.viewBox.width / 2;
                 const targetViewBoxY = workingTask.y - this.viewBox.height / 2;
 
-                // Calculate how much to shift the viewBox
-                const dx = targetViewBoxX - this.viewBox.x;
-                const dy = targetViewBoxY - this.viewBox.y;
-
-                console.log(`  Target viewBox: x=${targetViewBoxX}, y=${targetViewBoxY}`);
-                console.log(`  Delta: dx=${dx}, dy=${dy}`);
-                console.log(`  After move, viewBox CENTER will be: (${targetViewBoxX + this.viewBox.width/2}, ${targetViewBoxY + this.viewBox.height/2})`);
-
                 const targetZoom = 1.2; // Focused view
-                console.log(`  Target zoom: ${targetZoom}`);
 
                 if (animate) {
                     // Cinematic 3-phase animation: zoom out → pan → zoom in
@@ -6589,12 +6759,15 @@
                     const endZoom = targetZoom;
                     const overviewZoom = Math.min(startZoom, endZoom) * 0.5; // Zoom out to 50% of minimum
 
+                    // Store starting viewBox position for smooth pan interpolation
+                    const startViewBoxX = this.viewBox.x;
+                    const startViewBoxY = this.viewBox.y;
+
                     const totalDuration = 1300; // ms
                     const zoomOutDuration = 300;
                     const panDuration = 500;
                     const zoomInDuration = 500;
                     const startTime = performance.now();
-                    let panTriggered = false;
 
                     // Animation phases
                     const animatePhases = (currentTime) => {
@@ -6610,17 +6783,14 @@
                             requestAnimationFrame(animatePhases);
 
                         } else if (elapsed < zoomOutDuration + panDuration) {
-                            // Phase 2: Pan while zoomed out (300-800ms)
-                            if (!panTriggered) {
-                                panTriggered = true;
-                                // Move the viewBox to center on working task (don't move tasks!)
-                                console.log(`[jumpToWorkingTask] APPLYING PAN at zoom ${this.zoomLevel}`);
-                                console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
-                                this.viewBox.x += dx;
-                                this.viewBox.y += dy;
-                                console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y})`);
-                                console.log(`  New CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
-                            }
+                            // Phase 2: Smoothly pan while zoomed out (300-800ms)
+                            const panProgress = (elapsed - zoomOutDuration) / panDuration;
+                            const panEased = 1 - Math.pow(1 - panProgress, 3); // ease-out
+
+                            // Progressively interpolate viewBox position
+                            this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
+                            this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
+
                             // Stay at overview zoom during pan
                             this.zoomLevel = overviewZoom;
                             this.updateZoomDisplay();
@@ -6655,16 +6825,13 @@
 
                 } else {
                     // Instant jump (no animation)
-                    // Move the viewBox to center on working task (don't move tasks!)
-                    console.log(`[jumpToWorkingTask] INSTANT JUMP (no animation)`);
-                    console.log(`  Before: viewBox = (${this.viewBox.x}, ${this.viewBox.y}), zoom = ${this.zoomLevel}`);
-                    this.viewBox.x += dx;
-                    this.viewBox.y += dy;
-                    this.zoomLevel = targetZoom;
-                    console.log(`  After: viewBox = (${this.viewBox.x}, ${this.viewBox.y}), zoom = ${this.zoomLevel}`);
-                    console.log(`  Final CENTER: (${this.viewBox.x + this.viewBox.width/2}, ${this.viewBox.y + this.viewBox.height/2})`);
+                    // SET viewBox to target position (don't add, to avoid accumulation!)
+                    this.viewBox.x = targetViewBoxX;
+                    this.viewBox.y = targetViewBoxY;
 
+                    this.zoomLevel = targetZoom;
                     this.updateZoomDisplay();
+
                     this.saveToStorage();
                     this.render();
 
@@ -6846,13 +7013,9 @@
                     return;
                 }
 
-                // Calculate center of current view
-                const centerX = this.tasks.length > 0
-                    ? this.tasks.reduce((sum, t) => sum + t.x, 0) / this.tasks.length
-                    : this.viewBox.width / 2;
-                const centerY = this.tasks.length > 0
-                    ? this.tasks.reduce((sum, t) => sum + t.y, 0) / this.tasks.length
-                    : this.viewBox.height / 2;
+                // Calculate center of current viewport (where user is currently looking)
+                const centerX = this.viewBox.x + this.viewBox.width / 2;
+                const centerY = this.viewBox.y + this.viewBox.height / 2;
 
                 home.centerX = centerX;
                 home.centerY = centerY;
