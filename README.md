@@ -628,9 +628,11 @@ Stored in localStorage as:
 **Sharing with Peers**:
 1. Copy subtree (JSON automatically in system clipboard)
 2. Paste into Slack, email, or text file
-3. Colleague copies JSON
-4. Colleague opens Task Tree → Right-click empty space → "Paste Subtree Here"
+3. Colleague copies JSON text
+4. Colleague opens Task Tree → Right-click empty space → "📋 Paste from Clipboard"
 5. Subtree appears perfectly!
+
+**Note**: The "Paste from Clipboard" option reads JSON directly from your system clipboard and validates it. If the JSON is invalid or not in subtree format, you'll see a helpful error message. The regular "Paste Subtree Here" option only appears if you've copied something in the current session.
 
 #### Clipboard Format
 
@@ -669,6 +671,9 @@ Stored in localStorage as:
 - **Undo/Redo Support**: Copy/paste operations fully undoable
 - **Multiple Paste**: Paste same subtree multiple times with unique IDs
 - **Working State Protection**: Never copies `currentlyWorking: true` (prevents corruption)
+- **Foreign JSON Import**: "Paste from Clipboard" option reads and validates JSON from system clipboard
+- **Smart Validation**: Checks format, validates task structure, provides helpful error messages
+- **Graceful Fallback**: Shows specific errors for invalid JSON, missing fields, or wrong format
 
 #### Use Cases
 
@@ -6479,3 +6484,66 @@ parent.currentlyWorking = true;
 **Files Modified**: task-tree.html, README.md
 **Line Count**: ~7400 lines in task-tree.html (+220 lines for copy/paste system)
 **Implementation Time**: ~3 hours
+
+### Enhancement: Foreign JSON Import via Clipboard
+
+**Date**: 2025-10-29 (same session as copy/paste feature)
+
+#### 📋 Enhancement: Paste from Clipboard
+
+**Problem**: The initial copy/paste feature only worked within the same session. If someone sent you subtree JSON via Slack/email, you had to manually import it via the Import JSON modal.
+
+**Solution**: Added "Paste from Clipboard" option that reads JSON directly from system clipboard.
+
+**New Function**:
+- `pasteFromClipboard(parentId, x, y)` - Line ~3177: Async function that:
+  1. Checks if Clipboard API is available
+  2. Reads clipboard text using `navigator.clipboard.readText()`
+  3. Parses as JSON with try/catch
+  4. Validates subtree format (version, subtree array, rootId, metadata)
+  5. Validates each task has required fields (id, title, x, y)
+  6. Checks rootId exists in subtree
+  7. Temporarily stores in `copiedSubtree`
+  8. Calls `pasteSubtree()` to insert
+  9. Shows "Imported and pasted N nodes from clipboard" toast
+
+**UI Integration**:
+- **Empty space menu**: "📋 Paste from Clipboard" (always shown)
+- **Node menu**: "📋 Paste from Clipboard as Child" (always shown)
+- **Difference from regular paste**: Regular paste only appears if `copiedSubtree` exists from current session
+
+**Validation & Error Handling**:
+```javascript
+// Error messages shown:
+- "Clipboard API not available in this browser"
+- "Clipboard is empty"
+- "Clipboard does not contain valid JSON"
+- "Clipboard JSON is not a valid subtree format"
+- "Invalid task format in subtree"
+- "Root task not found in subtree"
+```
+
+**Workflow**:
+```
+User A (sender):
+1. Right-click task → "Copy Subtree"
+2. JSON automatically in system clipboard
+3. Paste JSON into Slack/email
+
+User B (receiver):
+4. Copy JSON from message (Ctrl+C)
+5. Open Task Tree
+6. Right-click empty space → "Paste from Clipboard"
+7. Subtree appears! ✨
+```
+
+**Benefits**:
+- ✅ No modal dialogs needed
+- ✅ Works exactly like internal paste (same positioning logic)
+- ✅ Validates before attempting paste
+- ✅ Helpful error messages guide user
+- ✅ Seamless peer-to-peer sharing
+
+**Version**: 1.17.1 (Foreign JSON Import Enhancement)
+**Files Modified**: task-tree.html, README.md
+**Line Count**: ~7470 lines in task-tree.html (+70 lines for clipboard import)

@@ -3174,6 +3174,67 @@
                 this.showToast(`✓ Pasted ${newTasks.length} ${nodeWord}`, 'success', 2000);
             },
 
+            async pasteFromClipboard(parentId = null, x = null, y = null) {
+                // Read clipboard and paste if it contains valid subtree JSON
+                try {
+                    // Check if Clipboard API is available
+                    if (!navigator.clipboard || !navigator.clipboard.readText) {
+                        this.showToast('❌ Clipboard API not available in this browser', 'error', 3000);
+                        return;
+                    }
+
+                    // Read clipboard text
+                    const clipboardText = await navigator.clipboard.readText();
+
+                    if (!clipboardText || clipboardText.trim() === '') {
+                        this.showToast('❌ Clipboard is empty', 'error', 2000);
+                        return;
+                    }
+
+                    // Try to parse as JSON
+                    let clipboardData;
+                    try {
+                        clipboardData = JSON.parse(clipboardText);
+                    } catch (parseError) {
+                        this.showToast('❌ Clipboard does not contain valid JSON', 'error', 3000);
+                        return;
+                    }
+
+                    // Validate subtree format
+                    if (!clipboardData.version || !clipboardData.subtree || !Array.isArray(clipboardData.subtree) || !clipboardData.rootId || !clipboardData.metadata) {
+                        this.showToast('❌ Clipboard JSON is not a valid subtree format', 'error', 3000);
+                        return;
+                    }
+
+                    // Validate each task has required fields
+                    for (const task of clipboardData.subtree) {
+                        if (typeof task.id !== 'number' || !task.title || typeof task.x !== 'number' || typeof task.y !== 'number') {
+                            this.showToast('❌ Invalid task format in subtree', 'error', 3000);
+                            return;
+                        }
+                    }
+
+                    // Check rootId exists in subtree
+                    if (!clipboardData.subtree.find(t => t.id === clipboardData.rootId)) {
+                        this.showToast('❌ Root task not found in subtree', 'error', 3000);
+                        return;
+                    }
+
+                    // Valid subtree! Store temporarily and paste
+                    this.copiedSubtree = clipboardData;
+                    this.pasteSubtree(parentId, x, y);
+
+                    // Show success message mentioning import
+                    const nodeCount = clipboardData.metadata.nodeCount || clipboardData.subtree.length;
+                    const nodeWord = nodeCount === 1 ? 'node' : 'nodes';
+                    this.showToast(`📋 Imported and pasted ${nodeCount} ${nodeWord} from clipboard`, 'success', 3000);
+
+                } catch (error) {
+                    console.error('Paste from clipboard error:', error);
+                    this.showToast(`❌ Failed to read clipboard: ${error.message}`, 'error', 3000);
+                }
+            },
+
             exportData() {
                 const json = localStorage.getItem('taskTree') || '{}';
                 const blob = new Blob([json], { type: 'application/json' });
@@ -4736,6 +4797,9 @@
                         buttons.push({ label: pasteLabel, action: () => this.pasteSubtree(taskId) });
                     }
 
+                    // Always show "Paste from Clipboard as Child" option (reads foreign JSON)
+                    buttons.push({ label: '📋 Paste from Clipboard as Child', action: () => this.pasteFromClipboard(taskId) });
+
                     // Link management options
                     if (!task.links) task.links = [];
 
@@ -4950,6 +5014,13 @@
                         action: () => this.pasteSubtree(null, pt.x, pt.y)
                     });
                 }
+
+                // Always show "Paste from Clipboard" option (reads foreign JSON)
+                const pt = this.getSVGPoint(e);
+                buttons.push({
+                    label: '📋 Paste from Clipboard',
+                    action: () => this.pasteFromClipboard(null, pt.x, pt.y)
+                });
 
                 buttons.push({ label: '🔍 Zoom to Fit', action: () => this.zoomToFit() });
                 buttons.push({ label: '🎯 Mark Origin', action: () => this.markOrigin() });
