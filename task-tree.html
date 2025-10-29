@@ -5501,8 +5501,10 @@
                         clickArea.setAttribute('y', badgeY);
                         clickArea.setAttribute('width', badgeWidth);
                         clickArea.setAttribute('height', badgeHeight);
-                        clickArea.setAttribute('fill', 'transparent');
+                        clickArea.setAttribute('fill', 'none');
+                        clickArea.setAttribute('opacity', '0');
                         clickArea.style.cursor = 'pointer';
+                        clickArea.style.pointerEvents = 'all';
                         badgeGroup.appendChild(clickArea);
 
                         // Badge text (just emoji, no visible background or count)
