@@ -486,13 +486,9 @@
             filter: brightness(1.1);
         }
 
-        /* Tooltip for indicators */
-        .offscreen-indicator::before {
-            content: attr(data-tooltip);
+        /* Tooltip for indicators - separate element positioned via JS */
+        .indicator-tooltip {
             position: absolute;
-            bottom: calc(100% + 8px);
-            left: 50%;
-            transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.9);
             color: white;
             padding: 6px 12px;
@@ -502,13 +498,13 @@
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.2s;
-            z-index: 1000;
+            z-index: 1001;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-weight: 500;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
 
-        .offscreen-indicator:hover::before {
+        .indicator-tooltip.visible {
             opacity: 1;
         }
 
@@ -5494,33 +5490,21 @@
                         badgeGroup.classList.add('link-badge');
 
                         // Position badge at top-right corner INSIDE the node bounds
-                        const badgeWidth = task.links.length > 1 ? 28 : 20;
+                        const badgeWidth = 20;  // Fixed width for just the emoji
                         const badgeHeight = 14;
                         const badgeX = rectWidth / 2 - badgeWidth - 3;  // 3px margin from right edge
                         const badgeY = -rectHeight / 2 + 3;              // 3px margin from top edge
 
-                        // Badge background (clickable)
-                        const badgeRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                        badgeRect.setAttribute('x', badgeX);
-                        badgeRect.setAttribute('y', badgeY);
-                        badgeRect.setAttribute('width', badgeWidth);
-                        badgeRect.setAttribute('height', badgeHeight);
-                        badgeRect.setAttribute('rx', 3);
-                        badgeRect.setAttribute('fill', '#2196f3');
-                        badgeRect.setAttribute('filter', 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))');
-                        badgeRect.style.cursor = 'pointer';
-                        badgeGroup.appendChild(badgeRect);
-
-                        // Badge text (emoji + count)
+                        // Badge text (just emoji, no background or count)
                         const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         badgeText.setAttribute('x', badgeX + badgeWidth / 2);
                         badgeText.setAttribute('y', badgeY + 10);
-                        badgeText.setAttribute('fill', 'white');
-                        badgeText.setAttribute('font-size', '10');
-                        badgeText.setAttribute('font-weight', '600');
+                        badgeText.setAttribute('fill', '#2196f3');  // Blue color for link
+                        badgeText.setAttribute('font-size', '12');  // Slightly larger since no background
                         badgeText.setAttribute('text-anchor', 'middle');
-                        badgeText.setAttribute('pointer-events', 'none');  // Click passes through to rect
-                        badgeText.textContent = task.links.length > 1 ? `🔗 ${task.links.length}` : '🔗';
+                        badgeText.setAttribute('filter', 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))');
+                        badgeText.style.cursor = 'pointer';
+                        badgeText.textContent = '🔗';
                         badgeGroup.appendChild(badgeText);
 
                         // Tooltip showing all links
@@ -5542,7 +5526,7 @@
                                 this.openLink(task.links[0]);
                             } else {
                                 // Multiple links - show dropdown menu at badge location
-                                const rect = badgeRect.getBoundingClientRect();
+                                const rect = badgeText.getBoundingClientRect();
                                 this.showLinksDropdown(task.id, rect.left, rect.bottom);
                             }
                         };
@@ -5945,13 +5929,54 @@
                 // Use different emojis: arrow for tasks, house for homes
                 indicator.innerHTML = type === 'home' ? '🏠' : '➤';
 
-                // Add tooltip data attribute
+                // Create separate tooltip element (won't rotate with indicator)
+                const tooltip = document.createElement('div');
+                tooltip.className = 'indicator-tooltip';
                 const prefix = type === 'home' ? '🏠 Home: ' : '🎯 Task: ';
-                indicator.setAttribute('data-tooltip', prefix + title);
+                tooltip.textContent = prefix + title;
+
+                // Position tooltip on opposite side (visible side) based on angle
+                // Normalize angle to 0-360
+                const normalizedAngle = ((rotation % 360) + 360) % 360;
+
+                // Determine best position for tooltip (opposite to where indicator is pointing inward)
+                let tooltipX = edgeX;
+                let tooltipY = edgeY;
+
+                if (normalizedAngle >= 315 || normalizedAngle < 45) {
+                    // Pointing right, tooltip on left
+                    tooltipX = edgeX - 50;
+                    tooltipY = edgeY;
+                    tooltip.style.transform = 'translate(-100%, -50%)';
+                } else if (normalizedAngle >= 45 && normalizedAngle < 135) {
+                    // Pointing down, tooltip on top
+                    tooltipX = edgeX;
+                    tooltipY = edgeY - 50;
+                    tooltip.style.transform = 'translate(-50%, -100%)';
+                } else if (normalizedAngle >= 135 && normalizedAngle < 225) {
+                    // Pointing left, tooltip on right
+                    tooltipX = edgeX + 50;
+                    tooltipY = edgeY;
+                    tooltip.style.transform = 'translate(0%, -50%)';
+                } else {
+                    // Pointing up, tooltip on bottom
+                    tooltipX = edgeX;
+                    tooltipY = edgeY + 50;
+                    tooltip.style.transform = 'translate(-50%, 0%)';
+                }
+
+                tooltip.style.left = `${tooltipX}px`;
+                tooltip.style.top = `${tooltipY}px`;
+
+                // Show/hide tooltip on hover
+                indicator.onmouseenter = () => tooltip.classList.add('visible');
+                indicator.onmouseleave = () => tooltip.classList.remove('visible');
+
                 indicator.title = title; // Fallback for browsers without CSS support
                 indicator.onclick = onClick;
 
                 container.appendChild(indicator);
+                container.appendChild(tooltip);
             },
 
             // Helper: Calculate task dimensions with multiline support
