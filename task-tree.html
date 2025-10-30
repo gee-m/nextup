@@ -6480,12 +6480,8 @@
                 const dy = pt.y - sourceTask.y;
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Convert to degrees
 
-                // Flip arrow 180° so it points in drag direction (away from source)
-                // Cursor is at B, arrow should point A→B direction (away from A)
-                const flippedAngle = angle + 180;
-
                 // Apply rotation (rotate around center of SVG)
-                this.cursorArrow.style.transform = `rotate(${flippedAngle}deg)`;
+                this.cursorArrow.style.transform = `rotate(${angle}deg)`;
                 this.cursorArrow.style.transformOrigin = '12px 12px';
             },
 
