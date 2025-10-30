@@ -6439,9 +6439,9 @@
                 svg.style.width = '24px';
                 svg.style.height = '24px';
 
-                // Create arrowhead path (pointing right by default, rotation will be applied)
+                // Create arrowhead path (pointing LEFT by default, rotation will be applied)
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', 'M2,12 L22,12 M22,12 L15,5 M22,12 L15,19');
+                path.setAttribute('d', 'M22,12 L2,12 M2,12 L9,5 M2,12 L9,19');
                 path.setAttribute('stroke-width', '2');
                 path.setAttribute('stroke-linecap', 'round');
                 path.setAttribute('stroke-linejoin', 'round');
