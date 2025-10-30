@@ -1463,7 +1463,7 @@
 
                 const helpElement = document.getElementById('shortcuts-help');
                 if (helpElement) {
-                    helpElement.textContent = `Double-click: edit | ${shift}+Double-click: hide/show | Right-click: menu | Left-click: select | ${mod}+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | ${mod}+K: attach link | P: priority | J: jump to working | ${shift}+Drag: subtree | Scroll/${mod}+±: zoom | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo | ${mod}+${shift}+Z: redo`;
+                    helpElement.textContent = `Double-click: edit | ${mod}+Dbl-click: create | ${shift}+Double-click: hide/show | ${mod}+Drag: reparent | Right-click: menu | ${mod}+Click: multi-select | Backspace: delete | Middle-click: cycle | ${mod}+K: link | P: priority | J: jump | ${shift}+Drag: subtree | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo`;
                 }
 
                 // Update tooltips with platform-specific text
@@ -1490,7 +1490,10 @@
                         if (element.dataset && element.dataset.id && element.classList?.contains('task-node')) {
                             const taskId = parseInt(element.dataset.id);
 
-                            if (e.shiftKey) {
+                            if (e.ctrlKey || e.metaKey) {
+                                // Ctrl+double click on node: create child task
+                                this.addChildTask(taskId);
+                            } else if (e.shiftKey) {
                                 // Shift+double click: hide/show the node itself within its parent
                                 this.toggleHiddenSelf(taskId);
                             } else {
@@ -1503,6 +1506,14 @@
                             return;
                         }
                         element = element.parentElement;
+                    }
+
+                    // Ctrl+double-click on empty space: create root task at cursor
+                    if (e.ctrlKey || e.metaKey) {
+                        const pt = this.getSVGPoint(e);
+                        this.addRootTaskAtPosition(pt.x, pt.y);
+                        e.preventDefault();
+                        e.stopPropagation();
                     }
                 });
 
@@ -1933,6 +1944,38 @@
                 // Auto-start editing the new task
                 setTimeout(() => this.startEditing(task.id), 50);
                 this.showToast('Child task created', 'success', 2000);
+            },
+
+            addRootTaskAtPosition(x, y) {
+                this.saveSnapshot(`Created root task`);
+
+                const newTask = {
+                    id: this.taskIdCounter++,
+                    title: '',  // Empty - user will edit immediately
+                    x: x,
+                    y: y,
+                    vx: 0,
+                    vy: 0,
+                    mainParent: null,
+                    otherParents: [],
+                    children: [],
+                    dependencies: [],
+                    status: 'pending',
+                    currentlyWorking: false,
+                    hidden: false,
+                    textExpanded: false,
+                    textLocked: false,
+                    links: [],  // Array of URLs attached to this task
+                    priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+                };
+
+                this.tasks.push(newTask);
+                this.saveToStorage();
+                this.render();
+
+                // Auto-start editing the new task
+                setTimeout(() => this.startEditing(newTask.id), 50);
+                this.showToast('Root task created', 'success', 2000);
             },
 
             cycleStatus(taskId) {
@@ -3964,9 +4007,13 @@
 
                     if (e.button === 0) { // Left click
                         if (e.ctrlKey || e.metaKey) {
-                            // Ctrl+click: Don't start drag - let click event handle multi-select
-                            // Don't set dragMode, don't preventDefault (let click fire)
-                            return;
+                            // Prepare for potential reparent drag (will activate on mousemove >5px)
+                            // If no drag occurs, click event will handle multi-select
+                            this.dragMode = 'reparent-pending';
+                            this.selectedNode = taskId;
+                            const pt = this.getSVGPoint(e);
+                            this.dragStart = { x: pt.x, y: pt.y };
+                            this.dragStartOriginal = { x: pt.x, y: pt.y };
                         } else if (e.altKey) {
                             // Start dependency drag
                             this.dragMode = 'dependency';
@@ -4147,6 +4194,32 @@
                     });
 
                     this.render();
+                } else if (this.dragMode === 'reparent-pending' && this.selectedNode !== null) {
+                    // Check if moved >5px to activate reparent drag (vs Ctrl+click for multi-select)
+                    const distance = Math.sqrt(
+                        Math.pow(pt.x - this.dragStartOriginal.x, 2) +
+                        Math.pow(pt.y - this.dragStartOriginal.y, 2)
+                    );
+
+                    if (distance >= 5) {
+                        // Activate reparent drag mode
+                        this.dragMode = 'reparent';
+                        this.createTempLine(e);
+                        // Create custom cursor arrow
+                        this.cursorArrow = this.createCursorArrow();
+                    }
+                } else if (this.dragMode === 'reparent' && this.tempLine) {
+                    // Get source task for cursor arrow rotation
+                    const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
+                    if (sourceTask) {
+                        this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
+                    }
+
+                    // Update line from source to cursor (green line for reparenting)
+                    this.tempLine.setAttribute('x1', sourceTask.x);
+                    this.tempLine.setAttribute('y1', sourceTask.y);
+                    this.tempLine.setAttribute('x2', pt.x);
+                    this.tempLine.setAttribute('y2', pt.y);
                 } else if ((this.dragMode === 'dependency') && this.tempLine) {
                     // Get source task for cursor arrow rotation
                     const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
@@ -4215,6 +4288,22 @@
                         }
                     }
                     this.removeTempLine();
+                } else if (this.dragMode === 'reparent') {
+                    // Complete reparent: Make source a child of target
+                    const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
+                    const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
+                    if (targetNode && this.tempLine) {
+                        const targetId = parseInt(targetNode.dataset.id);
+
+                        // Reparent source to target (source becomes child of target)
+                        if (targetId !== this.selectedNode) {
+                            this.reparentTask({ taskId: this.selectedNode, newParentId: targetId });
+                        }
+                    }
+                    this.removeTempLine();
+                } else if (this.dragMode === 'reparent-pending') {
+                    // Ctrl+click without dragging - don't interfere, let click event handle multi-select
+                    // Don't do anything here, just clear the dragMode
                 } else if (this.dragMode === 'subtree-pending') {
                     // Shift+click without dragging - clear pending mode
                     // Don't do anything here, just clear the dragMode
@@ -5243,6 +5332,8 @@
                         category: '✏️ Editing',
                         items: [
                             { keys: 'Double-click node', description: 'Edit task name' },
+                            { keys: `${modSymbol}+Double-click node`, description: 'Create child task under node' },
+                            { keys: `${modSymbol}+Double-click empty`, description: 'Create root task at cursor' },
                             { keys: 'Backspace', description: 'Delete selected task(s)' },
                             { keys: `${altSymbol}+Click node`, description: 'Delete task (alternative method)' }
                         ]
@@ -6455,16 +6546,17 @@
             // When adding a NEW operation that modifies task data, you MUST call
             // this.saveSnapshot("Description") BEFORE the modification.
             //
-            // CURRENT INTEGRATION POINTS (18 total):
-            // ✅ addChildTask() - line 1112
-            // ✅ cycleStatus() - lines 1184, 1189, 1198 (3 state transitions)
-            // ✅ toggleDone() - lines 1225, 1229 (done ↔ pending, also has flow-state logic)
-            // ✅ toggleHidden() - line 1336
-            // ✅ deleteTask() - line 1377
-            // ✅ finishEditing() - line 1594 (with smart grouping)
-            // ✅ clearAllData() - line 1611
-            // ✅ importData() - line 2109
-            // ✅ Right-click menu creation - line 2759
+            // CURRENT INTEGRATION POINTS (19 total):
+            // ✅ addChildTask() - line 1878
+            // ✅ addRootTaskAtPosition() - line 1949
+            // ✅ cycleStatus() - lines 1981+ (3 state transitions)
+            // ✅ toggleDone() - lines 2050+ (done ↔ pending, also has flow-state logic)
+            // ✅ toggleHidden() - line ~2180
+            // ✅ deleteTask() - line ~2220
+            // ✅ finishEditing() - line ~2430 (with smart grouping)
+            // ✅ clearAllData() - line ~2450
+            // ✅ importData() - line ~2950
+            // ✅ Right-click menu creation - line ~4875
             // ✅ Move subtree - line 2454
             // ✅ Move single task - line 2473
             // ✅ addDependency() - lines 2579, 2596 (add & remove toggle)
