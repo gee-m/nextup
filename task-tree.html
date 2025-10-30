@@ -4215,11 +4215,13 @@
                         this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
                     }
 
-                    // Update line from source to cursor (green line for reparenting)
-                    this.tempLine.setAttribute('x1', sourceTask.x);
-                    this.tempLine.setAttribute('y1', sourceTask.y);
-                    this.tempLine.setAttribute('x2', pt.x);
-                    this.tempLine.setAttribute('y2', pt.y);
+                    // Update line from cursor to source (green line for reparenting)
+                    // Shows target → source (target becomes parent of source)
+                    // Matches final arrow: when A dragged to B, B becomes parent, arrow is B → A
+                    this.tempLine.setAttribute('x1', pt.x);
+                    this.tempLine.setAttribute('y1', pt.y);
+                    this.tempLine.setAttribute('x2', sourceTask.x);
+                    this.tempLine.setAttribute('y2', sourceTask.y);
                 } else if ((this.dragMode === 'dependency') && this.tempLine) {
                     // Get source task for cursor arrow rotation
                     const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
