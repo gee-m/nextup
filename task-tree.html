@@ -3968,16 +3968,7 @@
                     const taskId = parseInt(node.dataset.id);
 
                     if (e.button === 0) { // Left click
-                        if (e.ctrlKey || e.metaKey) {
-                            // Start create-child drag (Ctrl+drag to empty space or reparent to node)
-                            this.dragMode = 'create-child';
-                            this.selectedNode = taskId;
-                            this.dragChildSourceNode = taskId;
-                            const pt = this.getSVGPoint(e);
-                            this.dragStart = { x: pt.x, y: pt.y };
-                            // Create custom cursor arrow
-                            this.cursorArrow = this.createCursorArrow();
-                        } else if (e.altKey) {
+                        if (e.altKey) {
                             // Start dependency drag
                             this.dragMode = 'dependency';
                             this.selectedNode = taskId;
