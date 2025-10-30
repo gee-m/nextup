@@ -4469,18 +4469,22 @@
                 const svg = document.getElementById('canvas');
                 this.tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                 this.tempLine.classList.add('temp-line');
-                
+
                 // Style based on drag mode
                 if (this.dragMode === 'reparent') {
                     // Solid green line for reparenting
                     this.tempLine.style.strokeDasharray = 'none';
                     this.tempLine.style.stroke = '#28a745';
+                    // Add arrowhead at END of line (x2, y2 = cursor position)
+                    this.tempLine.setAttribute('marker-end', 'url(#arrowhead)');
                 } else {
                     // Dashed blue line for dependency
                     this.tempLine.style.strokeDasharray = '5,5';
                     this.tempLine.style.stroke = '#007bff';
+                    // Add arrowhead at END of line
+                    this.tempLine.setAttribute('marker-end', 'url(#arrowhead)');
                 }
-                
+
                 this.tempLine.setAttribute('x1', task.x);
                 this.tempLine.setAttribute('y1', task.y);
                 this.tempLine.setAttribute('x2', task.x);
