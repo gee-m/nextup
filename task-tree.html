@@ -6474,11 +6474,16 @@
                 this.cursorArrow.style.left = `${clientX - 12}px`;
                 this.cursorArrow.style.top = `${clientY - 12}px`;
 
+                // DEBUG: Log positioning
+                console.log(`[CURSOR ARROW] Positioned at clientX=${clientX}, clientY=${clientY}`);
+
                 // Calculate rotation angle from source to cursor
                 const pt = this.getSVGPoint({ clientX, clientY });
                 const dx = pt.x - sourceTask.x;
                 const dy = pt.y - sourceTask.y;
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI); // Convert to degrees
+
+                console.log(`[CURSOR ARROW] Angle=${angle}° (from source ${sourceTask.x},${sourceTask.y} to cursor ${pt.x},${pt.y})`);
 
                 // Apply rotation (rotate around center of SVG)
                 this.cursorArrow.style.transform = `rotate(${angle}deg)`;
