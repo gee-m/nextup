@@ -810,11 +810,6 @@
             transition: transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
         }
 
-        /* Also transition preview node during create-child drag */
-        #canvas.animating-view .preview-node {
-            transition: transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
-        }
-
         /* Hide lines during animation - CSS transitions don't work on SVG line attributes */
         /* This is the standard approach for non-transitionable SVG elements */
         #canvas.animating-view line {
@@ -4152,125 +4147,6 @@
                     });
 
                     this.render();
-                } else if (this.dragMode === 'create-child') {
-                    // Use elementFromPoint to find what's actually under the cursor
-                    // (e.target continues to be the source node during drag)
-                    const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
-                    const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
-
-                    const svg = document.getElementById('canvas');
-                    const linksGroup = document.getElementById('links');
-                    const nodesGroup = document.getElementById('nodes');
-
-                    // Get source task for positioning
-                    const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
-
-                    // Update custom cursor arrow
-                    if (sourceTask) {
-                        this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
-                    }
-
-                    // Check what we're hovering over
-                    const isOverDifferentNode = targetNode && parseInt(targetNode.dataset.id) !== this.selectedNode;
-                    const isOverSourceNode = targetNode && parseInt(targetNode.dataset.id) === this.selectedNode;
-
-                    // ALWAYS show a line from source to cursor
-                    if (!this.tempLine) {
-                        this.tempLine = this.createLine(0, 0, 0, 0, 'link temp');
-                        this.tempLine.setAttribute('stroke-width', '2');
-                        linksGroup.appendChild(this.tempLine);
-                    }
-
-                    if (sourceTask) {
-                        // BOTH cases: show source → cursor (drag direction matches final arrow direction)
-                        this.tempLine.setAttribute('x1', sourceTask.x);
-                        this.tempLine.setAttribute('y1', sourceTask.y);
-                        this.tempLine.setAttribute('x2', pt.x);
-                        this.tempLine.setAttribute('y2', pt.y);
-
-                        // Change color based on mode
-                        if (isOverDifferentNode) {
-                            this.tempLine.setAttribute('stroke', '#4caf50'); // Green for reparent
-                        } else {
-                            this.tempLine.setAttribute('stroke', '#2196f3'); // Blue for new child
-                        }
-                    }
-
-                    // Calculate preview box dimensions (needed for offset calculation)
-                    const textPadding = 20;
-                    const charWidth = 8;
-                    const minWidth = 80;
-                    const rectWidth = Math.max(minWidth, '+ New Task'.length * charWidth + textPadding * 2);
-                    const rectHeight = 40;
-
-                    // Calculate ellipse-based offset (smooth, rectangle-aware)
-                    let offsetX = 40;
-                    let offsetY = 40;
-
-                    if (!isOverDifferentNode && !isOverSourceNode && sourceTask) {
-                        const dx = pt.x - sourceTask.x;
-                        const dy = pt.y - sourceTask.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-
-                        if (distance > 0) {
-                            // Calculate angle from source to cursor
-                            const angle = Math.atan2(dy, dx);
-
-                            // Find point on ellipse with semi-axes = rect dimensions / 2
-                            const ellipseX = (rectWidth / 2) * Math.cos(angle);
-                            const ellipseY = (rectHeight / 2) * Math.sin(angle);
-
-                            // Add padding beyond the ellipse edge
-                            const extraPadding = 3;
-                            offsetX = ellipseX + extraPadding * Math.cos(angle);
-                            offsetY = ellipseY + extraPadding * Math.sin(angle);
-                        }
-                    }
-
-                    if (isOverDifferentNode || isOverSourceNode) {
-                        // Over any node (source or different) - remove preview node
-                        const previewElement = document.querySelector('.preview-node');
-                        if (previewElement) {
-                            previewElement.remove();
-                        }
-                        this.previewNode = null;
-                    } else {
-                        // Over empty space - show blue line + preview node
-
-                        // Remove existing preview node if exists
-                        const previewElement = document.querySelector('.preview-node');
-                        if (previewElement) {
-                            previewElement.remove();
-                        }
-
-                        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                        g.classList.add('preview-node');
-                        g.style.pointerEvents = 'none'; // Don't interfere with hit detection
-
-                        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                        rect.setAttribute('x', pt.x + offsetX - rectWidth / 2);
-                        rect.setAttribute('y', pt.y + offsetY - rectHeight / 2);
-                        rect.setAttribute('width', rectWidth);
-                        rect.setAttribute('height', rectHeight);
-                        rect.setAttribute('rx', 8);
-                        rect.setAttribute('ry', 8);
-                        g.appendChild(rect);
-
-                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        text.setAttribute('x', pt.x + offsetX);
-                        text.setAttribute('y', pt.y + offsetY + 5);
-                        text.setAttribute('text-anchor', 'middle');
-                        text.textContent = '+ New Task';
-                        g.appendChild(text);
-
-                        nodesGroup.appendChild(g);
-
-                        this.previewNode = {
-                            x: pt.x,
-                            y: pt.y,
-                            title: '+ New Task'
-                        };
-                    }
                 } else if ((this.dragMode === 'dependency') && this.tempLine) {
                     // Get source task for cursor arrow rotation
                     const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
@@ -4307,39 +4183,7 @@
             },
 
             onCanvasMouseUp(e) {
-                if (this.dragMode === 'create-child') {
-                    // Use elementFromPoint to find what's actually under the cursor
-                    const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
-                    const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
-                    const pt = this.getSVGPoint(e);
-
-                    if (targetNode) {
-                        // Dropped on a node - make target a child of source (drag direction = arrow direction)
-                        const targetId = parseInt(targetNode.dataset.id);
-
-                        // Check if dropping ON a selected node (multi-target reparenting)
-                        if (this.selectedTaskIds.has(targetId)) {
-                            // Dropping ON a selected node: make source the parent of ALL selected
-                            this.selectedTaskIds.forEach(taskId => {
-                                if (taskId !== this.selectedNode) {
-                                    this.reparentTask({ taskId: taskId, newParentId: this.selectedNode });
-                                }
-                            });
-                        } else {
-                            // Normal case: make target a child of source
-                            if (targetId !== this.selectedNode) {
-                                this.reparentTask({ taskId: targetId, newParentId: this.selectedNode });
-                            }
-                        }
-                    } else {
-                        // Dropped on empty space - create new child at that position
-                        this.createChildAtPosition({ parentId: this.selectedNode, x: pt.x, y: pt.y });
-                    }
-
-                    this.removeTempLine();
-                    this.previewNode = null;
-                    this.render();
-                } else if (this.dragMode === 'dependency') {
+                if (this.dragMode === 'dependency') {
                     // Use elementFromPoint to find what's actually under cursor (not e.target)
                     const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
                     const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
@@ -5399,8 +5243,6 @@
                         category: '✏️ Editing',
                         items: [
                             { keys: 'Double-click node', description: 'Edit task name' },
-                            { keys: `${modSymbol}+Click node`, description: 'Create child task under clicked node' },
-                            { keys: `${modSymbol}+Click empty`, description: 'Create new root task at cursor' },
                             { keys: 'Backspace', description: 'Delete selected task(s)' },
                             { keys: `${altSymbol}+Click node`, description: 'Delete task (alternative method)' }
                         ]
@@ -5409,7 +5251,8 @@
                         category: '🎯 Selection',
                         items: [
                             { keys: 'Click node', description: 'Select task (clears other selections)' },
-                            { keys: `${shiftSymbol}+Click node`, description: 'Add/remove task from selection' },
+                            { keys: `${modSymbol}+Click node`, description: 'Multi-select (toggle selection)' },
+                            { keys: `${modSymbol}+Drag empty`, description: 'Box select (select all nodes in rectangle)' },
                             { keys: 'Escape', description: 'Clear all selections' }
                         ]
                     },
@@ -6176,43 +6019,6 @@
                     nodesGroup.appendChild(g);
                 });
 
-                // Render preview node during create-child drag
-                if (this.previewNode && this.dragMode === 'create-child') {
-                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                    g.classList.add('preview-node');
-
-                    // ⭐ NEW: Position with transform
-                    g.setAttribute('transform', `translate(${this.previewNode.x}, ${this.previewNode.y})`);
-
-                    // Calculate rect dimensions (same as regular nodes)
-                    const padding = 10;
-                    const charWidth = 8;
-                    const minWidth = 80;
-                    const rectWidth = Math.max(minWidth, this.previewNode.title.length * charWidth + padding * 2);
-                    const rectHeight = 40;
-
-                    // Draw ghosted rectangle (relative to group center)
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    rect.setAttribute('x', -rectWidth / 2);
-                    rect.setAttribute('y', -rectHeight / 2);
-                    rect.setAttribute('width', rectWidth);
-                    rect.setAttribute('height', rectHeight);
-                    rect.setAttribute('rx', 8);
-                    rect.setAttribute('ry', 8);
-                    g.appendChild(rect);
-
-                    // Draw preview text (relative to group center)
-                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    text.setAttribute('x', 0);
-                    text.setAttribute('y', 5);
-                    text.setAttribute('text-anchor', 'middle');
-                    text.textContent = this.previewNode.title;
-                    text.style.cursor = 'pointer';
-                    g.appendChild(text);
-
-                    nodesGroup.appendChild(g);
-                }
-
                 // Render off-screen indicators for working tasks
                 this.renderOffscreenIndicators();
             },
@@ -6649,9 +6455,8 @@
             // When adding a NEW operation that modifies task data, you MUST call
             // this.saveSnapshot("Description") BEFORE the modification.
             //
-            // CURRENT INTEGRATION POINTS (20 total):
+            // CURRENT INTEGRATION POINTS (18 total):
             // ✅ addChildTask() - line 1112
-            // ✅ createChildAtPosition() - line 1147
             // ✅ cycleStatus() - lines 1184, 1189, 1198 (3 state transitions)
             // ✅ toggleDone() - lines 1225, 1229 (done ↔ pending, also has flow-state logic)
             // ✅ toggleHidden() - line 1336
@@ -6659,7 +6464,6 @@
             // ✅ finishEditing() - line 1594 (with smart grouping)
             // ✅ clearAllData() - line 1611
             // ✅ importData() - line 2109
-            // ✅ Ctrl+Click creation - line 2199
             // ✅ Right-click menu creation - line 2759
             // ✅ Move subtree - line 2454
             // ✅ Move single task - line 2473
