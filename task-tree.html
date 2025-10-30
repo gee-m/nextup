@@ -6150,6 +6150,12 @@
                             return;
                         }
 
+                        // Don't interfere with Ctrl+click (multi-select), Alt+click (delete), or Shift+click (reserved)
+                        // Let the main canvas click handler handle those
+                        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+                            return;
+                        }
+
                         // Select the node (this updates lastWorkingTaskId if task is working)
                         this.selectNode(task.id);
 
