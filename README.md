@@ -703,13 +703,14 @@ Stored in localStorage as:
 |--------|-----|---------------|-------|
 | **Editing** |
 | Edit task name | Double-click | Double-click | Inline editing |
-| Create child task | ⌘+Click node | Ctrl+Click node | Creates child under clicked node |
-| Create root task | ⌘+Click empty | Ctrl+Click empty | Creates task at cursor |
+| Create child task | Right-click node | Right-click node | Select "Add Child" from menu |
+| Create root task | Right-click empty | Right-click empty | Select "Create New Task" from menu |
 | Delete task | Backspace | Backspace | On selected task(s) |
 | Delete task (alt) | ⌥+Click | Alt+Click | Alternative method |
 | **Selection** |
 | Select task | Click | Click | Clears other selections |
-| Multi-select | ⇧+Click | Shift+Click | Add/remove from selection |
+| Multi-select | ⌘+Click | Ctrl+Click | Add/remove from selection (Windows standard) |
+| Box select | ⌘+Drag empty | Ctrl+Drag empty | Drag rectangle to select multiple |
 | Clear selection | Escape | Escape | Clears all selections |
 | **Status & Priority** |
 | Cycle status | Middle-click | Middle-click | Pending → Working → Done |
@@ -6578,3 +6579,54 @@ User B (receiver):
 
 **Version**: 1.17.2 (Cursor-Based Paste)
 **Lines Changed**: ~5 lines
+
+### Keyboard Binding Reorganization: Windows-Standard Multi-Select
+
+**Date**: 2025-10-29
+
+#### 🎯 UX Improvement: Ctrl+Click for Multi-Select
+
+**Problem**: Multi-select was bound to Shift+click, which conflicts with Windows conventions where Ctrl+click is the standard for multi-select (e.g., File Explorer, VS Code).
+
+**Solution**: Reorganize keyboard bindings to match Windows standards and free up Shift+click for future features.
+
+**Binding Changes**:
+
+**Before**:
+- Ctrl+click on node: Create child task
+- Ctrl+click on empty: Create root task
+- Shift+click: Multi-select
+- Shift+drag on empty: Box select
+
+**After**:
+- **Ctrl+click on node**: Multi-select (toggle selection) - Windows standard ✨
+- **Ctrl+drag on empty**: Box select - Windows standard ✨
+- Shift+drag on node: Move subtree (unchanged)
+- Shift+click: Reserved for future use
+- Create child/root: Right-click menu only (already existed)
+
+**Why This is Better**:
+1. **Matches Windows conventions**: Users expect Ctrl+click for multi-select
+2. **More intuitive**: Right-click menus are more discoverable than Ctrl+click shortcuts
+3. **Frees up Shift+click**: Can be used for quick actions in the future (e.g., quick add sibling, quick mark done)
+4. **Consistent**: Ctrl+drag box select also matches Windows File Explorer
+
+**Code Changes**:
+- Removed Ctrl+click → create child binding (line ~1535)
+- Removed Ctrl+click on empty → create root binding (line ~4029)
+- Changed multi-select from Shift+click to Ctrl+click (line ~1543)
+- Changed box select from Shift+drag to Ctrl+drag (line ~4029)
+- Removed shiftWasPressedOnMouseDown tracking (no longer needed)
+- Updated shortcuts help text (line ~1471)
+- Updated README keyboard shortcuts table
+
+**User Impact**:
+- ✅ More intuitive for Windows users
+- ✅ Right-click menus still work (no functionality lost)
+- ✅ Shift+drag subtree movement unchanged
+- ✅ Box select now Ctrl+drag (standard Windows binding)
+
+**Version**: 1.18.0 (Windows-Standard Multi-Select)
+**Files Modified**: task-tree.html, README.md
+**Lines Changed**: ~30 lines (mostly simplification)
+

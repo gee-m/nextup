@@ -1435,7 +1435,6 @@
             // Copy/paste subtree
             copiedSubtree: null,  // Clipboard for copying/pasting subtrees (not persisted to localStorage)
             lastMousePosition: { x: 0, y: 0 },  // Track last mouse position for Ctrl+V paste
-            shiftWasPressedOnMouseDown: false,  // Track shift state for shift+click selection
 
             init() {
                 const data = localStorage.getItem('taskTree');
@@ -1469,7 +1468,7 @@
 
                 const helpElement = document.getElementById('shortcuts-help');
                 if (helpElement) {
-                    helpElement.textContent = `Double-click: edit | ${shift}+Double-click: hide/show | Right-click: menu | Left-click: select | ${shift}+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | ${mod}+Click: create task | ${mod}+K: attach link | P: priority | J: jump to working | ${shift}+Drag: subtree | Scroll/${mod}+±: zoom | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo | ${mod}+${shift}+Z: redo`;
+                    helpElement.textContent = `Double-click: edit | ${shift}+Double-click: hide/show | Right-click: menu | Left-click: select | ${mod}+Click: multi-select | Backspace: delete | Escape: clear | Middle-click: cycle | ${mod}+K: attach link | P: priority | J: jump to working | ${shift}+Drag: subtree | Scroll/${mod}+±: zoom | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo | ${mod}+${shift}+Z: redo`;
                 }
 
                 // Update tooltips with platform-specific text
@@ -1532,14 +1531,6 @@
                     if (node) {
                         const taskId = parseInt(node.dataset.id);
 
-                        // Ctrl+click: Create new child
-                        if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-                            this.addChildTask(taskId);
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return;
-                        }
-
                         // Alt+click: Delete node
                         if (e.altKey && !e.ctrlKey && !e.metaKey) {
                             this.deleteTask(taskId);
@@ -1548,27 +1539,36 @@
                             return;
                         }
 
-                        // Left-click: Select node (with Shift for multi-select)
-                        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-                            // Check if shift was pressed (either still held OR was pressed on mousedown)
-                            const shiftSelection = e.shiftKey || this.shiftWasPressedOnMouseDown;
-                            this.shiftWasPressedOnMouseDown = false;  // Reset flag after use
-
-                            if (shiftSelection) {
-                                // Shift+Click: Toggle selection (multi-select mode)
-                                if (this.selectedTaskIds.has(taskId)) {
-                                    this.selectedTaskIds.delete(taskId);
-                                } else {
-                                    this.selectedTaskIds.add(taskId);
-                                }
-                                this.lastClickedTaskId = taskId;
-                                // TODO: Support Shift+Click range selection between lastClickedTaskId and current
+                        // Ctrl+click: Multi-select (toggle selection) - Windows standard
+                        if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+                            if (this.selectedTaskIds.has(taskId)) {
+                                this.selectedTaskIds.delete(taskId);
                             } else {
-                                // Plain click: Select only this node (clear others)
-                                this.selectedTaskIds.clear();
                                 this.selectedTaskIds.add(taskId);
-                                this.lastClickedTaskId = taskId;
                             }
+                            this.lastClickedTaskId = taskId;
+                            requestAnimationFrame(() => this.render());
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                        }
+
+                        // Plain left-click: Select only this node (clear others)
+                        if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+                            this.selectedTaskIds.clear();
+                            this.selectedTaskIds.add(taskId);
+                            this.lastClickedTaskId = taskId;
+                            requestAnimationFrame(() => this.render());
+                            return;
+                        }
+
+                        // Shift+click: Reserved for future use
+                        if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                            // Currently unused - available for future feature
+                            // For now, treat as regular click
+                            this.selectedTaskIds.clear();
+                            this.selectedTaskIds.add(taskId);
+                            this.lastClickedTaskId = taskId;
                             requestAnimationFrame(() => this.render());
                             return;
                         }
@@ -3996,10 +3996,8 @@
                             }
                         } else if (e.shiftKey) {
                             // Prepare for potential subtree drag (will activate on mousemove >5px)
-                            // This allows shift+click to work for multi-select when not dragging
                             this.dragMode = 'subtree-pending';
                             this.selectedNode = taskId;
-                            this.shiftWasPressedOnMouseDown = true;  // Track for click handler
                             const pt = this.getSVGPoint(e);
                             this.dragStart = { x: pt.x, y: pt.y };
                             this.dragStartOriginal = { x: pt.x, y: pt.y };
@@ -4026,34 +4024,7 @@
                 } else {
                     // Clicked on empty space
                     if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
-                        // Ctrl+Click on empty space: create new task at cursor
-                        this.saveSnapshot(`Created task`);
-
-                        const pt = this.getSVGPoint(e);
-                        const newTask = {
-                            id: this.taskIdCounter++,
-                            title: '',
-                            x: pt.x,
-                            y: pt.y,
-                            mainParent: null,
-                            otherParents: [],
-                            children: [],
-                            dependencies: [],
-                            status: 'pending',
-                            currentlyWorking: false,
-                            hidden: false,
-                            textExpanded: false,
-                            textLocked: false,
-                            links: [],
-                            priority: 'normal'
-                        };
-                        this.tasks.push(newTask);
-                        this.startEditing(newTask.id);
-                        this.saveToStorage();
-                        this.render();
-                        e.preventDefault();
-                    } else if (e.button === 0 && e.shiftKey) {
-                        // Shift+Drag on empty space: prepare for box selection
+                        // Ctrl+Drag on empty space: prepare for box selection (Windows standard)
                         const pt = this.getSVGPoint(e);
                         this.dragMode = 'box-select';
                         this.boxSelectStart = { x: pt.x, y: pt.y };
@@ -4406,12 +4377,9 @@
                     }
                     this.removeTempLine();
                 } else if (this.dragMode === 'subtree-pending') {
-                    // Shift+click without dragging - clear pending mode and let click event handle selection
+                    // Shift+click without dragging - clear pending mode
                     // Don't do anything here, just clear the dragMode
-                    // Note: shiftWasPressedOnMouseDown will be used by click handler
                 } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
-                    // Full subtree drag happened - reset shift flag since click won't fire
-                    this.shiftWasPressedOnMouseDown = false;
                     const task = this.tasks.find(t => t.id === this.selectedNode);
                     if (task) {
                         const movedDistance = Math.sqrt(
