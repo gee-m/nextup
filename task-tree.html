@@ -4207,6 +4207,14 @@
                         this.createTempLine(e);
                         // Create custom cursor arrow
                         this.cursorArrow = this.createCursorArrow();
+                        // Initialize line from source to cursor (A → B drag direction)
+                        const task = this.tasks.find(t => t.id === this.selectedNode);
+                        if (task && this.tempLine) {
+                            this.tempLine.setAttribute('x1', task.x);
+                            this.tempLine.setAttribute('y1', task.y);
+                            this.tempLine.setAttribute('x2', pt.x);
+                            this.tempLine.setAttribute('y2', pt.y);
+                        }
                     }
                 } else if (this.dragMode === 'reparent' && this.tempLine) {
                     // Get source task for cursor arrow rotation
