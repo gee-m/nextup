@@ -4230,6 +4230,9 @@
                     this.tempLine.setAttribute('y1', sourceTask.y);
                     this.tempLine.setAttribute('x2', pt.x);
                     this.tempLine.setAttribute('y2', pt.y);
+
+                    // DEBUG: Log coordinates to see what's happening
+                    console.log(`[REPARENT] x1=${sourceTask.x}, y1=${sourceTask.y} (SOURCE A) → x2=${pt.x}, y2=${pt.y} (CURSOR B)`);
                 } else if ((this.dragMode === 'dependency') && this.tempLine) {
                     // Get source task for cursor arrow rotation
                     const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
@@ -4483,14 +4486,12 @@
                     // Solid green line for reparenting
                     this.tempLine.style.strokeDasharray = 'none';
                     this.tempLine.style.stroke = '#28a745';
-                    // Add arrowhead at END of line (x2, y2 = cursor position)
-                    this.tempLine.setAttribute('marker-end', 'url(#arrowhead)');
+                    // No arrowhead - cursor arrow already shows direction
                 } else {
                     // Dashed blue line for dependency
                     this.tempLine.style.strokeDasharray = '5,5';
                     this.tempLine.style.stroke = '#007bff';
-                    // Add arrowhead at END of line
-                    this.tempLine.setAttribute('marker-end', 'url(#arrowhead)');
+                    // No arrowhead - cursor arrow already shows direction
                 }
 
                 this.tempLine.setAttribute('x1', task.x);
