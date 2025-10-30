@@ -66,8 +66,11 @@
 ### ✅ Core Task Management
 
 #### Adding Tasks
-- **Root Task**: Type in input field, click "Add Root Task" or press Enter
-- **Child Task**: Ctrl+Click on parent node
+- **Root Task**:
+  - Type in input field, click "Add Root Task" or press Enter
+  - **Quick Create**: Ctrl+Double-click on empty space
+- **Child Task**:
+  - Ctrl+Double-click on parent node
 - **Test Checklist**: Click "🧪 Test Checklist" to load pre-built test scenarios
 
 #### Editing Tasks
@@ -336,21 +339,12 @@ Attach multiple URLs to any task for quick access to related resources (PRs, doc
 #### Parent-Child Relationships
 - **Main Parent**: Solid line with arrow showing direction (Parent → Child)
 - **Other Parents**: Secondary parent relationships (multiple parents per task)
-- **Create Child**: Ctrl+Click on parent node
-- **Reparent**: Ctrl+Drag from parent to make target a child
-  - Drag A → B makes B a child of A (drag direction = relationship direction)
-  - Shows **green line** from source to target matching final arrow
-  - Arrow direction: A → B (parent → child)
+- **Create Child**: Ctrl+Double-click on parent node (creates child, auto-starts editing)
+- **Reparent**: Ctrl+Drag from child to new parent
+  - Drag A → B makes **A a child of B** (source becomes child of target)
+  - Shows **green line** from source to target
   - Release over target node to complete reparenting
-  - **Multi-Source Reparenting**: If multiple tasks selected + Ctrl+Drag one of them
-    - All selected tasks become children of the drop target
-    - Example: Select B, C, D → Ctrl+Drag to A → B, C, D all become children of A
-- **Create Child at Position**: Ctrl+Drag parent to empty space
-  - Shows **blue line** from source to cursor + preview node
-  - Preview node intelligently positioned in drag direction (avoids blocking cursor)
-  - Creates new child task at exact cursor location
-  - New task has empty name and immediately enters edit mode
-  - Smart positioning: preview appears ahead of cursor based on drag direction
+  - Arrow direction after reparent: B → A (parent → child)
 - **Delete Connection**: Click line to select (turns blue), press Backspace
   - Deleting parent-child connection makes child a root task
 
@@ -702,9 +696,9 @@ Stored in localStorage as:
 | Action | Mac | Windows/Linux | Notes |
 |--------|-----|---------------|-------|
 | **Editing** |
-| Edit task name | Double-click | Double-click | Inline editing |
-| Create child task | Right-click node | Right-click node | Select "Add Child" from menu |
-| Create root task | Right-click empty | Right-click empty | Select "Create New Task" from menu |
+| Edit task name | Double-click node | Double-click node | Inline editing |
+| Create child task | ⌘+Double-click node | Ctrl+Double-click node | Quick create + edit |
+| Create root task | ⌘+Double-click empty | Ctrl+Double-click empty | Quick create + edit |
 | Delete task | Backspace | Backspace | On selected task(s) |
 | Delete task (alt) | ⌥+Click | Alt+Click | Alternative method |
 | **Selection** |
@@ -6629,4 +6623,101 @@ User B (receiver):
 **Version**: 1.18.0 (Windows-Standard Multi-Select)
 **Files Modified**: task-tree.html, README.md
 **Lines Changed**: ~30 lines (mostly simplification)
+
+---
+
+### Session N+2: Ctrl+Double-Click Create & Ctrl+Drag Reparenting Restore
+
+**Date**: 2025-10-30
+
+#### 🆕 New Features: Quick Node Creation
+
+**Problem**: After reorganizing keyboard bindings in Session N+1, users lost the quick Ctrl+click shortcuts for creating tasks. Right-click menus work but are slower for power users.
+
+**User Request**:
+1. "ctrl + double click should create a new node"
+2. "what happened to ctrl+drag from a node to a child to attach a link?"
+
+**Solution**: Implemented Ctrl+double-click for creating nodes and restored Ctrl+drag for reparenting (which was accidentally broken during multi-select refactoring).
+
+#### ✨ Feature 1: Ctrl+Double-Click to Create
+
+**Implementation**:
+- `addRootTaskAtPosition(x, y)` - Line ~1949: Creates root task at specific coordinates
+- **Ctrl+double-click on node**: Creates child task under the clicked node
+- **Ctrl+double-click on empty space**: Creates root task at cursor position
+- Both auto-start inline editing for immediate text input
+- Both integrated with undo/redo system
+
+**User Experience**:
+```
+Ctrl+double-click node → Child appears below → Editing immediately
+Ctrl+double-click empty → Root appears at cursor → Editing immediately
+```
+
+**Code Changes**:
+- Modified dblclick handler (line ~1484) to check for Ctrl/Cmd modifier
+- If Ctrl pressed + on node → call `addChildTask(taskId)`
+- If Ctrl pressed + on empty → call `addRootTaskAtPosition(pt.x, pt.y)`
+- Added saveSnapshot calls for undo support
+- Updated undo/redo integration checklist (18→19 operations)
+
+#### 🐛 Bug Fix: Restored Ctrl+Drag Reparenting
+
+**Problem**: When implementing Ctrl+click multi-select, an early `return` statement prevented Ctrl+drag from ever activating, breaking the reparent feature.
+
+**Root Cause**: Line ~3969 had `if (e.ctrlKey || e.metaKey) return;` which blocked ALL Ctrl+drag operations.
+
+**Solution**: Implemented "reparent-pending" drag mode with 5px threshold (similar to subtree-pending pattern).
+
+**How It Works**:
+1. **Ctrl+mousedown on node**: Set dragMode = 'reparent-pending'
+2. **Mouse moves >5px**: Activate dragMode = 'reparent', show green line + cursor arrow
+3. **Mouse moves <5px**: Stays pending, click event fires → multi-select works
+4. **Mouseup with reparent active**: Call reparentTask({ taskId: source, newParentId: target })
+
+**Visual Feedback**:
+- **Green line** from source to cursor during drag (distinguishes from blue dependency line)
+- **Cursor arrow** rotates to point in drag direction
+- **Shows**: "Drag A → B makes **A a child of B**"
+
+**Code Locations**:
+- Mousedown handler: Line ~3966 (sets reparent-pending)
+- Mousemove handler: Line ~4154 (activates reparent after 5px)
+- Mousemove handler: Line ~4168 (updates green line during drag)
+- Mouseup handler: Line ~4248 (completes reparent operation)
+
+#### 📚 Documentation Updates
+
+**Keyboard Shortcuts**:
+- Updated shortcuts modal (line ~5335): Added Ctrl+double-click shortcuts
+- Updated help text (line ~1466): Added "Ctrl+Dbl-click: create" and "Ctrl+Drag: reparent"
+
+**README Changes**:
+- Updated "Adding Tasks" section: Added Ctrl+double-click methods
+- Updated "Parent-Child Relationships": Fixed reparent description (source becomes child of target)
+- Updated keyboard shortcuts table: Added Ctrl+double-click entries
+- Added this Development History entry
+
+**Undo/Redo Integration**:
+- Updated checklist: Now tracks 19 undoable operations (was 18)
+- Added addRootTaskAtPosition() to integration points list
+
+#### 🎯 User Impact
+
+**New Workflows Enabled**:
+- ✅ **Rapid node creation**: Ctrl+double-click is faster than right-click menu
+- ✅ **Cursor-based positioning**: Nodes appear exactly where you click
+- ✅ **Reparenting restored**: Ctrl+drag node-to-node works again
+- ✅ **Multi-select preserved**: Ctrl+click still works (doesn't interfere with drag)
+
+**Before vs After**:
+- **Before**: Ctrl+drag on node → nothing happened (broken)
+- **After**: Ctrl+drag on node → reparent (green line, works correctly)
+- **Before**: Ctrl+double-click → just edited the node
+- **After**: Ctrl+double-click → creates child/root
+
+**Version**: 1.19.0 (Ctrl+Double-Click Create & Reparenting Restore)
+**Files Modified**: task-tree.html (107 insertions, 15 deletions), README.md
+**Implementation Time**: ~2 hours
 
