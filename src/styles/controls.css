@@ -1,0 +1,410 @@
+/* @order: 20 */
+/* @category: styles */
+
+#controls {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    padding: 14px 24px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    z-index: 100;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+button {
+    padding: 9px 18px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #1a1a2e;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+button:hover {
+    background: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+button.secondary {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+button.secondary:hover {
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+}
+
+/* Dropdown menu for Homes button */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: rgba(255, 255, 255, 0.98);
+    min-width: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    border-radius: 8px;
+    margin-top: 8px;
+    z-index: 1000;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-content.show {
+    display: block;
+}
+
+.dropdown-item {
+    padding: 12px 16px;
+    color: #333;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.dropdown-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.dropdown-item.special {
+    background: rgba(156, 39, 176, 0.1);
+    font-weight: 600;
+}
+
+.dropdown-item.special:hover {
+    background: rgba(156, 39, 176, 0.2);
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1);
+    margin: 4px 0;
+}
+
+.dropdown-empty {
+    padding: 16px;
+    color: rgba(0, 0, 0, 0.4);
+    text-align: center;
+    font-style: italic;
+}
+
+/* Nested submenu for context menu */
+.menu-item-with-submenu {
+    position: relative;
+}
+
+.menu-item-with-submenu::after {
+    content: '▶';
+    margin-left: 8px;
+    font-size: 10px;
+}
+
+.submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    background: rgba(255, 255, 255, 0.98);
+    min-width: 180px;
+    max-height: 350px;
+    overflow-y: auto;
+    overflow-x: hidden; /* Prevent horizontal scrollbar */
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    border-radius: 8px;
+    margin-left: -2px; /* Overlap slightly to remove gap */
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 1001;
+    /* Add invisible padding on left to create "hover bridge" */
+    padding-left: 6px;
+}
+
+/* Show submenu when hovering parent OR the submenu itself */
+.menu-item-with-submenu:hover .submenu,
+.submenu:hover {
+    display: block;
+}
+
+/* Compensate for padding on first item */
+.submenu-item:first-child {
+    margin-left: -6px;
+    padding-left: 14px;
+    width: calc(100% + 6px);
+}
+
+.submenu-item {
+    margin-left: -6px;
+    padding-left: 14px;
+    width: calc(100% + 6px);
+}
+
+.submenu-item {
+    padding: 10px 14px;
+    color: #333;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    white-space: nowrap;
+}
+
+.submenu-item:last-child {
+    border-bottom: none;
+}
+
+.submenu-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.submenu-item.special {
+    background: rgba(156, 39, 176, 0.1);
+    font-weight: 600;
+}
+
+.submenu-item.special:hover {
+    background: rgba(156, 39, 176, 0.2);
+}
+
+/* Fix margin for submenu items that have nested submenus */
+.submenu-item.menu-item-with-submenu {
+    margin-left: 0 !important;
+    width: 100% !important;
+    position: relative;
+    display: block;
+    cursor: pointer;
+}
+
+.submenu-item.menu-item-with-submenu > span {
+    display: inline-block;
+    width: 100%;
+}
+
+/* Nested submenu - uses fixed positioning to break out of overflow context */
+.submenu-nested {
+    display: none;
+    position: fixed; /* Fixed instead of absolute to escape overflow container */
+    background: rgba(255, 255, 255, 0.98);
+    min-width: 200px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 1002; /* Higher than parent submenu */
+    padding: 0;
+}
+
+.submenu-item.menu-item-with-submenu:hover .submenu-nested,
+.submenu-nested:hover {
+    display: block !important;
+}
+
+.submenu-nested .submenu-item {
+    margin-left: 0;
+    padding-left: 14px;
+    width: 100%;
+}
+
+.submenu-nested .submenu-item:first-child {
+    margin-left: 0;
+    padding-left: 14px;
+    width: 100%;
+}
+
+.submenu-empty {
+    padding: 12px;
+    color: rgba(0, 0, 0, 0.4);
+    text-align: center;
+    font-style: italic;
+    font-size: 12px;
+}
+
+.submenu-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.1);
+    margin: 4px 0;
+}
+
+input {
+    padding: 10px 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    font-size: 14px;
+    flex: 1;
+    max-width: 300px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    transition: all 0.3s ease;
+}
+
+input:focus {
+    outline: none;
+    border-color: white;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+    background: white;
+}
+
+#zoomLevel {
+    color: white;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.info {
+    margin-left: auto;
+    font-size: 12px;
+    color: #666;
+}
+
+/* Off-screen indicators for working tasks */
+.offscreen-indicators {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+}
+
+.offscreen-indicator {
+    position: absolute;
+    background: rgba(255, 213, 79, 0.85);
+    border: 2px solid rgba(255, 160, 0, 0.7);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    cursor: pointer;
+    pointer-events: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    transition: all 0.2s;
+    backdrop-filter: blur(2px);
+}
+
+.offscreen-indicator:hover {
+    background: rgba(255, 193, 7, 0.95);
+    filter: brightness(1.1);
+}
+
+.offscreen-indicator.home {
+    background: rgba(33, 150, 243, 0.85);
+    border-color: rgba(25, 118, 210, 0.7);
+}
+
+.offscreen-indicator.home:hover {
+    background: rgba(33, 150, 243, 0.95);
+    filter: brightness(1.1);
+}
+
+/* Tooltip for indicators - separate element positioned via JS */
+.indicator-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 1001;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.indicator-tooltip.visible {
+    opacity: 1;
+}
+
+/* Toast Notification System */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+}
+
+.toast {
+    background: white;
+    color: #333;
+    padding: 14px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    font-size: 14px;
+    font-weight: 500;
+    border-left: 4px solid #4caf50;
+    animation: slideIn 0.3s ease, slideOut 0.3s ease 3.7s;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.toast.success {
+    border-left-color: #4caf50;
+    background: #f1f8e9;
+}
+
+.toast.error {
+    border-left-color: #f44336;
+    background: #ffebee;
+    color: #c62828;
+}
+
+.toast.info {
+    border-left-color: #2196f3;
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}

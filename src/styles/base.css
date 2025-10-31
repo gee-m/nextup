@@ -1,0 +1,48 @@
+/* @order: 10 */
+/* @category: styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+    overflow: hidden;
+}
+
+svg {
+    width: 100%;
+    height: 100%;
+}
+
+#canvas-container {
+    position: fixed;
+    top: 65px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: grab;
+}
+
+#canvas-container.has-status-bar {
+    bottom: 44px;
+}
+
+#canvas-container.dragging {
+    cursor: grabbing;
+}
+
+/* Smooth animation for home jumps - Transform is GPU accelerated! */
+#canvas.animating-view .task-node {
+    transition: transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Hide lines during animation - CSS transitions don't work on SVG line attributes */
+/* This is the standard approach for non-transitionable SVG elements */
+#canvas.animating-view line {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+}

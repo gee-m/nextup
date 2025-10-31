@@ -1,0 +1,202 @@
+/* @order: 30 */
+/* @category: styles */
+
+.task-node {
+    cursor: move;
+}
+
+.task-node rect {
+    stroke: #555;
+    stroke-width: 2;
+    transition: all 0.2s ease;
+    rx: 8;
+    ry: 8;
+    fill: white;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.task-node.done rect {
+    fill: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    fill: #e8f5e9;
+    stroke: #4caf50;
+    filter: drop-shadow(0 2px 6px rgba(76, 175, 80, 0.3));
+}
+
+.task-node.working rect {
+    fill: #fff8e1;
+    stroke: #ff9800;
+    stroke-width: 3;
+    filter: drop-shadow(0 3px 8px rgba(255, 152, 0, 0.4));
+}
+
+.task-node.parent-of-working rect {
+    stroke: #ff9800;
+    stroke-width: 3;
+    filter: drop-shadow(0 0 4px rgba(255, 152, 0, 0.4));
+}
+
+.task-node.incomplete-child-of-working rect {
+    stroke: #e74c3c;
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 2px rgba(231, 76, 60, 0.3));
+}
+
+.task-node.hidden {
+    display: none; /* Completely hide nodes with hidden property */
+}
+
+.task-node text {
+    pointer-events: none;
+    user-select: none;
+    font-size: 14px;
+    font-weight: 500; /* Will be overridden by inline style from app.fontWeight */
+    fill: #37474f;
+    font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+
+.hidden-indicator {
+    cursor: pointer;
+    fill: #ff6b6b;
+    stroke: #c92a2a;
+    stroke-width: 1;
+}
+
+.hidden-indicator-text {
+    pointer-events: none;
+    font-size: 12px;
+    font-weight: bold;
+    fill: white;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+.hidden-indicator:hover {
+    fill: #ff5252;
+    stroke: #a01919;
+}
+
+.task-node:hover rect {
+    filter: brightness(0.95);
+    stroke-width: 2.5;
+}
+
+.text-expand-button circle {
+    transition: fill 0.3s ease;
+}
+
+.text-expand-button:hover circle {
+    filter: brightness(1.1);
+}
+
+.task-node.selected rect {
+    stroke: #007bff;
+    stroke-width: 3;
+    filter: drop-shadow(0 0 4px rgba(0, 123, 255, 0.6));
+}
+
+.preview-node rect {
+    fill: #e8e8ff;
+    stroke: #007bff;
+    stroke-width: 2;
+    stroke-dasharray: 5,3;
+    opacity: 0.6;
+    filter: none;
+}
+
+.preview-node text {
+    fill: #4a7c9e;
+    opacity: 0.7;
+    font-style: italic;
+}
+
+/* Custom cursor arrow for drag operations */
+#canvas-container.dragging-relationship {
+    cursor: none !important;
+}
+
+#canvas-container.dragging-relationship * {
+    cursor: none !important;
+}
+
+.cursor-arrow {
+    pointer-events: none;
+    position: fixed;
+    z-index: 10000;
+    width: 24px;
+    height: 24px;
+}
+
+.cursor-arrow path {
+    stroke: #007bff;
+    fill: none;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+.node-menu {
+    position: fixed;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 8px 0;
+    z-index: 1000;
+    min-width: 180px;
+}
+
+.node-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    color: #333;
+    padding: 10px 16px;
+    border-radius: 0;
+}
+
+.node-menu button:hover {
+    background: #f8f9fa;
+}
+
+.node-menu .dependency-section {
+    padding: 8px 16px;
+    border-bottom: 1px solid #e9ecef;
+    margin-bottom: 4px;
+}
+
+.node-menu .dependency-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.node-menu .dependency-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.node-menu .dependency-item span {
+    color: #333;
+}
+
+.node-menu .dependency-item .remove-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: 8px;
+    min-width: 20px;
+    height: 20px;
+    line-height: 1;
+}
+
+.node-menu .dependency-item .remove-btn:hover {
+    background: #c82333;
+}

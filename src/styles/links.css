@@ -1,0 +1,72 @@
+/* @order: 40 */
+/* @category: styles */
+
+.link {
+    stroke: #90a4ae;
+    stroke-width: 2;
+    fill: none;
+    transition: all 0.3s ease;
+}
+
+.link.dependency {
+    stroke: #78909c;
+    stroke-width: 2;
+    stroke-dasharray: 5,5;
+}
+
+/* Hit detection lines - invisible, wide for easy clicking */
+.link.dependency-hit,
+.link.parent-hit,
+.link.other-parent-hit {
+    cursor: pointer;
+    stroke: transparent;
+    stroke-width: 15;
+    pointer-events: stroke;
+}
+
+/* Visible line styling */
+.link.parent-visible {
+    stroke: #90a4ae;
+    stroke-width: 2;
+}
+
+/* Hover effects - style visible line when hit line is hovered */
+.link.dependency-hit:hover + .link.dependency,
+.link.parent-hit:hover + .link.parent-visible,
+.link.other-parent-hit:hover + .link.other-parent {
+    stroke: #007bff !important;
+    stroke-width: 3 !important;
+}
+
+.link.other-parent {
+    stroke: #b0bec5;
+    stroke-width: 1.5;
+    stroke-dasharray: 3,3;
+}
+
+.link.selected {
+    stroke: #007bff !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 3px rgba(0, 123, 255, 0.7));
+}
+
+.temp-line {
+    stroke-width: 2;
+    pointer-events: none;
+}
+
+.marker {
+    fill: #78909c;
+}
+
+/* Link Badge Styling */
+.link-badge {
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Links Dropdown Styling */
+.links-dropdown {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+}
