@@ -1,12 +1,14 @@
-# JavaScript Extraction Summary - Phases 1 & 2
+# JavaScript Extraction Summary - Phases 1, 2 & 3
 
 **Date:** 2025-10-31
 **Task:** Extract JavaScript from task-tree.html into modular files
-**Phases Completed:** Phase 1 (Utils) and Phase 2 (Data)
+**Phases Completed:** Phase 1 (Utils), Phase 2 (Data), and Phase 3 (Core Logic)
 
 ## Overview
 
-Successfully extracted **1,026 lines** of JavaScript code from `task-tree.html` into **7 modular files** organized by functionality.
+Successfully extracted **1,926 lines** of JavaScript code from `task-tree.html` into **10 modular files** organized by functionality.
+
+**Update**: Phase 3 (Core Logic) is now complete, adding 3 more modules and 900+ lines of code.
 
 ## Directory Structure
 
@@ -16,11 +18,15 @@ src/js/
 │   ├── platform.js         (62 lines, @order: 5)
 │   ├── svg.js              (36 lines, @order: 6)
 │   └── cycle-detection.js  (44 lines, @order: 8)
-└── data/           # Phase 2: Data management (order 10-14)
-    ├── undo-redo.js        (293 lines, @order: 10)
-    ├── persistence.js      (199 lines, @order: 11)
-    ├── import-export.js    (121 lines, @order: 12)
-    └── clipboard.js        (271 lines, @order: 13)
+├── data/           # Phase 2: Data management (order 10-14)
+│   ├── undo-redo.js        (293 lines, @order: 10)
+│   ├── persistence.js      (199 lines, @order: 11)
+│   ├── import-export.js    (121 lines, @order: 12)
+│   └── clipboard.js        (271 lines, @order: 13)
+└── core/           # Phase 3: Core domain logic (order 15-19)
+    ├── tasks.js            (280 lines, @order: 15)
+    ├── status.js           (450 lines, @order: 16)
+    └── relationships.js    (170 lines, @order: 17)
 ```
 
 ## Phase 1: Utils Layer (@order: 5-9)
@@ -256,24 +262,104 @@ this.showToast('Message', 'success');
 
 ---
 
+## Phase 3: Core Logic Layer (@order: 15-19) - NEW!
+
+### 8. tasks.js (@order: 15) - 280 lines
+**Purpose:** Task CRUD operations and tree traversal
+
+**Exports:**
+- `app.addChildTask(parentId)` - Create child with random offset
+- `app.createChildAtPosition({parentId, x, y})` - Create child at coords
+- `app.addRootTaskAtPosition(x, y)` - Create root task
+- `app.deleteTask(taskId)` - Delete with descendants
+- `app.deleteMultipleTasks(taskIds)` - Bulk delete
+- `app.getDescendants(taskId)` - Get all descendants
+- `app.getRootTask(taskId)` - Find root of tree
+- `app.getAncestors(taskId)` - Get all ancestors
+- `app.getPathToRoot(taskId)` - Get title path to root
+
+**Key Features:**
+- Auto-start editing on task creation
+- Confirmation for deletions (configurable)
+- Undo integration with truncated titles
+- Recursive descendant collection
+
+---
+
+### 9. status.js (@order: 16) - 450 lines
+**Purpose:** Task status, priority, visibility management
+
+**Exports:**
+- `app.cycleStatus(taskId)` - Pending → Working → Done cycle
+- `app.toggleDone(taskId)` - Toggle done status
+- `app.toggleWorking(taskId)` - Toggle working state only
+- `app.setPriority(taskId, priority)` - Set high/medium/normal
+- `app.cyclePriority(taskId)` - Cycle through priorities
+- `app.selectNode(taskId)` - Single-node selection
+- `app.toggleHidden(taskId)` - Hide/show descendants
+- `app.toggleHiddenSelf(taskId)` - Hide/show self
+- `app.getHiddenChildrenCount(taskId)` - Count hidden children
+- `app.autoCollapseCompleted(taskId)` - Auto-hide completed subtrees
+- `app.clearCompleted()` - Remove all done tasks
+- `app.toggleDarkMode()` - Toggle dark mode
+- `app.repairWorkingTasks(silent)` - Fix multiple working tasks bug
+
+**Key Features:**
+- **Multi-project support**: workingTasksByRoot tracks one working task per root tree
+- **Flow state**: Auto-start parent when completing working child
+- **Smart auto-collapse**: Only hides completed tasks inside completed parents (roots never hide)
+- **Priority emoji indicators**: 🔴 High, 🟠 Medium, ⚪ Normal
+- **Text expansion**: Auto-expand working tasks, collapse when done (unless locked)
+
+---
+
+### 10. relationships.js (@order: 17) - 170 lines
+**Purpose:** Task relationship management
+
+**Exports:**
+- `app.reparentTask({taskId, newParentId})` - Change parent via Ctrl+drag
+- `app.addDependency({dependentId, prerequisiteId})` - Add/toggle dependency
+- `app.removeDependency(fromId, toId)` - Remove dependency
+- `app.deleteLine(lineData)` - Delete parent or dependency link
+- `app.wouldCreateCycle(fromId, toId)` - Check for circular dependencies
+
+**Key Features:**
+- Cycle prevention using BFS algorithm
+- Redundancy cleanup (parent can't depend on child)
+- Toggle behavior for dependencies (Alt+drag same pair twice removes)
+- Working task log updates on reparent (moves between root trees)
+
+---
+
 ## Remaining Work (Future Phases)
 
-**Phase 3: Core Logic (@order: 15-19)**
-- Task management (create, edit, delete)
-- Status cycling (pending/working/done)
-- Relationship management (reparenting, dependencies)
+**Phase 4: Rendering (@order: 20-24)**
+- Golden path visualization
+- Off-screen indicators
+- Node rendering
+- Link rendering
+- Main render() function
 
-**Phase 4: UI Layer (@order: 20-24)**
-- Event handlers (mouse, keyboard)
-- Rendering engine
-- Modal system
-- Menu system
+**Phase 5: Interactions (@order: 25-29)**
+- Mouse event handlers
+- Keyboard handlers
+- Drag logic
+- Inline editing
 
-**Phase 5: Features (@order: 25+)**
-- Navigation (zoom, pan, jump)
-- Homes system
-- Settings
+**Phase 6: UI Components (@order: 30-39)**
+- Modals system
+- Context menus
 - Status bar
+- Settings panel
+- Shortcuts modal
+- Toast notifications
+- Import/export UI
+
+**Phase 7: Navigation (@order: 40-44)**
+- Viewport (zoom, pan)
+- Homes system
+- Jump to working
+- Text lock/expansion
 
 ---
 
@@ -288,24 +374,46 @@ this.showToast('Message', 'success');
 | persistence.js | 199 | Data | 11 |
 | import-export.js | 121 | Data | 12 |
 | clipboard.js | 271 | Data | 13 |
-| **TOTAL** | **1,026** | - | - |
+| tasks.js | 280 | Core | 15 |
+| status.js | 450 | Core | 16 |
+| relationships.js | 170 | Core | 17 |
+| **TOTAL** | **1,926** | - | - |
 
 ---
 
-## Notes for Next Phase
+## Notes for Next Phase (Phase 4: Rendering)
 
-1. **Geometry utilities missing**: getBoundingBox() and distance calculations not found in search. May need to extract from rendering code.
+1. **render() is the largest function** (~600 lines): Will need careful extraction into node and link rendering helpers.
 
-2. **Phase 3 dependencies**: Task management functions will need to reference undo-redo and persistence layers.
+2. **Golden path visualization**: Relatively simple (1 function, 35 lines) - good starting point for Phase 4.
 
-3. **Load order critical**: Modules must load in @order sequence. Utils (5-9) → Data (10-14) → Core (15+).
+3. **Off-screen indicators**: Complex logic with arrow positioning and click handlers (~200 lines).
 
-4. **Testing strategy**: Each phase should be tested independently before moving to next phase.
+4. **Rendering helpers**: calculateTaskDimensions(), getLineEndAtRectEdge(), createLine(), createCurvedPath().
 
-5. **No breaking changes**: All extracted functions remain as app methods. No API changes needed.
+5. **Load order critical**: Modules must load in @order sequence. Utils (5-9) → Data (10-14) → Core (15-19) → Rendering (20-24).
 
 ---
 
 ## Conclusion
 
-Successfully extracted **7 modules** totaling **1,026 lines** of well-documented, modular JavaScript code. All functions preserve original logic, comments, and integration points. Ready for Phase 3 extraction.
+Successfully extracted **10 modules** totaling **1,926 lines** of well-documented, modular JavaScript code.
+
+**Phase 1-3 Complete:**
+- Utils layer: Platform detection, SVG transforms, cycle detection
+- Data layer: Undo/redo, persistence, import/export, clipboard
+- Core layer: Task CRUD, status management, relationships
+
+**Remaining: Phases 4-7** (~5000 lines across 18 modules)
+
+All functions preserve original logic, comments, and integration points. The extraction pattern is established and ready for Phases 4-7.
+
+---
+
+## Additional Resources Created
+
+1. **EXTRACTION_MAP.md** - Complete line-by-line mapping of all 121 functions
+2. **MODULE_EXTRACTION_PROGRESS.md** - Detailed progress tracking and extraction guide
+3. **extract_modules.sh** - Bash script template for automation
+
+These documents provide a complete roadmap for finishing the remaining 18 modules.
