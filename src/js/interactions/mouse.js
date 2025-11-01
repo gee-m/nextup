@@ -159,13 +159,13 @@ export const MouseMixin = {
                 this.render();
             }
         } else if (this.dragMode === 'subtree-pending' && this.selectedNode !== null) {
-            // Check if moved >5px to activate subtree drag (vs shift+click for selection)
+            // Check if moved >threshold to activate subtree drag (vs shift+click for selection)
             const distance = Math.sqrt(
                 Math.pow(pt.x - this.dragStartOriginal.x, 2) +
                 Math.pow(pt.y - this.dragStartOriginal.y, 2)
             );
 
-            if (distance >= 5) {
+            if (distance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                 // Activate full subtree drag
                 this.dragMode = 'subtree';
                 const taskId = this.selectedNode;
@@ -209,13 +209,13 @@ export const MouseMixin = {
 
             this.render();
         } else if (this.dragMode === 'reparent-pending' && this.selectedNode !== null) {
-            // Check if moved >5px to activate reparent drag (vs Ctrl+click for multi-select)
+            // Check if moved >threshold to activate reparent drag (vs Ctrl+click for multi-select)
             const distance = Math.sqrt(
                 Math.pow(pt.x - this.dragStartOriginal.x, 2) +
                 Math.pow(pt.y - this.dragStartOriginal.y, 2)
             );
 
-            if (distance >= 5) {
+            if (distance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                 // Activate reparent drag mode
                 this.dragMode = 'reparent';
                 this.createTempLine(e);
@@ -343,7 +343,7 @@ export const MouseMixin = {
                 );
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
-                if (movedDistance >= 5) {
+                if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -365,7 +365,7 @@ export const MouseMixin = {
                 );
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
-                if (movedDistance >= 5) {
+                if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -425,8 +425,8 @@ export const MouseMixin = {
                 Math.pow(pt.y - this.dragStartOriginal.y, 2)
             );
 
-            // If pan distance < 5px, treat as a click on canvas and clear selection
-            if (panDistance < 5) {
+            // If pan distance < threshold, treat as a click on canvas and clear selection
+            if (panDistance < this.INTERACTION.DRAG_THRESHOLD_PX) {
                 this.selectedTaskIds.clear();
                 this.selectedLine = null;
                 this.render();

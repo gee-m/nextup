@@ -100,68 +100,27 @@ export const JumpMixin = {
             workingTask.hidden = false;
         }
 
-        const targetViewBoxX = workingTask.x - this.viewBox.width / 2;
-        const targetViewBoxY = workingTask.y - this.viewBox.height / 2;
         const targetZoom = 1.2;
+        const taskTitle = this.truncateTitle(workingTask.title);
 
         if (animate) {
-            const svg = document.getElementById('canvas');
-            svg.classList.add('animating-view');
+            // Use utility function for smooth three-phase animation
             const startZoom = this.zoomLevel;
-            const endZoom = targetZoom;
-            const overviewZoom = Math.min(startZoom, endZoom) * 0.5;
-            const startViewBoxX = this.viewBox.x;
-            const startViewBoxY = this.viewBox.y;
-            const totalDuration = 1300;
-            const zoomOutDuration = 300;
-            const panDuration = 500;
-            const zoomInDuration = 500;
-            const startTime = performance.now();
+            const overviewZoom = Math.min(startZoom, targetZoom) * 0.5;
 
-            const animatePhases = (currentTime) => {
-                const elapsed = currentTime - startTime;
-                if (elapsed < zoomOutDuration) {
-                    const progress = elapsed / zoomOutDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3);
-                    this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+            this.animateViewportTo(workingTask.x, workingTask.y, targetZoom, {
+                overviewZoom: overviewZoom,
+                onComplete: () => {
                     this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-                } else if (elapsed < zoomOutDuration + panDuration) {
-                    const panProgress = (elapsed - zoomOutDuration) / panDuration;
-                    const panEased = 1 - Math.pow(1 - panProgress, 3);
-                    this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
-                    this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
-                    this.zoomLevel = overviewZoom;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-                } else if (elapsed < totalDuration) {
-                    const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3);
-                    this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-                } else {
-                    this.zoomLevel = endZoom;
-                    this.updateZoomDisplay();
-                    svg.classList.remove('animating-view');
                     this.saveToStorage();
-                    this.render();
-                    const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
                     this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
                 }
-            };
-            requestAnimationFrame(animatePhases);
+            });
         } else {
-            this.viewBox.x = targetViewBoxX;
-            this.viewBox.y = targetViewBoxY;
-            this.zoomLevel = targetZoom;
+            // Instant jump without animation
+            this.jumpToPosition(workingTask.x, workingTask.y, targetZoom);
             this.updateZoomDisplay();
             this.saveToStorage();
-            this.render();
-            const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
             this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
         }
     },

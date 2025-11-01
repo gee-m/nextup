@@ -1,5 +1,5 @@
 /**
- * @order 8
+ * @order 14
  * @category Utils
  * @description Dependency cycle detection
  *

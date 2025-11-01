@@ -2062,53 +2062,384 @@ console.log('[url-helpers.js] URL extraction and formatting utilities loaded');
 
 
 // ============================================================
-// UTILS/CYCLE-DETECTION.JS (Order: 8, Category: Utils)
+// UTILS/CONSTANTS.JS (Order: 8, Category: Utils)
 // ============================================================
 
 /**
+ * @module utils/constants
  * @order 8
  * @category Utils
- * @description Dependency cycle detection
  *
- * This module provides:
- * - wouldCreateCycle() - Checks if adding a dependency would create a circular dependency
- *
- * ALGORITHM: Breadth-first search (BFS)
- * - Start from the target task (toId)
- * - Follow all dependency chains
- * - If we reach the source task (fromId), a cycle exists
- *
- * USAGE: Called before adding dependencies via Alt+drag
- * Prevents: A → B → C → A (circular dependency)
+ * Application-wide constants
+ * Eliminates magic numbers and provides single source of truth
  */
 
 /**
- * Check if adding a dependency from→to would create a cycle
- * @param {number} fromId - Task that will depend on toId
- * @param {number} toId - Task that fromId will depend on
- * @returns {boolean} True if cycle would be created, false otherwise
+ * Interaction Constants
+ * Controls how user input is interpreted
  */
-app.wouldCreateCycle = function(fromId, toId) {
-    // Check if adding dependency from->to would create a cycle
-    const visited = new Set();
-    const queue = [toId];
+app.INTERACTION = {
+    /**
+     * Minimum pixels to move before drag activates
+     * Used to distinguish between click and drag
+     */
+    DRAG_THRESHOLD_PX: 5,
 
-    while (queue.length > 0) {
-        const current = queue.shift();
-        if (current === fromId) return true;
-        if (visited.has(current)) continue;
+    /**
+     * Delay before click menu appears (ms)
+     * Allows time for double-click detection
+     */
+    CLICK_DELAY_MS: 200,
 
-        visited.add(current);
-        const task = this.tasks.find(t => t.id === current);
-        if (task) {
-            queue.push(...task.dependencies);
-        }
-    }
+    /**
+     * Maximum time between clicks for double-click (ms)
+     */
+    DOUBLE_CLICK_MAX_MS: 300,
 
-    return false;
+    /**
+     * Paste offset distance (px)
+     * How far to offset pasted tasks from original
+     */
+    PASTE_OFFSET_X: 100,
+    PASTE_OFFSET_Y: 100,
 };
 
-console.log('[cycle-detection.js] Dependency cycle detection loaded');
+/**
+ * Animation Durations (milliseconds)
+ * Controls timing for smooth viewport animations
+ */
+app.ANIMATION = {
+    /** Zoom out duration for viewport animation */
+    ZOOM_OUT_MS: 300,
+
+    /** Pan/move duration for viewport animation */
+    PAN_MS: 500,
+
+    /** Zoom in duration for viewport animation */
+    ZOOM_IN_MS: 500,
+
+    /** Total animation time (zoom out + pan + zoom in) */
+    TOTAL_MS: 1300,
+
+    /**
+     * Easing function for smooth animations
+     * Ease-in-out quadratic curve
+     * @param {number} t - Progress from 0 to 1
+     * @returns {number} Eased value
+     */
+    EASING: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+};
+
+/**
+ * UI Display Constants
+ * Controls visual presentation
+ */
+app.UI = {
+    /**
+     * Default title truncation length
+     * Note: Some contexts use app.textLengthThreshold from config
+     */
+    TITLE_MAX_LENGTH: 30,
+
+    /**
+     * Toast message durations by severity (ms)
+     */
+    TOAST_DURATION: {
+        SUCCESS: 2000,   // Quick confirmation
+        INFO: 3000,      // Standard information
+        WARNING: 3000,   // User attention needed
+        ERROR: 4000,     // Critical issues need more time
+    },
+
+    /**
+     * Modal z-index for layering
+     */
+    MODAL_Z_INDEX: 1000,
+
+    /**
+     * Dropdown z-index (higher than modal)
+     */
+    DROPDOWN_Z_INDEX: 1100,
+};
+
+/**
+ * Canvas/Rendering Constants
+ * Controls how tasks are displayed
+ */
+app.CANVAS = {
+    /**
+     * Default viewBox dimensions
+     */
+    DEFAULT_WIDTH: 2000,
+    DEFAULT_HEIGHT: 1500,
+
+    /**
+     * Zoom limits
+     */
+    MIN_ZOOM: 0.1,
+    MAX_ZOOM: 3.0,
+
+    /**
+     * Grid snap distance (px)
+     * Currently unused but reserved for future grid feature
+     */
+    GRID_SNAP: 10,
+};
+
+/**
+ * Data/Storage Constants
+ */
+app.STORAGE = {
+    /**
+     * localStorage key prefix
+     */
+    KEY_PREFIX: 'task-tree-',
+
+    /**
+     * Maximum undo/redo stack size
+     * Note: App has maxUndoSteps config that may override
+     */
+    MAX_UNDO_STEPS: 50,
+
+    /**
+     * Undo snapshot grouping time window (ms)
+     * Edits within this window get grouped into one undo step
+     */
+    UNDO_GROUP_WINDOW_MS: 2000,
+};
+
+/**
+ * Feature Flags
+ * Quick toggles for experimental features
+ */
+app.FEATURES = {
+    /**
+     * Enable performance logging
+     */
+    DEBUG_PERFORMANCE: false,
+
+    /**
+     * Enable verbose console logging
+     */
+    DEBUG_VERBOSE: false,
+};
+
+console.log('[constants.js] Application constants loaded');
+
+
+
+// ============================================================
+// UTILS/TASK-HELPERS.JS (Order: 9, Category: Utils)
+// ============================================================
+
+/**
+ * @module utils/task-helpers
+ * @order 9
+ * @category Utils
+ *
+ * Task manipulation and validation utilities
+ * Centralizes common task operations to eliminate code duplication
+ */
+
+Object.assign(app, {
+    /**
+     * Validate task has finite coordinates
+     * Prevents NaN/Infinity rendering bugs
+     *
+     * @param {Object} task - Task object to validate
+     * @returns {boolean} true if coordinates are valid, false otherwise
+     */
+    validateTaskCoordinates(task) {
+        if (!task) {
+            console.error('[VALIDATION] Cannot validate null/undefined task');
+            return false;
+        }
+
+        if (!isFinite(task.x) || !isFinite(task.y)) {
+            console.error(
+                `[VALIDATION] Task ${task.id} "${task.title || 'Untitled'}" has invalid coords: (${task.x}, ${task.y})`
+            );
+            return false;
+        }
+
+        return true;
+    },
+
+    /**
+     * Truncate title to maximum length with ellipsis
+     *
+     * @param {string} title - Task title to truncate
+     * @param {number} maxLength - Maximum characters (default 30)
+     * @returns {string} Truncated title with '...' if needed
+     */
+    truncateTitle(title, maxLength = 30) {
+        if (!title) return '';
+        if (typeof title !== 'string') return String(title);
+        if (title.length <= maxLength) return title;
+        return title.substring(0, maxLength - 3) + '...';
+    },
+
+    /**
+     * Find task by ID with null safety
+     * Prevents crashes from undefined task access
+     *
+     * @param {Array} tasks - Tasks array
+     * @param {number} id - Task ID to find
+     * @returns {Object|null} Task object or null if not found
+     */
+    findTaskById(tasks, id) {
+        if (!tasks || !Array.isArray(tasks)) {
+            console.warn('[TASK-HELPERS] findTaskById called with invalid tasks array');
+            return null;
+        }
+        return tasks.find(t => t.id === id) || null;
+    },
+
+    /**
+     * Get safe task title for display
+     * Handles null/undefined tasks and empty titles
+     *
+     * @param {Object} task - Task object
+     * @param {number} maxLength - Max length before truncation (default 30)
+     * @returns {string} Safe display title
+     */
+    getTaskDisplayTitle(task, maxLength = 30) {
+        if (!task) return 'Untitled';
+        if (!task.title || task.title.trim() === '') return 'Untitled';
+        return this.truncateTitle(task.title, maxLength);
+    },
+
+    /**
+     * Get all ancestor tasks (parents, grandparents, etc.)
+     * Useful for hierarchy traversal
+     *
+     * @param {Array} tasks - All tasks
+     * @param {Object} task - Starting task
+     * @returns {Array} Array of ancestor tasks (parent first, root last)
+     */
+    getAncestors(tasks, task) {
+        const ancestors = [];
+        let current = task;
+
+        while (current && current.mainParent !== null) {
+            const parent = this.findTaskById(tasks, current.mainParent);
+            if (!parent) break; // Circular reference protection
+            if (ancestors.includes(parent)) break; // Additional safety
+            ancestors.push(parent);
+            current = parent;
+        }
+
+        return ancestors;
+    },
+
+    /**
+     * Get all descendant tasks (children, grandchildren, etc.)
+     * Useful for subtree operations
+     *
+     * @param {Array} tasks - All tasks
+     * @param {Object} task - Starting task
+     * @param {boolean} includeHidden - Include hidden descendants (default false)
+     * @returns {Array} Array of descendant tasks
+     */
+    getDescendants(tasks, task, includeHidden = false) {
+        const descendants = [];
+        const toProcess = [...(task.children || [])];
+        const processed = new Set();
+
+        while (toProcess.length > 0) {
+            const childId = toProcess.shift();
+
+            // Circular reference protection
+            if (processed.has(childId)) continue;
+            processed.add(childId);
+
+            const child = this.findTaskById(tasks, childId);
+            if (!child) continue;
+            if (!includeHidden && child.hidden) continue;
+
+            descendants.push(child);
+
+            // Add grandchildren
+            if (child.children) {
+                toProcess.push(...child.children);
+            }
+        }
+
+        return descendants;
+    },
+
+    /**
+     * Check if task has any incomplete children
+     * Used for status indicators
+     *
+     * @param {Array} tasks - All tasks
+     * @param {Object} task - Parent task to check
+     * @returns {boolean} true if has incomplete children
+     */
+    hasIncompleteChildren(tasks, task) {
+        if (!task.children || task.children.length === 0) return false;
+
+        for (const childId of task.children) {
+            const child = this.findTaskById(tasks, childId);
+            if (!child) continue;
+            if (child.hidden) continue;
+            if (child.status !== 'done') return true;
+        }
+
+        return false;
+    },
+
+    /**
+     * Count visible children by status
+     * Used for progress indicators
+     *
+     * @param {Array} tasks - All tasks
+     * @param {Object} task - Parent task
+     * @returns {Object} { total, done, pending, working }
+     */
+    countChildrenByStatus(tasks, task) {
+        const counts = { total: 0, done: 0, pending: 0, working: 0 };
+
+        if (!task.children) return counts;
+
+        for (const childId of task.children) {
+            const child = this.findTaskById(tasks, childId);
+            if (!child || child.hidden) continue;
+
+            counts.total++;
+            if (child.currentlyWorking) {
+                counts.working++;
+            } else if (child.status === 'done') {
+                counts.done++;
+            } else {
+                counts.pending++;
+            }
+        }
+
+        return counts;
+    },
+
+    /**
+     * Format task path for display (e.g., "Root > Parent > Task")
+     * Used in status bar and tooltips
+     *
+     * @param {Array} tasks - All tasks
+     * @param {Object} task - Task to format path for
+     * @param {string} separator - Path separator (default ' > ')
+     * @param {number} maxTitleLength - Max length per title (default 20)
+     * @returns {string} Formatted path string
+     */
+    formatTaskPath(tasks, task, separator = ' > ', maxTitleLength = 20) {
+        const ancestors = this.getAncestors(tasks, task);
+        const path = [...ancestors.reverse(), task];
+
+        return path
+            .map(t => this.truncateTitle(t.title || 'Untitled', maxTitleLength))
+            .join(separator);
+    },
+});
+
+console.log('[task-helpers.js] Task validation and manipulation helpers loaded');
 
 
 
@@ -3051,6 +3382,57 @@ app.pasteFromClipboard = async function(parentId = null, x = null, y = null) {
 };
 
 console.log('[clipboard.js] Copy/paste subtree operations loaded');
+
+
+
+// ============================================================
+// UTILS/CYCLE-DETECTION.JS (Order: 14, Category: Utils)
+// ============================================================
+
+/**
+ * @order 14
+ * @category Utils
+ * @description Dependency cycle detection
+ *
+ * This module provides:
+ * - wouldCreateCycle() - Checks if adding a dependency would create a circular dependency
+ *
+ * ALGORITHM: Breadth-first search (BFS)
+ * - Start from the target task (toId)
+ * - Follow all dependency chains
+ * - If we reach the source task (fromId), a cycle exists
+ *
+ * USAGE: Called before adding dependencies via Alt+drag
+ * Prevents: A → B → C → A (circular dependency)
+ */
+
+/**
+ * Check if adding a dependency from→to would create a cycle
+ * @param {number} fromId - Task that will depend on toId
+ * @param {number} toId - Task that fromId will depend on
+ * @returns {boolean} True if cycle would be created, false otherwise
+ */
+app.wouldCreateCycle = function(fromId, toId) {
+    // Check if adding dependency from->to would create a cycle
+    const visited = new Set();
+    const queue = [toId];
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (current === fromId) return true;
+        if (visited.has(current)) continue;
+
+        visited.add(current);
+        const task = this.tasks.find(t => t.id === current);
+        if (task) {
+            queue.push(...task.dependencies);
+        }
+    }
+
+    return false;
+};
+
+console.log('[cycle-detection.js] Dependency cycle detection loaded');
 
 
 
@@ -5498,13 +5880,13 @@ Object.assign(app, {
                 this.render();
             }
         } else if (this.dragMode === 'subtree-pending' && this.selectedNode !== null) {
-            // Check if moved >5px to activate subtree drag (vs shift+click for selection)
+            // Check if moved >threshold to activate subtree drag (vs shift+click for selection)
             const distance = Math.sqrt(
                 Math.pow(pt.x - this.dragStartOriginal.x, 2) +
                 Math.pow(pt.y - this.dragStartOriginal.y, 2)
             );
 
-            if (distance >= 5) {
+            if (distance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                 // Activate full subtree drag
                 this.dragMode = 'subtree';
                 const taskId = this.selectedNode;
@@ -5548,13 +5930,13 @@ Object.assign(app, {
 
             this.render();
         } else if (this.dragMode === 'reparent-pending' && this.selectedNode !== null) {
-            // Check if moved >5px to activate reparent drag (vs Ctrl+click for multi-select)
+            // Check if moved >threshold to activate reparent drag (vs Ctrl+click for multi-select)
             const distance = Math.sqrt(
                 Math.pow(pt.x - this.dragStartOriginal.x, 2) +
                 Math.pow(pt.y - this.dragStartOriginal.y, 2)
             );
 
-            if (distance >= 5) {
+            if (distance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                 // Activate reparent drag mode
                 this.dragMode = 'reparent';
                 this.createTempLine(e);
@@ -5682,7 +6064,7 @@ Object.assign(app, {
                 );
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
-                if (movedDistance >= 5) {
+                if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -5704,7 +6086,7 @@ Object.assign(app, {
                 );
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
-                if (movedDistance >= 5) {
+                if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -5764,8 +6146,8 @@ Object.assign(app, {
                 Math.pow(pt.y - this.dragStartOriginal.y, 2)
             );
 
-            // If pan distance < 5px, treat as a click on canvas and clear selection
-            if (panDistance < 5) {
+            // If pan distance < threshold, treat as a click on canvas and clear selection
+            if (panDistance < this.INTERACTION.DRAG_THRESHOLD_PX) {
                 this.selectedTaskIds.clear();
                 this.selectedLine = null;
                 this.render();
@@ -7867,6 +8249,155 @@ Object.assign(app, {
 
 
 // ============================================================
+// UTILS/VIEWPORT-ANIMATION.JS (Order: 39, Category: Utils)
+// ============================================================
+
+/**
+ * @module utils/viewport-animation
+ * @order 39
+ * @category Utils
+ *
+ * Smooth viewport navigation animations
+ * Extracts duplicate code from jump.js and homes.js
+ */
+
+Object.assign(app, {
+    /**
+     * Smoothly animate viewport to target position with zoom
+     *
+     * Three-phase animation for smooth UX:
+     * 1. Zoom out to overview (see both current and target)
+     * 2. Pan to target location
+     * 3. Zoom in to target zoom level
+     *
+     * This creates a natural "fly-over" effect that helps users
+     * maintain spatial awareness during navigation.
+     *
+     * @param {number} targetX - Target X coordinate (center point)
+     * @param {number} targetY - Target Y coordinate (center point)
+     * @param {number} targetZoom - Target zoom level (default 1.0)
+     * @param {Object} options - Animation options
+     * @param {number} options.overviewZoom - Zoom level for overview phase (default 0.3)
+     * @param {Function} options.onComplete - Callback when animation completes
+     * @returns {Promise} Resolves when animation completes
+     *
+     * @example
+     * // Jump to task with smooth animation
+     * await app.animateViewportTo(task.x, task.y, 1.0, {
+     *     onComplete: () => app.showToast('Navigation complete')
+     * });
+     */
+    animateViewportTo(targetX, targetY, targetZoom = 1.0, options = {}) {
+        const {
+            overviewZoom = 0.3,
+            onComplete = null,
+        } = options;
+
+        return new Promise((resolve) => {
+            // Store starting state
+            const startX = this.viewBox.x + this.viewBox.width / 2;
+            const startY = this.viewBox.y + this.viewBox.height / 2;
+            const startZoom = this.zoomLevel;
+
+            // Calculate distances for pan
+            const dx = targetX - startX;
+            const dy = targetY - startY;
+
+            // Phase 1: Zoom out to overview
+            this._animatePhase(0, this.ANIMATION.ZOOM_OUT_MS, (progress) => {
+                const t = this.ANIMATION.EASING(progress);
+                this.zoomLevel = startZoom + (overviewZoom - startZoom) * t;
+                this.render();
+            }, () => {
+                // Phase 2: Pan to target location
+                this._animatePhase(0, this.ANIMATION.PAN_MS, (progress) => {
+                    const t = this.ANIMATION.EASING(progress);
+                    const currentX = startX + dx * t;
+                    const currentY = startY + dy * t;
+
+                    // Update viewBox center
+                    this.viewBox.x = currentX - this.viewBox.width / 2;
+                    this.viewBox.y = currentY - this.viewBox.height / 2;
+                    this.render();
+                }, () => {
+                    // Phase 3: Zoom in to target level
+                    this._animatePhase(0, this.ANIMATION.ZOOM_IN_MS, (progress) => {
+                        const t = this.ANIMATION.EASING(progress);
+                        this.zoomLevel = overviewZoom + (targetZoom - overviewZoom) * t;
+
+                        // Recenter on target during zoom to prevent drift
+                        this.viewBox.x = targetX - this.viewBox.width / 2;
+                        this.viewBox.y = targetY - this.viewBox.height / 2;
+                        this.render();
+                    }, () => {
+                        // Final positioning - ensure exact target state
+                        this.zoomLevel = targetZoom;
+                        this.viewBox.x = targetX - this.viewBox.width / 2;
+                        this.viewBox.y = targetY - this.viewBox.height / 2;
+                        this.render();
+
+                        // Execute callback and resolve promise
+                        if (onComplete) onComplete();
+                        resolve();
+                    });
+                });
+            });
+        });
+    },
+
+    /**
+     * Helper: Animate a single phase using requestAnimationFrame
+     *
+     * @param {number} startTime - Animation start time (0 for first frame)
+     * @param {number} duration - Phase duration in milliseconds
+     * @param {Function} onProgress - Callback with progress (0 to 1)
+     * @param {Function} onComplete - Callback when phase complete
+     * @private
+     */
+    _animatePhase(startTime, duration, onProgress, onComplete) {
+        const animate = (currentTime) => {
+            // Initialize start time on first frame
+            if (startTime === 0) startTime = currentTime;
+
+            // Calculate progress (0 to 1)
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1.0);
+
+            // Update via callback
+            onProgress(progress);
+
+            // Continue or complete
+            if (progress < 1.0) {
+                requestAnimationFrame(animate);
+            } else {
+                onComplete();
+            }
+        };
+
+        requestAnimationFrame(animate);
+    },
+
+    /**
+     * Instant jump to position (no animation)
+     * Useful for immediate navigation or when animation is disabled
+     *
+     * @param {number} targetX - Target X coordinate (center)
+     * @param {number} targetY - Target Y coordinate (center)
+     * @param {number} targetZoom - Target zoom level (default 1.0)
+     */
+    jumpToPosition(targetX, targetY, targetZoom = 1.0) {
+        this.zoomLevel = targetZoom;
+        this.viewBox.x = targetX - this.viewBox.width / 2;
+        this.viewBox.y = targetY - this.viewBox.height / 2;
+        this.render();
+    },
+});
+
+console.log('[viewport-animation.js] Smooth viewport navigation animations loaded');
+
+
+
+// ============================================================
 // NAVIGATION/VIEWPORT.JS (Order: 40, Category: navigation)
 // ============================================================
 
@@ -8154,98 +8685,25 @@ Object.assign(app, {
             return;
         }
 
-        // Calculate absolute viewBox position to center on saved home coordinates
-        // viewBox.x + viewBox.width/2 = home.centerX
-        // Therefore: viewBox.x = home.centerX - viewBox.width/2
-        const targetViewBoxX = home.centerX - this.viewBox.width / 2;
-        const targetViewBoxY = home.centerY - this.viewBox.height / 2;
-
         if (animate) {
-            // Cinematic 3-phase animation: zoom out → pan → zoom in
-            const svg = document.getElementById('canvas');
-            svg.classList.add('animating-view');
-
+            // Use utility function for smooth three-phase animation
             const startZoom = this.zoomLevel;
-            const endZoom = home.zoomLevel;
-            const overviewZoom = Math.min(startZoom, endZoom) * 0.5; // Zoom out to 50% of minimum
+            const targetZoom = home.zoomLevel;
+            const overviewZoom = Math.min(startZoom, targetZoom) * 0.5;
 
-            // Store starting viewBox position for smooth pan interpolation
-            const startViewBoxX = this.viewBox.x;
-            const startViewBoxY = this.viewBox.y;
-
-            const totalDuration = 1300; // ms
-            const zoomOutDuration = 300;
-            const panDuration = 500;
-            const zoomInDuration = 500;
-            const startTime = performance.now();
-
-            // Animation phases
-            const animatePhases = (currentTime) => {
-                const elapsed = currentTime - startTime;
-
-                if (elapsed < zoomOutDuration) {
-                    // Phase 1: Zoom out (0-300ms)
-                    const progress = elapsed / zoomOutDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
-                    this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+            this.animateViewportTo(home.centerX, home.centerY, targetZoom, {
+                overviewZoom: overviewZoom,
+                onComplete: () => {
                     this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-
-                } else if (elapsed < zoomOutDuration + panDuration) {
-                    // Phase 2: Smoothly pan while zoomed out (300-800ms)
-                    const panProgress = (elapsed - zoomOutDuration) / panDuration;
-                    const panEased = 1 - Math.pow(1 - panProgress, 3); // ease-out
-
-                    // Progressively interpolate viewBox position
-                    this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
-                    this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
-
-                    // Stay at overview zoom during pan
-                    this.zoomLevel = overviewZoom;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-
-                } else if (elapsed < totalDuration) {
-                    // Phase 3: Zoom in to target (800-1300ms)
-                    const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
-                    this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-
-                } else {
-                    // Animation complete
-                    this.zoomLevel = endZoom;
-                    this.updateZoomDisplay();
-                    svg.classList.remove('animating-view');
-                    this.render(); // Lines reappear with perfect edge-to-edge arrows
-
-                    // Save after animation completes to persist zoom
                     this.saveToStorage();
+                    this.showToast(`→ Jumped to "${home.name}"`, 'success');
                 }
-            };
-
-            requestAnimationFrame(animatePhases);
-
-            // Note: Lines fade out via CSS (opacity: 0 on .animating-view line)
-            // They'll be re-rendered perfectly after animation completes
-
-            this.showToast(`→ Jumped to "${home.name}"`, 'success');
+            });
         } else {
-            // Instant jump (no animation)
-            // SET viewBox to target position (don't add, to avoid accumulation!)
-            this.viewBox.x = targetViewBoxX;
-            this.viewBox.y = targetViewBoxY;
-
-            this.zoomLevel = home.zoomLevel;
+            // Instant jump without animation
+            this.jumpToPosition(home.centerX, home.centerY, home.zoomLevel);
             this.updateZoomDisplay();
-
             this.saveToStorage();
-            this.render();
-
             this.showToast(`→ Jumped to "${home.name}"`, 'success');
         }
     },
@@ -8752,68 +9210,27 @@ Object.assign(app, {
             workingTask.hidden = false;
         }
 
-        const targetViewBoxX = workingTask.x - this.viewBox.width / 2;
-        const targetViewBoxY = workingTask.y - this.viewBox.height / 2;
         const targetZoom = 1.2;
+        const taskTitle = this.truncateTitle(workingTask.title);
 
         if (animate) {
-            const svg = document.getElementById('canvas');
-            svg.classList.add('animating-view');
+            // Use utility function for smooth three-phase animation
             const startZoom = this.zoomLevel;
-            const endZoom = targetZoom;
-            const overviewZoom = Math.min(startZoom, endZoom) * 0.5;
-            const startViewBoxX = this.viewBox.x;
-            const startViewBoxY = this.viewBox.y;
-            const totalDuration = 1300;
-            const zoomOutDuration = 300;
-            const panDuration = 500;
-            const zoomInDuration = 500;
-            const startTime = performance.now();
+            const overviewZoom = Math.min(startZoom, targetZoom) * 0.5;
 
-            const animatePhases = (currentTime) => {
-                const elapsed = currentTime - startTime;
-                if (elapsed < zoomOutDuration) {
-                    const progress = elapsed / zoomOutDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3);
-                    this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+            this.animateViewportTo(workingTask.x, workingTask.y, targetZoom, {
+                overviewZoom: overviewZoom,
+                onComplete: () => {
                     this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-                } else if (elapsed < zoomOutDuration + panDuration) {
-                    const panProgress = (elapsed - zoomOutDuration) / panDuration;
-                    const panEased = 1 - Math.pow(1 - panProgress, 3);
-                    this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
-                    this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
-                    this.zoomLevel = overviewZoom;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-                } else if (elapsed < totalDuration) {
-                    const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3);
-                    this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-                } else {
-                    this.zoomLevel = endZoom;
-                    this.updateZoomDisplay();
-                    svg.classList.remove('animating-view');
                     this.saveToStorage();
-                    this.render();
-                    const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
                     this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
                 }
-            };
-            requestAnimationFrame(animatePhases);
+            });
         } else {
-            this.viewBox.x = targetViewBoxX;
-            this.viewBox.y = targetViewBoxY;
-            this.zoomLevel = targetZoom;
+            // Instant jump without animation
+            this.jumpToPosition(workingTask.x, workingTask.y, targetZoom);
             this.updateZoomDisplay();
             this.saveToStorage();
-            this.render();
-            const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
             this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
         }
     },

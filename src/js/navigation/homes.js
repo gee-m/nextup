@@ -130,98 +130,25 @@ export const HomesMixin = {
             return;
         }
 
-        // Calculate absolute viewBox position to center on saved home coordinates
-        // viewBox.x + viewBox.width/2 = home.centerX
-        // Therefore: viewBox.x = home.centerX - viewBox.width/2
-        const targetViewBoxX = home.centerX - this.viewBox.width / 2;
-        const targetViewBoxY = home.centerY - this.viewBox.height / 2;
-
         if (animate) {
-            // Cinematic 3-phase animation: zoom out → pan → zoom in
-            const svg = document.getElementById('canvas');
-            svg.classList.add('animating-view');
-
+            // Use utility function for smooth three-phase animation
             const startZoom = this.zoomLevel;
-            const endZoom = home.zoomLevel;
-            const overviewZoom = Math.min(startZoom, endZoom) * 0.5; // Zoom out to 50% of minimum
+            const targetZoom = home.zoomLevel;
+            const overviewZoom = Math.min(startZoom, targetZoom) * 0.5;
 
-            // Store starting viewBox position for smooth pan interpolation
-            const startViewBoxX = this.viewBox.x;
-            const startViewBoxY = this.viewBox.y;
-
-            const totalDuration = 1300; // ms
-            const zoomOutDuration = 300;
-            const panDuration = 500;
-            const zoomInDuration = 500;
-            const startTime = performance.now();
-
-            // Animation phases
-            const animatePhases = (currentTime) => {
-                const elapsed = currentTime - startTime;
-
-                if (elapsed < zoomOutDuration) {
-                    // Phase 1: Zoom out (0-300ms)
-                    const progress = elapsed / zoomOutDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
-                    this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+            this.animateViewportTo(home.centerX, home.centerY, targetZoom, {
+                overviewZoom: overviewZoom,
+                onComplete: () => {
                     this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-
-                } else if (elapsed < zoomOutDuration + panDuration) {
-                    // Phase 2: Smoothly pan while zoomed out (300-800ms)
-                    const panProgress = (elapsed - zoomOutDuration) / panDuration;
-                    const panEased = 1 - Math.pow(1 - panProgress, 3); // ease-out
-
-                    // Progressively interpolate viewBox position
-                    this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
-                    this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
-
-                    // Stay at overview zoom during pan
-                    this.zoomLevel = overviewZoom;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-
-                } else if (elapsed < totalDuration) {
-                    // Phase 3: Zoom in to target (800-1300ms)
-                    const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
-                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
-                    this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
-                    this.updateZoomDisplay();
-                    this.updateViewBoxOnly();
-                    requestAnimationFrame(animatePhases);
-
-                } else {
-                    // Animation complete
-                    this.zoomLevel = endZoom;
-                    this.updateZoomDisplay();
-                    svg.classList.remove('animating-view');
-                    this.render(); // Lines reappear with perfect edge-to-edge arrows
-
-                    // Save after animation completes to persist zoom
                     this.saveToStorage();
+                    this.showToast(`→ Jumped to "${home.name}"`, 'success');
                 }
-            };
-
-            requestAnimationFrame(animatePhases);
-
-            // Note: Lines fade out via CSS (opacity: 0 on .animating-view line)
-            // They'll be re-rendered perfectly after animation completes
-
-            this.showToast(`→ Jumped to "${home.name}"`, 'success');
+            });
         } else {
-            // Instant jump (no animation)
-            // SET viewBox to target position (don't add, to avoid accumulation!)
-            this.viewBox.x = targetViewBoxX;
-            this.viewBox.y = targetViewBoxY;
-
-            this.zoomLevel = home.zoomLevel;
+            // Instant jump without animation
+            this.jumpToPosition(home.centerX, home.centerY, home.zoomLevel);
             this.updateZoomDisplay();
-
             this.saveToStorage();
-            this.render();
-
             this.showToast(`→ Jumped to "${home.name}"`, 'success');
         }
     },

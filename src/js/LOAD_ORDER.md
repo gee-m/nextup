@@ -29,21 +29,32 @@ This file documents the required load order for all extracted JavaScript modules
 
 ---
 
-### @order: 7 - geometry.js (TODO: Phase 3)
+### @order: 7 - url-helpers.js
 ```html
-<!-- <script src="src/js/utils/geometry.js"></script> -->
+<script src="src/js/utils/url-helpers.js"></script>
 ```
-**Provides:** getBoundingBox(), distance calculations
-**Status:** Not yet extracted
+**Provides:** extractURLsFromText(), removeURLsFromText(), isValidURL()
+**Dependencies:** None (pure URL utilities)
 
 ---
 
-### @order: 8 - cycle-detection.js
+### @order: 8 - constants.js ✨ NEW
 ```html
-<script src="src/js/utils/cycle-detection.js"></script>
+<script src="src/js/utils/constants.js"></script>
 ```
-**Provides:** wouldCreateCycle()
-**Dependencies:** Requires `this.tasks` array to exist
+**Provides:** app.INTERACTION, app.ANIMATION, app.UI, app.CANVAS, app.STORAGE, app.FEATURES
+**Dependencies:** None (pure constants)
+**Purpose:** Eliminates magic numbers, single source of truth for timing, thresholds, durations
+
+---
+
+### @order: 9 - task-helpers.js ✨ NEW
+```html
+<script src="src/js/utils/task-helpers.js"></script>
+```
+**Provides:** validateTaskCoordinates(), truncateTitle(), findTaskById(), getTaskDisplayTitle(), getAncestors(), getDescendants(), hasIncompleteChildren(), countChildrenByStatus(), formatTaskPath()
+**Dependencies:** None (pure validation and display helpers)
+**Purpose:** Defensive programming - eliminates 150+ instances of duplicate validation/display code
 
 ---
 
@@ -100,20 +111,103 @@ This file documents the required load order for all extracted JavaScript modules
 
 ---
 
-## Complete Load Sequence (Phases 1-2)
+### @order: 14 - cycle-detection.js (MOVED from @order 8)
+```html
+<script src="src/js/utils/cycle-detection.js"></script>
+```
+**Provides:** wouldCreateCycle()
+**Dependencies:** Requires `this.tasks` array to exist
+**Note:** Moved after data layer to ensure tasks array is populated
+
+---
+
+## Phase 3: Navigation Layer (@order: 37-43)
+
+### @order: 39 - viewport-animation.js ✨ NEW
+```html
+<script src="src/js/utils/viewport-animation.js"></script>
+```
+**Provides:** animateViewportTo(), jumpToPosition(), _animatePhase()
+**Dependencies:**
+- Requires app.ANIMATION constants (@order 8)
+- Calls `this.render()`, uses `this.viewBox`, `this.zoomLevel`
+**Purpose:** Eliminates 100+ lines of duplicate animation code from jump.js and homes.js
+
+---
+
+## Future Phases (TODO)
+
+### @order: 10 - undo-redo.js
+```html
+<script src="src/js/data/undo-redo.js"></script>
+```
+**Provides:** saveSnapshot(), undo(), redo(), enforceUndoLimit(), clearUndoHistory()
+**Dependencies:**
+- Requires `this.tasks`, `this.undoStack`, `this.redoStack` arrays
+- Calls `this.saveToStorage()`, `this.render()`, `this.updateStatusBar()`
+- Calls `this.showToast()`, `this.showConfirm()` (UI layer)
+
+---
+
+### @order: 11 - persistence.js
+```html
+<script src="src/js/data/persistence.js"></script>
+```
+**Provides:** saveToStorage(), loadFromStorage()
+**Dependencies:**
+- Requires all app state properties (tasks, viewBox, homes, etc.)
+- Calls `this.showToast()` for error handling
+- Calls `this.updateZoomDisplay()` on load
+
+---
+
+### @order: 12 - import-export.js
+```html
+<script src="src/js/data/import-export.js"></script>
+```
+**Provides:** exportData(), copyDataToClipboard(), importData(), showImportModal(), hideImportModal()
+**Dependencies:**
+- Requires `this.saveSnapshot()` (undo-redo.js)
+- Requires `this.loadFromStorage()` (persistence.js)
+- Calls `this.showAlert()` (UI layer)
+- Calls `this.render()`, `this.updateStatusBar()` (UI layer)
+
+---
+
+### @order: 13 - clipboard.js
+```html
+<script src="src/js/data/clipboard.js"></script>
+```
+**Provides:** copySubtree(), pasteSubtree(), pasteFromClipboard()
+**Dependencies:**
+- Requires `this.tasks`, `this.copiedSubtree`, `this.taskIdCounter`
+- Calls `this.saveSnapshot()` (undo-redo.js)
+- Calls `this.saveToStorage()` (persistence.js)
+- Calls `this.showToast()` (UI layer)
+- Calls `this.render()`, `this.updateStatusBar()` (UI layer)
+
+---
+
+## Complete Load Sequence (Phases 1-3)
 
 ```html
 <!-- Utils Layer -->
-<script src="src/js/utils/platform.js"></script>      <!-- @order: 5 -->
-<script src="src/js/utils/svg.js"></script>           <!-- @order: 6 -->
-<!-- <script src="src/js/utils/geometry.js"></script> -->   <!-- @order: 7 - TODO -->
-<script src="src/js/utils/cycle-detection.js"></script>   <!-- @order: 8 -->
+<script src="src/js/utils/platform.js"></script>           <!-- @order: 5 -->
+<script src="src/js/utils/svg.js"></script>                <!-- @order: 6 -->
+<script src="src/js/utils/url-helpers.js"></script>        <!-- @order: 7 -->
+<script src="src/js/utils/constants.js"></script>          <!-- @order: 8 ✨ NEW -->
+<script src="src/js/utils/task-helpers.js"></script>       <!-- @order: 9 ✨ NEW -->
 
 <!-- Data Layer -->
-<script src="src/js/data/undo-redo.js"></script>      <!-- @order: 10 -->
-<script src="src/js/data/persistence.js"></script>    <!-- @order: 11 -->
-<script src="src/js/data/import-export.js"></script>  <!-- @order: 12 -->
-<script src="src/js/data/clipboard.js"></script>      <!-- @order: 13 -->
+<script src="src/js/data/undo-redo.js"></script>           <!-- @order: 10 -->
+<script src="src/js/data/persistence.js"></script>         <!-- @order: 11 -->
+<script src="src/js/data/import-export.js"></script>       <!-- @order: 12 -->
+<script src="src/js/data/clipboard.js"></script>           <!-- @order: 13 -->
+<script src="src/js/utils/cycle-detection.js"></script>    <!-- @order: 14 (moved) -->
+
+<!-- Navigation Layer -->
+<script src="src/js/utils/viewport-animation.js"></script> <!-- @order: 39 ✨ NEW -->
+<!-- ... other navigation files 40-43 ... -->
 ```
 
 ## Dependency Graph
