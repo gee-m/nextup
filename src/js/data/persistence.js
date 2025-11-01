@@ -196,4 +196,24 @@ app.loadFromStorage = function() {
     }
 };
 
+/**
+ * Debounced save for performance optimization
+ * Used for operations that happen frequently (like canvas panning, zooming)
+ * Waits 'delay' ms after last call before actually saving
+ * Prevents excessive localStorage writes during rapid interactions
+ * @param {number} delay - Milliseconds to wait before saving (default: 500)
+ */
+app.debouncedSaveToStorage = function(delay = 500) {
+    // Clear existing timer if any
+    if (this.saveDebounceTimer) {
+        clearTimeout(this.saveDebounceTimer);
+    }
+
+    // Set new timer
+    this.saveDebounceTimer = setTimeout(() => {
+        this.saveToStorage();
+        this.saveDebounceTimer = null;
+    }, delay);
+};
+
 console.log('[persistence.js] localStorage persistence layer loaded');

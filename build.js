@@ -227,9 +227,41 @@ function transformModuleSyntax(content) {
         // With: Object.assign(app, {
         content = content.replace(/export\s+const\s+\w+\s*=\s*\{/g, 'Object.assign(app, {');
 
-        // Replace the final closing }; with });
-        // This assumes the export is the main content of the file
-        content = content.replace(/\};\s*$/, '});');
+        // Replace the closing }; of the main export object with });
+        // Match }; followed by newlines and optional console.log or other statements
+        // Use lookbehind to find the last closing brace of the object literal
+        const lines = content.split('\n');
+        let braceCount = 0;
+        let exportStarted = false;
+        let closeIndex = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            if (line.includes('Object.assign(app, {')) {
+                exportStarted = true;
+                braceCount = 1; // Opening brace of Object.assign
+            } else if (exportStarted) {
+                // Count braces in this line
+                for (const char of line) {
+                    if (char === '{') braceCount++;
+                    if (char === '}') braceCount--;
+
+                    // When we close the Object.assign's opening brace
+                    if (braceCount === 0) {
+                        closeIndex = i;
+                        break;
+                    }
+                }
+                if (closeIndex >= 0) break;
+            }
+        }
+
+        if (closeIndex >= 0) {
+            // Replace }; with }); on the closing line
+            lines[closeIndex] = lines[closeIndex].replace(/\};/, '});');
+            content = lines.join('\n');
+        }
     }
 
     // Remove any other standalone export statements

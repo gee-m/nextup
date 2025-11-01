@@ -134,4 +134,46 @@ test.describe('Application Loading', () => {
         expect(result.lastTask.id, 'Task should have an ID').toBeGreaterThanOrEqual(0);
         expect(consoleErrors, 'Should have no errors when creating task').toHaveLength(0);
     });
+
+    test('can pan canvas with cursor drag', async ({ page }) => {
+        await page.goto(`file://${htmlPath}`);
+
+        // Wait for app to be ready
+        await page.waitForFunction(() => typeof app !== 'undefined');
+
+        // Get initial viewBox position
+        const initialViewBox = await page.evaluate(() => {
+            return { x: app.viewBox.x, y: app.viewBox.y };
+        });
+
+        // Get the SVG canvas element
+        const canvas = await page.locator('#canvas');
+
+        // Simulate a drag on empty canvas area (pan operation)
+        // Start from center of canvas, drag 100px right and 50px down
+        await canvas.hover({ position: { x: 400, y: 300 } });
+        await page.mouse.down();
+        await page.mouse.move(500, 350, { steps: 10 });
+        await page.mouse.up();
+
+        // Wait a bit for any async updates
+        await page.waitForTimeout(100);
+
+        // Check if viewBox changed (pan occurred)
+        const finalViewBox = await page.evaluate(() => {
+            return { x: app.viewBox.x, y: app.viewBox.y };
+        });
+
+        // Check for any errors that occurred during panning
+        if (consoleErrors.length > 0) {
+            console.log('❌ Errors detected during pan:');
+            consoleErrors.forEach(err => console.log(`  - ${err}`));
+        }
+
+        expect(consoleErrors, 'Pan operation should not cause errors').toHaveLength(0);
+
+        // ViewBox should have changed (pan should work)
+        const viewBoxChanged = initialViewBox.x !== finalViewBox.x || initialViewBox.y !== finalViewBox.y;
+        expect(viewBoxChanged, 'ViewBox should change after pan').toBe(true);
+    });
 });
