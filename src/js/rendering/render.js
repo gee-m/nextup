@@ -133,7 +133,8 @@ export const RenderMixin = {
                             }
                             hitLine.addEventListener('click', (e) => {
                                 e.stopPropagation();
-                                this.selectLine({ type: 'parent', taskId: task.id, parentId: task.mainParent });
+                                this.selectedLine = { type: 'parent', taskId: task.id, parentId: task.mainParent };
+                                this.render();
                             });
                             linksGroup.appendChild(hitLine);
 
@@ -184,7 +185,8 @@ export const RenderMixin = {
                                 }
                                 hitLine.addEventListener('click', (e) => {
                                     e.stopPropagation();
-                                    this.selectLine({ type: 'otherParent', taskId: task.id, parentId });
+                                    this.selectedLine = { type: 'otherParent', taskId: task.id, parentId };
+                                    this.render();
                                 });
                                 linksGroup.appendChild(hitLine);
 
@@ -214,7 +216,8 @@ export const RenderMixin = {
                                 }
                                 hitLine.addEventListener('click', (e) => {
                                     e.stopPropagation();
-                                    this.selectLine({ type: 'dependency', from: task.id, to: depId });
+                                    this.selectedLine = { type: 'dependency', from: task.id, to: depId };
+                                    this.render();
                                 });
                                 linksGroup.appendChild(hitLine);
 
@@ -311,9 +314,9 @@ export const RenderMixin = {
                         textarea.addEventListener('keydown', (e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
-                                this.saveEdit();
+                                this.finishEditing(true);
                             } else if (e.key === 'Escape') {
-                                this.cancelEdit();
+                                this.finishEditing(false);
                             }
                         });
 
@@ -439,7 +442,7 @@ export const RenderMixin = {
                         badge.style.cursor = 'pointer';
                         badge.addEventListener('click', (e) => {
                             e.stopPropagation();
-                            this.toggleSubtreeVisibility(task.id);
+                            this.toggleHiddenSelf(task.id);
                         });
                         g.appendChild(badge);
 
