@@ -37,10 +37,130 @@
 
 ## Quick Start
 
-1. Open `task-tree.html` in any modern web browser
+### For End Users
+
+1. Open `dist/task-tree.html` in any modern web browser
 2. No build step, no server needed - works offline
 3. Data auto-saves to localStorage on every change
 4. That's it!
+
+### For Developers
+
+1. Edit source files in `src/` (not `dist/` - that's generated!)
+2. Run `node build.js` to build `dist/task-tree.html`
+3. Open `dist/task-tree.html` in browser to test
+4. See **[Modular Architecture](#-modular-architecture-for-llms--developers)** below for full development workflow
+
+---
+
+## 🏗️ Modular Architecture (For LLMs & Developers)
+
+**Project Structure**: This project has been refactored from a single 7,817-line monolithic file into **33 modular files** with a smart auto-discovery build system.
+
+### Why Modular?
+
+**Problem**: Single 7,817-line file was hard to navigate and expensive for LLMs to load into context.
+
+**Solution**: Split into focused modules (~200 lines each) organized by responsibility.
+
+**Benefits**:
+- ✅ **LLM-Friendly**: Load only the 200-line module you need (vs 7,817 lines)
+- ✅ **Fast Development**: Find code in seconds using MODULE-MAP.md
+- ✅ **Zero Maintenance**: Add new files with @order header → auto-discovered by build
+- ✅ **Single-File Output**: Still distributes as one `dist/task-tree.html` file
+
+### Directory Structure
+
+```
+src/
+├── index.html                # HTML template
+├── styles/                   # 7 CSS modules
+│   ├── base.css              # Resets, body
+│   ├── controls.css          # Top bar, buttons
+│   ├── task-nodes.css        # Node styling
+│   ├── links.css             # Relationships
+│   ├── modals.css            # Dialogs
+│   ├── status-bar.css        # Bottom panel
+│   └── dark-mode.css         # Dark theme
+└── js/                       # 33 JavaScript modules
+    ├── state.js              # App state (@order: 1)
+    ├── config.js             # Configuration (@order: 2)
+    ├── utils/                # Platform, SVG, cycle detection
+    ├── data/                 # Undo/redo, persistence, import/export, clipboard
+    ├── core/                 # Tasks, status, relationships
+    ├── rendering/            # Golden path, indicators, nodes, links, render
+    ├── interactions/         # Mouse, keyboard, drag, edit
+    ├── ui/                   # Modals, context menus, status bar, settings, shortcuts, toast
+    ├── navigation/           # Viewport, homes, jump, text-lock
+    └── app.js                # Init & event listeners (@order: 100)
+```
+
+### How It Works
+
+1. **@order Headers**: Every file has `// @order: <number>` comment
+   - Lower numbers load first (1, 2, 5, 10...)
+   - Build script auto-sorts files
+
+2. **Smart Build**: `node build.js`
+   - Scans `src/` recursively
+   - Sorts by @order → category → filename
+   - Injects into `src/index.html`
+   - Outputs to `dist/task-tree.html`
+
+3. **Mixin Pattern**: All JS modules extend the `app` object
+   ```javascript
+   // Example: utils/platform.js
+   Object.assign(app, {
+       getModifierKey() { return this.isMac ? '⌘' : 'Ctrl'; }
+   });
+   ```
+
+### Development Workflow
+
+**To add/modify a feature:**
+
+1. **Find the right module** using `MODULE-MAP.md`
+   ```
+   Need to edit zoom? → navigation/viewport.js
+   Need to add shortcut? → interactions/keyboard.js + app.js
+   ```
+
+2. **Edit the source file** in `src/` (NOT `dist/`)
+
+3. **Build**: `node build.js`
+   ```
+   ✅ Output: dist/task-tree.html
+   📊 Size: 204.75 KB
+   📏 Lines: 6,241
+   ```
+
+4. **Test**: Open `dist/task-tree.html` in browser
+
+5. **Commit**: `git add src/` (build.js auto-discovers new files)
+
+**Adding new files - NO build.js edits needed:**
+```javascript
+// Create src/js/my-feature.js
+// @order: 25
+// @category: ui
+
+Object.assign(app, {
+    myFeature() { /* ... */ }
+});
+```
+Then `node build.js` → auto-discovered!
+
+### Quick Reference
+
+**Find code fast with MODULE-MAP.md:**
+- Task CRUD → `core/tasks.js`
+- Undo/Redo → `data/undo-redo.js`
+- Keyboard shortcuts → `interactions/keyboard.js` + `app.js`
+- Rendering → `rendering/render.js`, `rendering/nodes.js`, `rendering/links.js`
+- Settings → `ui/settings.js`
+- Zoom/pan → `navigation/viewport.js`
+
+**See CLAUDE.md for complete development guide.**
 
 ---
 
