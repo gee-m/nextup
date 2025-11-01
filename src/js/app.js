@@ -501,6 +501,23 @@ Object.assign(app, {
                 }
             }
         });
+    },
+
+    clearAllData() {
+        this.showConfirm(
+            'Clear All Data',
+            'Delete ALL tasks and reset everything? This can be undone with Ctrl+Z.',
+            () => {
+                this.saveSnapshot('Cleared all data');
+                localStorage.removeItem('taskTree');
+                this.tasks = [];
+                this.taskIdCounter = 0;
+                this.editingTaskId = null;
+
+                this.updateStatusBar();
+                this.render();
+            }
+        );
     }
 });
 

@@ -252,5 +252,24 @@ export const TasksMixin = {
         }
 
         return path;
+    },
+
+    getSubtreeSize(taskId) {
+        // Count the number of nodes in a subtree (including root)
+        let count = 0;
+        const counted = new Set();
+
+        const countNode = (id) => {
+            if (counted.has(id)) return;
+            const task = this.tasks.find(t => t.id === id);
+            if (!task) return;
+
+            counted.add(id);
+            count++;
+            task.children.forEach(childId => countNode(childId));
+        };
+
+        countNode(taskId);
+        return count;
     }
 };
