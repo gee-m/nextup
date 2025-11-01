@@ -76,6 +76,11 @@ export const NodesMixin = {
         return allLines.length > 0 ? allLines : [''];
     },
 
+    /**
+     * Calculate task dimensions with multiline support
+     * @param {Object} task - Task object
+     * @returns {{width: number, height: number, lines: string[]}} Dimensions object
+     */
     calculateTaskDimensions(task) {
         // Helper: Calculate task dimensions with multiline support
         const padding = this.nodePadding;
@@ -110,6 +115,12 @@ export const NodesMixin = {
         return { width: rectWidth, height: rectHeight, lines };
     },
 
+    /**
+     * Calculate rectangle dimensions for given text
+     * Used by both render() and resizeEditingBox() for consistent sizing
+     * @param {string} text - Text content
+     * @returns {{width: number, height: number, lines: string[]}} Dimensions object
+     */
     calculateTextBoxDimensions(text) {
         // Helper method to calculate rectangle dimensions for given text
         // Returns { width, height, lines }

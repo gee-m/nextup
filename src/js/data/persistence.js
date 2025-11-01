@@ -123,6 +123,16 @@ app.loadFromStorage = function() {
         // Task data
         this.tasks = parsed.tasks || [];
         this.taskIdCounter = parsed.taskIdCounter || 0;
+
+        // MIGRATION: Fix tasks with missing or invalid x/y coordinates
+        this.tasks.forEach((task, index) => {
+            if (typeof task.x !== 'number' || isNaN(task.x)) {
+                task.x = 100 + (index * 150); // Spread tasks horizontally
+            }
+            if (typeof task.y !== 'number' || isNaN(task.y)) {
+                task.y = 300;
+            }
+        });
         // Multi-project working state
         this.workingTasksByRoot = parsed.workingTasksByRoot || {};
         // View state

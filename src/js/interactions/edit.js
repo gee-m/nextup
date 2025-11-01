@@ -83,7 +83,7 @@ export const EditMixin = {
         const currentText = textarea.value || '';
 
         // Calculate new dimensions based on current text
-        const { rectWidth, rectHeight, lines } = this.calculateTextBoxDimensions(currentText);
+        const { width: rectWidth, height: rectHeight, lines } = this.calculateTextBoxDimensions(currentText);
 
         // Find the task node and its child elements
         const taskNode = document.querySelector(`.task-node[data-id="${this.editingTaskId}"]`);

@@ -8,6 +8,20 @@
 
 export const LinksMixin = {
     createLine(x1, y1, x2, y2, className) {
+        // Defensive: Check for NaN or invalid coordinates
+        if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) {
+            console.warn(`createLine called with invalid coordinates: (${x1},${y1}) to (${x2},${y2})`);
+            // Return a dummy line at origin to avoid breaking render
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', 0);
+            line.setAttribute('y1', 0);
+            line.setAttribute('x2', 0);
+            line.setAttribute('y2', 0);
+            line.setAttribute('class', className);
+            line.style.display = 'none'; // Hide invalid lines
+            return line;
+        }
+
         // Dispatch to appropriate renderer based on arrow style
         if (this.arrowStyle === 'curved') {
             return this.createCurvedPath(x1, y1, x2, y2, className);
@@ -24,6 +38,17 @@ export const LinksMixin = {
     },
 
     createCurvedPath(x1, y1, x2, y2, className) {
+        // Defensive: Check for NaN or invalid coordinates
+        if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) {
+            console.warn(`createCurvedPath called with invalid coordinates: (${x1},${y1}) to (${x2},${y2})`);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 0 0');
+            path.setAttribute('class', className);
+            path.setAttribute('fill', 'none');
+            path.style.display = 'none';
+            return path;
+        }
+
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
         // Calculate curve control points
@@ -85,10 +110,20 @@ export const LinksMixin = {
         let edgeDistance;
         if (absUx * halfHeight > absUy * halfWidth) {
             // Hit vertical edge (left/right) first
-            edgeDistance = halfWidth / absUx;
+            // Guard against division by zero (perfectly vertical line)
+            if (absUx === 0) {
+                edgeDistance = 0;
+            } else {
+                edgeDistance = halfWidth / absUx;
+            }
         } else {
             // Hit horizontal edge (top/bottom) first
-            edgeDistance = halfHeight / absUy;
+            // Guard against division by zero (perfectly horizontal line)
+            if (absUy === 0) {
+                edgeDistance = 0;
+            } else {
+                edgeDistance = halfHeight / absUy;
+            }
         }
 
         // Calculate endpoint at rectangle edge

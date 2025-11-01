@@ -16,6 +16,10 @@ export const RelationshipsMixin = {
         const task = this.tasks.find(t => t.id === taskId);
         const newParent = this.tasks.find(t => t.id === newParentId);
 
+        console.log(`[REPARENT] taskId=${taskId}, newParentId=${newParentId}`);
+        console.log(`[REPARENT] task coords: (${task?.x}, ${task?.y})`);
+        console.log(`[REPARENT] newParent coords: (${newParent?.x}, ${newParent?.y})`);
+
         if (!task || !newParent) return;
 
         // Can't reparent to self or to own descendant

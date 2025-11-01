@@ -20,6 +20,17 @@ export const TasksMixin = {
         this.saveSnapshot(`Created child task 'New Task'`);
 
         const parent = this.tasks.find(t => t.id === parentId);
+
+        // DEFENSIVE: Check parent coordinates
+        if (!parent) {
+            console.error(`addChildTask: parent ${parentId} not found!`);
+            return;
+        }
+        if (!isFinite(parent.x) || !isFinite(parent.y)) {
+            console.error(`addChildTask: parent ${parentId} has invalid coords: (${parent.x}, ${parent.y})`);
+            console.trace('Stack trace:');
+        }
+
         const task = {
             id: this.taskIdCounter++,
             title: 'New Task',
@@ -53,6 +64,15 @@ export const TasksMixin = {
     createChildAtPosition({ parentId, x, y }) {
         const parent = this.tasks.find(t => t.id === parentId);
         if (!parent) return;
+
+        // DEFENSIVE: Log and validate coordinates
+        if (!isFinite(x) || !isFinite(y)) {
+            console.error(`createChildAtPosition called with invalid coords: (${x}, ${y})`);
+            console.trace('Stack trace:');
+            // Use parent coords as fallback
+            x = parent.x + 100;
+            y = parent.y + 100;
+        }
 
         this.saveSnapshot(`Created child task`);
 
@@ -88,6 +108,15 @@ export const TasksMixin = {
     },
 
     addRootTaskAtPosition(x, y) {
+        // DEFENSIVE: Log and validate coordinates
+        if (!isFinite(x) || !isFinite(y)) {
+            console.error(`addRootTaskAtPosition called with invalid coords: (${x}, ${y})`);
+            console.trace('Stack trace:');
+            // Use default coordinates as fallback
+            x = 400;
+            y = 300;
+        }
+
         this.saveSnapshot(`Created root task`);
 
         const newTask = {

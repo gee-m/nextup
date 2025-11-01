@@ -28,8 +28,23 @@ app.getSVGPoint = function(e) {
     // Transform from screen space to SVG user space
     const screenCTM = svg.getScreenCTM();
     if (screenCTM) {
-        return pt.matrixTransform(screenCTM.inverse());
+        const transformed = pt.matrixTransform(screenCTM.inverse());
+
+        // DEFENSIVE: Log if we get NaN coordinates
+        if (!isFinite(transformed.x) || !isFinite(transformed.y)) {
+            console.error('getSVGPoint returned NaN!', {
+                clientX: e.clientX,
+                clientY: e.clientY,
+                screenCTM: screenCTM,
+                transformed: transformed
+            });
+        }
+
+        return transformed;
     }
+
+    // DEFENSIVE: If no screenCTM, log warning
+    console.warn('getScreenCTM returned null, returning untransformed point');
     return pt;
 };
 

@@ -11,7 +11,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:browser": "playwright test",
-    "check": "npm run build && npm run test && npm run test:browser",
+    "validate": "node scripts/validate-destructuring.js",
+    "check": "npm run validate && npm run build && npm run test && npm run test:browser",
     "install-hooks": "bash install-hooks.sh"
   },
   "keywords": [

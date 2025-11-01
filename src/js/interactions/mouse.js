@@ -36,15 +36,14 @@ export const MouseMixin = {
                     this.createTempLine(e);
                     // Create custom cursor arrow
                     this.cursorArrow = this.createCursorArrow();
-                    // For dependency: reverse the line so it shows (cursor → source)
-                    // This matches the final arrow direction: prerequisite → dependent
+                    // Initialize line from source to cursor (A → B drag direction)
                     const task = this.tasks.find(t => t.id === taskId);
                     if (task && this.tempLine) {
                         const pt = this.getSVGPoint(e);
-                        this.tempLine.setAttribute('x1', pt.x);
-                        this.tempLine.setAttribute('y1', pt.y);
-                        this.tempLine.setAttribute('x2', task.x);
-                        this.tempLine.setAttribute('y2', task.y);
+                        this.tempLine.setAttribute('x1', task.x);
+                        this.tempLine.setAttribute('y1', task.y);
+                        this.tempLine.setAttribute('x2', pt.x);
+                        this.tempLine.setAttribute('y2', pt.y);
                     }
                 } else if (e.shiftKey) {
                     // Prepare for potential subtree drag (will activate on mousemove >5px)
@@ -222,7 +221,8 @@ export const MouseMixin = {
                 this.createTempLine(e);
                 // Create custom cursor arrow
                 this.cursorArrow = this.createCursorArrow();
-                // Initialize line from source to cursor (A → B drag direction)
+                // Initialize line from source to cursor (A → B)
+                // Arrow follows drag motion for intuitive UX
                 const task = this.tasks.find(t => t.id === this.selectedNode);
                 if (task && this.tempLine) {
                     this.tempLine.setAttribute('x1', task.x);
@@ -236,26 +236,27 @@ export const MouseMixin = {
             const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
             if (sourceTask) {
                 this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
-            }
 
-            // Update line from source to cursor (green line for reparenting)
-            // INTUITIVE FEEDBACK: Arrow follows drag direction A → B
-            // (Result: B becomes parent of A, but arrow follows hand motion for UX)
-            this.tempLine.setAttribute('x1', sourceTask.x);
-            this.tempLine.setAttribute('y1', sourceTask.y);
-            this.tempLine.setAttribute('x2', pt.x);
-            this.tempLine.setAttribute('y2', pt.y);
+                // Update line from source to cursor (A → B)
+                // Arrow follows drag motion for intuitive UX
+                this.tempLine.setAttribute('x1', sourceTask.x);
+                this.tempLine.setAttribute('y1', sourceTask.y);
+                this.tempLine.setAttribute('x2', pt.x);
+                this.tempLine.setAttribute('y2', pt.y);
+            }
         } else if ((this.dragMode === 'dependency') && this.tempLine) {
             // Get source task for cursor arrow rotation
             const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
             if (sourceTask) {
                 this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
-            }
 
-            // For dependency: update START point (cursor) not end point (source)
-            // This shows the reversed direction: cursor (prereq) → source (dependent)
-            this.tempLine.setAttribute('x1', pt.x);
-            this.tempLine.setAttribute('y1', pt.y);
+                // Update line from source to cursor (A → B drag direction)
+                // Arrow follows hand motion for intuitive UX
+                this.tempLine.setAttribute('x1', sourceTask.x);
+                this.tempLine.setAttribute('y1', sourceTask.y);
+                this.tempLine.setAttribute('x2', pt.x);
+                this.tempLine.setAttribute('y2', pt.y);
+            }
         } else if (this.dragMode === 'canvas') {
             // Calculate delta in screen coordinates (stable)
             const screenDx = e.clientX - this.dragStart.x;
@@ -314,15 +315,16 @@ export const MouseMixin = {
             }
             this.removeTempLine();
         } else if (this.dragMode === 'reparent') {
-            // Complete reparent: Make source a child of target
+            // Complete reparent: Make target a child of source
             const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
             const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
             if (targetNode && this.tempLine) {
                 const targetId = parseInt(targetNode.dataset.id);
 
-                // Reparent source to target (source becomes child of target)
+                // Reparent target to source (source becomes parent of target)
+                // Drag from A to B = A becomes parent of B
                 if (targetId !== this.selectedNode) {
-                    this.reparentTask({ taskId: this.selectedNode, newParentId: targetId });
+                    this.reparentTask({ taskId: targetId, newParentId: this.selectedNode });
                 }
             }
             this.removeTempLine();
