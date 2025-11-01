@@ -95,18 +95,29 @@ clean-all: clean ## Remove build artifacts and node_modules
 
 ##@ Testing
 
-test: ## Run tests (placeholder for future unit tests)
+test: ## Run all tests
 	@echo "🧪 Running tests..."
-	@echo "⚠️  No tests configured yet. See REFACTOR-VERIFICATION.md for test recommendations."
-	@echo ""
-	@echo "Recommended test frameworks:"
-	@echo "  - Unit tests: Jest or Vitest"
-	@echo "  - Integration tests: Playwright or Cypress"
-	@echo "  - Visual regression: Percy or Chromatic"
+	@if [ ! -d node_modules ]; then \
+		echo "⚠️  node_modules not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@npm test
 
-test-unit: ## Run unit tests (placeholder)
-	@echo "🧪 Running unit tests..."
-	@echo "⚠️  Not implemented yet. Add Jest/Vitest tests in tests/unit/"
+test-watch: ## Run tests in watch mode
+	@echo "👀 Running tests in watch mode (Ctrl+C to stop)..."
+	@npm run test:watch
+
+test-ui: ## Open Vitest UI (interactive test runner)
+	@echo "🎨 Opening Vitest UI..."
+	@npm run test:ui
+
+test-coverage: ## Run tests with coverage report
+	@echo "📊 Running tests with coverage..."
+	@npm run test:coverage
+	@echo ""
+	@echo "Coverage report generated in coverage/"
+
+test-unit: test ## Run unit tests (alias for 'test')
 
 test-integration: ## Run integration tests (placeholder)
 	@echo "🧪 Running integration tests..."
@@ -117,6 +128,14 @@ test-manual: build ## Build and load test checklist data
 	@echo "✅ Build complete. Open dist/task-tree.html and click '🧪 Test Checklist'"
 
 ##@ Code Quality
+
+check: validate test ## Run all checks (build validation + tests)
+	@echo ""
+	@echo "✅ All checks passed!"
+	@echo ""
+	@echo "Ready to commit:"
+	@echo "  git add ."
+	@echo "  git commit -m 'your message'"
 
 lint: ## Lint JavaScript files (placeholder)
 	@echo "🔍 Linting JavaScript..."
@@ -130,7 +149,7 @@ format: ## Format code (placeholder)
 	@echo "   npm install --save-dev prettier"
 	@echo "   npx prettier --write 'src/**/*.{js,css,html}'"
 
-check-all: validate lint ## Run all checks (validate + lint)
+check-all: check lint format ## Run ALL checks (validate + test + lint + format)
 	@echo "✅ All checks passed!"
 
 ##@ Documentation
@@ -180,19 +199,33 @@ stats: ## Show project statistics
 
 ##@ Dependencies
 
-install: ## Install optional development dependencies
-	@echo "📦 Installing development dependencies..."
-	@if [ ! -f package.json ]; then \
-		echo "⚠️  No package.json found. Creating minimal package.json..."; \
-		echo '{"name":"task-tree","version":"1.0.0","private":true}' > package.json; \
-	fi
+setup: ## Setup project (install deps + git hooks)
+	@echo "🚀 Setting up Task Tree development environment..."
 	@echo ""
-	@echo "Optional dependencies (install as needed):"
-	@echo "  Watch mode:  npm install -g fswatch (macOS) or apt install inotify-tools (Linux)"
-	@echo "  Dev server:  npm install -g http-server"
-	@echo "  Linting:     npm install --save-dev eslint"
-	@echo "  Formatting:  npm install --save-dev prettier"
-	@echo "  Testing:     npm install --save-dev jest (or vitest)"
+	@echo "📦 Installing npm dependencies..."
+	@npm install
+	@echo ""
+	@echo "🪝 Installing git hooks..."
+	@bash install-hooks.sh
+	@echo ""
+	@echo "✅ Setup complete!"
+	@echo ""
+	@echo "Quick start:"
+	@echo "  make build    # Build dist/task-tree.html"
+	@echo "  make test     # Run tests"
+	@echo "  make check    # Run all checks (build + test)"
+	@echo "  make dev      # Build and open in browser"
+
+install: setup ## Install dependencies (alias for 'setup')
+
+install-deps: ## Install npm dependencies only
+	@echo "📦 Installing npm dependencies..."
+	@npm install
+	@echo "✅ Dependencies installed!"
+
+install-hooks: ## Install git hooks only
+	@echo "🪝 Installing git hooks..."
+	@bash install-hooks.sh
 
 ##@ Git
 

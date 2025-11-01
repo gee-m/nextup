@@ -1,5 +1,32 @@
 {
+  "name": "task-tree",
+  "version": "1.0.0",
+  "description": "Visual task management system with hierarchical dependencies",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run build && npm run test",
+    "install-hooks": "bash install-hooks.sh"
+  },
+  "keywords": [
+    "task-management",
+    "todo",
+    "graph",
+    "visualization",
+    "dependencies"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
     "live-server": "^1.2.2"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^1.0.0",
+    "vitest": "^1.0.0"
   }
 }

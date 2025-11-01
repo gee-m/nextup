@@ -1,0 +1,36 @@
+#!/bin/bash
+# Pre-commit hook for Task Tree
+# Automatically builds dist/task-tree.html and stages it
+
+set -e  # Exit on error
+
+echo "🪝 Running pre-commit hook..."
+
+# Check if src/ files are being committed
+SRC_FILES_STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src/' || true)
+
+if [ -z "$SRC_FILES_STAGED" ]; then
+    echo "✅ No src/ files changed, skipping build"
+    exit 0
+fi
+
+echo "📦 src/ files changed, rebuilding..."
+
+# Run build
+if ! node build.js; then
+    echo "❌ Build failed! Fix errors before committing."
+    exit 1
+fi
+
+# Check if dist/task-tree.html changed
+if [ -f dist/task-tree.html ]; then
+    # Stage the built file if it's not already staged
+    if git diff --name-only dist/task-tree.html > /dev/null 2>&1; then
+        echo "📝 Staging dist/task-tree.html..."
+        git add dist/task-tree.html
+        echo "✅ dist/task-tree.html staged"
+    fi
+fi
+
+echo "✅ Pre-commit checks passed!"
+exit 0
