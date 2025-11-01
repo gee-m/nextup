@@ -4071,6 +4071,75 @@ Object.assign(app, {
  */
 
 Object.assign(app, {
+    wrapText(text, maxWidth, charWidth, wordWrap) {
+        // Return single line if multiline is disabled
+        if (!this.enableMultiline) {
+            return [text];
+        }
+
+        // Calculate maximum characters that fit in one line
+        const maxChars = Math.floor(maxWidth / charWidth);
+        if (maxChars <= 0) return [text]; // Safety check
+
+        // NEW: First split by newlines to preserve user line breaks
+        const paragraphs = text.split('\n');
+        const allLines = [];
+
+        // Process each paragraph (line break = user intent)
+        for (const paragraph of paragraphs) {
+            // Handle empty lines (preserve them as blank lines)
+            if (paragraph === '') {
+                allLines.push('');
+                continue;
+            }
+
+            if (wordWrap) {
+                // Split on word boundaries within this paragraph
+                const words = paragraph.split(' ');
+                let currentLine = '';
+
+                for (const word of words) {
+                    const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                    const testWidth = testLine.length * charWidth;
+
+                    if (testWidth <= maxWidth) {
+                        currentLine = testLine;
+                    } else {
+                        // Line would be too long
+                        if (currentLine) {
+                            allLines.push(currentLine);
+                        }
+
+                        // Handle single word longer than max width
+                        if (word.length * charWidth > maxWidth) {
+                            // Force character break for long words
+                            let remainingWord = word;
+                            while (remainingWord.length > 0) {
+                                allLines.push(remainingWord.substring(0, maxChars));
+                                remainingWord = remainingWord.substring(maxChars);
+                            }
+                            currentLine = '';
+                        } else {
+                            currentLine = word;
+                        }
+                    }
+                }
+
+                if (currentLine) {
+                    allLines.push(currentLine);
+                }
+            } else {
+                // Character wrapping - simple split at max chars for this paragraph
+                for (let i = 0; i < paragraph.length; i += maxChars) {
+                    allLines.push(paragraph.substring(i, i + maxChars));
+                }
+            }
+        }
+
+        // Return at least one line (even if empty)
+        return allLines.length > 0 ? allLines : [''];
+    },
+
     calculateTaskDimensions(task) {
         // Helper: Calculate task dimensions with multiline support
         const padding = this.nodePadding;
@@ -4101,12 +4170,13 @@ Object.assign(app, {
             ? Math.min(this.maxNodeHeight, calculatedHeight)
             : calculatedHeight;
 
-        return { rectWidth, rectHeight, lines };
+        // Return width/height (not rectWidth/rectHeight) to match render() expectations
+        return { width: rectWidth, height: rectHeight, lines };
     },
 
     calculateTextBoxDimensions(text) {
         // Helper method to calculate rectangle dimensions for given text
-        // Returns { rectWidth, rectHeight, lines }
+        // Returns { width, height, lines }
         // Used by both render() and resizeEditingBox() for consistent sizing
 
         const padding = this.nodePadding;
@@ -4130,7 +4200,8 @@ Object.assign(app, {
             ? Math.min(this.maxNodeHeight, calculatedHeight)
             : calculatedHeight;
 
-        return { rectWidth, rectHeight, lines };
+        // Return width/height (not rectWidth/rectHeight) to match caller expectations
+        return { width: rectWidth, height: rectHeight, lines };
     }
 });
 

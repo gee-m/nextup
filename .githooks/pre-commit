@@ -22,6 +22,15 @@ if ! node build.js; then
     exit 1
 fi
 
+# Run browser tests to catch runtime errors
+echo "🧪 Running browser tests..."
+if ! PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true npx playwright test; then
+    echo "❌ Browser tests failed! Fix errors before committing."
+    echo "💡 Tip: Run 'npm run test:browser' to debug"
+    exit 1
+fi
+echo "✅ Browser tests passed"
+
 # Check if dist/task-tree.html changed
 if [ -f dist/task-tree.html ]; then
     # Stage the built file if it's not already staged

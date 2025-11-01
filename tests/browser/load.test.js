@@ -100,13 +100,13 @@ test.describe('Application Loading', () => {
         const elements = await page.evaluate(() => {
             return {
                 canvas: !!document.querySelector('#canvas'),
-                controlsTop: !!document.querySelector('.controls-top'),
+                controls: !!document.querySelector('#controls'),
                 statusBar: !!document.querySelector('#status-bar'),
             };
         });
 
         expect(elements.canvas, 'SVG canvas should exist').toBe(true);
-        expect(elements.controlsTop, 'Top controls should exist').toBe(true);
+        expect(elements.controls, 'Top controls should exist').toBe(true);
         expect(elements.statusBar, 'Status bar should exist').toBe(true);
     });
 
@@ -114,21 +114,24 @@ test.describe('Application Loading', () => {
         await page.goto(`file://${htmlPath}`);
 
         // Wait for app to be ready
-        await page.waitForFunction(() => typeof app !== 'undefined' && typeof app.addRootTask === 'function');
+        await page.waitForFunction(() => typeof app !== 'undefined' && typeof app.addRootTaskAtPosition === 'function');
 
         // Create a task
         const result = await page.evaluate(() => {
             const initialCount = app.tasks.length;
-            app.addRootTask({ x: 100, y: 100, title: 'Test Task' });
+            app.addRootTaskAtPosition(100, 100);
+            // Get the task that was just added
+            const lastTask = app.tasks[app.tasks.length - 1];
             return {
                 success: app.tasks.length === initialCount + 1,
                 taskCount: app.tasks.length,
-                lastTask: app.tasks[app.tasks.length - 1],
+                lastTask: lastTask,
             };
         });
 
         expect(result.success, 'Should add one task').toBe(true);
-        expect(result.lastTask.title, 'Task should have correct title').toBe('Test Task');
+        expect(result.lastTask.title, 'Task should exist (empty title is valid)').toBeDefined();
+        expect(result.lastTask.id, 'Task should have an ID').toBeGreaterThanOrEqual(0);
         expect(consoleErrors, 'Should have no errors when creating task').toHaveLength(0);
     });
 });
