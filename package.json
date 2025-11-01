@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "check": "npm run build && npm run test",
+    "test:browser": "playwright test",
+    "check": "npm run build && npm run test && npm run test:browser",
     "install-hooks": "bash install-hooks.sh"
   },
   "keywords": [
@@ -26,6 +27,7 @@
     "live-server": "^1.2.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@vitest/ui": "^1.0.0",
     "vitest": "^1.0.0"
   }

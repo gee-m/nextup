@@ -90,6 +90,7 @@ function findFiles(dir, ext) {
 /**
  * Extract metadata from file header comments
  * Returns: { order: number, category: string }
+ * Supports both JSDoc (/** * @order 16) and inline (// @order: 16) styles
  */
 function extractFileMetadata(filePath) {
     const content = fs.readFileSync(filePath, 'utf8');
@@ -99,12 +100,16 @@ function extractFileMetadata(filePath) {
     let category = path.dirname(filePath).split('/').pop() || 'misc';
 
     for (const line of lines) {
-        const orderMatch = line.match(/\/\/\s*@order:\s*(\d+)/);
+        // Match both styles:
+        // JSDoc style: * @order 16
+        // Inline style: // @order: 16
+        const orderMatch = line.match(/[@/]\s*@?order:?\s*(\d+)/i);
         if (orderMatch) {
             order = parseInt(orderMatch[1], 10);
         }
 
-        const categoryMatch = line.match(/\/\/\s*@category:\s*(\w+)/);
+        // Match both category styles
+        const categoryMatch = line.match(/[@/]\s*@?category:?\s*(\w+)/i);
         if (categoryMatch) {
             category = categoryMatch[1];
         }

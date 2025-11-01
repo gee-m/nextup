@@ -12,6 +12,8 @@ coverage/
 
 # Testing
 *.test.js.snap
+test-results/
+playwright-report/
 
 # Editor directories
 .vscode/

@@ -119,9 +119,19 @@ test-coverage: ## Run tests with coverage report
 
 test-unit: test ## Run unit tests (alias for 'test')
 
-test-integration: ## Run integration tests (placeholder)
-	@echo "🧪 Running integration tests..."
-	@echo "⚠️  Not implemented yet. Add Playwright/Cypress tests in tests/integration/"
+test-browser: ## Run browser tests (Playwright)
+	@echo "🌐 Running browser tests..."
+	@if [ ! -d node_modules ]; then \
+		echo "⚠️  node_modules not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@npm run test:browser
+
+test-browser-headed: ## Run browser tests with visible browser
+	@echo "🌐 Running browser tests (headed mode)..."
+	@npx playwright test --headed
+
+test-integration: test-browser ## Run integration tests (browser tests)
 
 test-manual: build ## Build and load test checklist data
 	@echo "🧪 Building with test data..."
@@ -129,7 +139,7 @@ test-manual: build ## Build and load test checklist data
 
 ##@ Code Quality
 
-check: validate test ## Run all checks (build validation + tests)
+check: validate build test test-browser ## Run all checks (validate + build + unit tests + browser tests)
 	@echo ""
 	@echo "✅ All checks passed!"
 	@echo ""
