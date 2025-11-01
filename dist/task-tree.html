@@ -6537,67 +6537,449 @@ Object.assign(app, {
  *
  * Settings modal and configuration management
  *
- * NOTE: Settings functions remain in task-tree.html (lines 3413-3797) due to
- * their size and complexity. This file documents the settings architecture.
- *
  * KEY FUNCTIONS:
  *
- * showSettingsModal() - Line 3413-3676
- * - Generates modal content from configDefs metadata
- * - Renders form inputs based on property type:
- *   - number: slider + number input
- *   - text: text input
- *   - select: dropdown
- *   - checkbox: toggle switch
- * - Groups settings into categories (Text, Dimensions, Visual, Behavior)
- * - Shows current values and defaults
+ * showSettingsModal() - Display settings modal
+ * - Generates form from configDefs metadata
+ * - Renders inputs based on type (number, text, select, checkbox)
+ * - Special handling for charWidth with calibration button
+ * - Shows undo/redo history stats
+ * - ESC to close, click-outside to close
  *
- * hideSettingsModal() - Line 3678-3697
- * - Closes modal
+ * hideSettingsModal() - Close settings modal
+ * - Removes show class
+ * - Resets scroll position
  * - Cleans up event listeners
  *
- * applySettings() - Line 3699-3749
- * - Reads form values
+ * applySettings() - Apply settings from form
+ * - Reads all form values
  * - Updates app state properties
- * - Recalculates derived values (charWidth calibration)
+ * - Enforces undo limit if changed
+ * - Auto-calibrates charWidth if font changed
  * - Saves to localStorage
  * - Re-renders canvas
  *
- * resetSettings() - Line 3751-3774
- * - Resets all configurable properties to defaults from configDefs
- * - Saves and re-renders
+ * resetSettings() - Reset to defaults
+ * - Shows confirmation dialog
+ * - Resets all config values to defaults
+ * - Auto-calibrates charWidth for default font
+ * - Refreshes form with new values
  *
- * exportSettings() - Line 3776-3797
- * - Exports all configurable settings as JSON
- * - Downloads as settings.json file
- *
- * calibrateCharWidth() - Line 2647-2700
- * - Measures actual character width for current font
- * - Creates temporary canvas element
- * - Uses browser's font rendering to measure
- * - Updates charWidth property
+ * exportSettings() - Export settings as JSON
+ * - Extracts all configuration parameters
+ * - Formats as pretty JSON
+ * - Copies to clipboard
  *
  * CONFIGURATION METADATA (configDefs):
- * Defines all user-customizable properties with:
- * - label: Display name
- * - type: Input type (number/text/select/checkbox)
- * - min/max: For number types
- * - step: For number sliders
- * - default: Default value
- * - description: Help text
- * - options: For select types
- *
- * Configurable properties include:
- * - Text: textLengthThreshold, fontFamily, fontWeight, fontSize, lineHeight
- * - Dimensions: minNodeWidth, maxNodeWidth, maxNodeHeight, nodePadding
- * - Visual: arrowStyle, arrowCurvature, showDeleteConfirmation
- * - Behavior: wordWrap, enableMultiline, physicsEnabled, darkMode
+ * Defines all user-customizable properties:
+ * - textLengthThreshold: Text truncation length
+ * - charWidth: Character width for node sizing
+ * - nodePadding: Left/right padding inside rectangles
+ * - wheelZoomSpeed: Mouse wheel zoom speed
+ * - minNodeWidth: Minimum node width
+ * - fontFamily: CSS font stack
+ * - fontWeight: Font weight (300-700)
+ * - showDeleteConfirmation: Show delete confirmation
+ * - autoHideCompletedNodes: Auto-hide completed subtrees
+ * - enableMultiline: Allow multiline text
+ * - maxNodeWidth: Max node width before wrapping
+ * - maxNodeHeight: Max node height (0 = unlimited)
+ * - lineHeight: Vertical spacing between lines
+ * - wordWrap: Wrap on word vs character boundaries
+ * - arrowStyle: Straight or curved arrows
+ * - arrowCurvature: Curve intensity (0.05-0.5)
+ * - maxUndoSteps: Max undo history (5-200)
  */
 
 Object.assign(app, {
-    // Placeholder - actual functions stay in main HTML file
-    // This module serves as settings architecture documentation
+    showSettingsModal() {
+        // Configuration metadata - defines which app properties are user-customizable
+        const configDefs = {
+            textLengthThreshold: {
+                label: 'Text Truncation Length',
+                type: 'number',
+                default: 80,
+                min: 20,
+                max: 200,
+                description: 'Characters before text is truncated'
+            },
+            charWidth: {
+                label: 'Character Width (px)',
+                type: 'number',
+                default: 8.5,
+                min: 4,
+                max: 15,
+                step: 0.5,
+                description: 'Pixels per character for node width calculation. Auto-calibrates when font changes, or click Calibrate to measure manually.'
+            },
+            nodePadding: {
+                label: 'Node Padding (px)',
+                type: 'number',
+                default: 15,
+                min: 0,
+                max: 50,
+                description: 'Left/right padding inside rectangles'
+            },
+            wheelZoomSpeed: {
+                label: 'Wheel/Trackpad Zoom Speed',
+                type: 'number',
+                default: 0.18,
+                min: 0.01,
+                max: 0.5,
+                step: 0.01,
+                description: 'Adjust mouse wheel / trackpad zoom speed (higher = faster)'
+            },
+            minNodeWidth: {
+                label: 'Minimum Node Width (px)',
+                type: 'number',
+                default: 100,
+                min: 40,
+                max: 200,
+                description: 'Minimum rectangle width'
+            },
+            fontFamily: {
+                label: 'Font Family',
+                type: 'text',
+                default: "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace",
+                description: 'CSS font stack for task text'
+            },
+            fontWeight: {
+                label: 'Font Weight',
+                type: 'select',
+                default: 700,
+                options: [
+                    { value: 300, label: 'Light (300)' },
+                    { value: 400, label: 'Normal (400)' },
+                    { value: 500, label: 'Medium (500)' },
+                    { value: 600, label: 'Semibold (600)' },
+                    { value: 700, label: 'Bold (700)' }
+                ],
+                description: 'Font weight for task text'
+            },
+            showDeleteConfirmation: {
+                label: 'Show Delete Confirmation',
+                type: 'checkbox',
+                default: true,
+                description: 'Show confirmation dialog when deleting tasks (can still undo with Ctrl+Z)'
+            },
+            autoHideCompletedNodes: {
+                label: 'Auto-Hide Completed Nodes',
+                type: 'checkbox',
+                default: true,
+                description: 'Automatically hide child nodes when they and their parent are marked done'
+            },
+            enableMultiline: {
+                label: 'Enable Multiline Text',
+                type: 'checkbox',
+                default: true,
+                description: 'Allow task text to wrap to multiple lines when it exceeds max width'
+            },
+            maxNodeWidth: {
+                label: 'Max Node Width (px)',
+                type: 'number',
+                default: 600,
+                min: 100,
+                max: 2000,
+                description: 'Maximum node width in pixels before text wraps to next line'
+            },
+            maxNodeHeight: {
+                label: 'Max Node Height (px)',
+                type: 'number',
+                default: 0,
+                min: 0,
+                max: 1000,
+                description: 'Maximum node height in pixels (0 = unlimited)'
+            },
+            lineHeight: {
+                label: 'Line Height (px)',
+                type: 'number',
+                default: 20,
+                min: 12,
+                max: 40,
+                description: 'Vertical spacing between lines of text'
+            },
+            wordWrap: {
+                label: 'Word Wrap',
+                type: 'checkbox',
+                default: true,
+                description: 'Wrap text on word boundaries (more readable) vs character boundaries'
+            },
+            arrowStyle: {
+                label: 'Arrow Style',
+                type: 'select',
+                default: 'straight',
+                options: [
+                    { value: 'straight', label: 'Straight' },
+                    { value: 'curved', label: 'Curved' }
+                ],
+                description: 'Visual style for arrows connecting tasks'
+            },
+            arrowCurvature: {
+                label: 'Arrow Curvature',
+                type: 'number',
+                default: 0.25,
+                min: 0.05,
+                max: 0.5,
+                step: 0.05,
+                description: 'Intensity of curve for curved arrows (0.05 = subtle, 0.5 = dramatic)'
+            },
+            maxUndoSteps: {
+                label: 'Max Undo History',
+                type: 'number',
+                default: 50,
+                min: 5,
+                max: 200,
+                step: 5,
+                description: 'Maximum number of undo steps to keep in history (5-200). Higher values use more memory.'
+            }
+        };
+
+        // Generate form HTML
+        const formContainer = document.getElementById('settings-form');
+        let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
+
+        for (const [key, def] of Object.entries(configDefs)) {
+            const currentValue = this[key];
+            html += `
+                <div class="settings-field">
+                    <label style="display: block; font-weight: 600; margin-bottom: 3px; font-size: 13px;">
+                        ${def.label}
+                    </label>
+                    <div style="font-size: 11px; color: #666; margin-bottom: 5px;">
+                        ${def.description}
+                    </div>`;
+
+            if (def.type === 'number') {
+                // Special handling for charWidth: add calibration button
+                if (key === 'charWidth') {
+                    html += `
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input
+                                type="number"
+                                id="setting-${key}"
+                                value="${currentValue}"
+                                min="${def.min || ''}"
+                                max="${def.max || ''}"
+                                step="${def.step || 1}"
+                                style="flex: 1; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"
+                            />
+                            <button
+                                onclick="app.calibrateCharWidth()"
+                                style="padding: 6px 12px; font-size: 12px; white-space: nowrap; background: #2196f3; color: white; border: 1px solid #1976d2; border-radius: 4px; cursor: pointer;"
+                                onmouseover="this.style.background='#1976d2'"
+                                onmouseout="this.style.background='#2196f3'"
+                                title="Measure actual character width for current font">
+                                📏 Calibrate
+                            </button>
+                        </div>`;
+                } else {
+                    html += `
+                        <input
+                            type="number"
+                            id="setting-${key}"
+                            value="${currentValue}"
+                            min="${def.min || ''}"
+                            max="${def.max || ''}"
+                            step="${def.step || 1}"
+                            style="width: 100%; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"
+                        />`;
+                }
+            } else if (def.type === 'text') {
+                html += `
+                    <input
+                        type="text"
+                        id="setting-${key}"
+                        value="${currentValue}"
+                        style="width: 100%; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;"
+                    />`;
+            } else if (def.type === 'select') {
+                html += `<select id="setting-${key}" style="width: 100%; padding: 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px;">`;
+                for (const opt of def.options) {
+                    const selected = currentValue == opt.value ? 'selected' : '';
+                    html += `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
+                }
+                html += `</select>`;
+            } else if (def.type === 'checkbox') {
+                const checked = currentValue ? 'checked' : '';
+                html += `
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input
+                            type="checkbox"
+                            id="setting-${key}"
+                            ${checked}
+                            style="width: 18px; height: 18px; cursor: pointer;"
+                        />
+                        <span style="font-size: 14px;">Enable this option</span>
+                    </label>`;
+            }
+
+            html += `</div>`;
+        }
+
+        html += '</div>';
+        formContainer.innerHTML = html;
+
+        // Store config defs for later use
+        this._configDefs = configDefs;
+
+        // Add ESC key handler
+        this._settingsEscHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.hideSettingsModal();
+            }
+        };
+        document.addEventListener('keydown', this._settingsEscHandler);
+
+        // Add click-outside handler
+        this._settingsClickHandler = (e) => {
+            const modal = document.getElementById('settings-modal');
+            if (e.target === modal) {
+                this.hideSettingsModal();
+            }
+        };
+        const modal = document.getElementById('settings-modal');
+        modal.addEventListener('click', this._settingsClickHandler);
+
+        // Update history stats
+        document.getElementById('undo-count').textContent = this.undoStack.length;
+        document.getElementById('undo-limit').textContent = this.maxUndoSteps;
+        document.getElementById('redo-count').textContent = this.redoStack.length;
+
+        // Estimate memory usage
+        const historyJSON = JSON.stringify({
+            undoStack: this.undoStack,
+            redoStack: this.redoStack
+        });
+        const sizeKB = Math.round(historyJSON.length / 1024);
+        document.getElementById('history-size').textContent = sizeKB;
+
+        // Show modal
+        modal.classList.add('show');
+    },
+
+    hideSettingsModal() {
+        const modal = document.getElementById('settings-modal');
+        modal.classList.remove('show');
+
+        // Reset scroll position for next time modal is opened
+        const modalContent = modal.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.scrollTop = 0;
+        }
+
+        // Remove event listeners
+        if (this._settingsEscHandler) {
+            document.removeEventListener('keydown', this._settingsEscHandler);
+            this._settingsEscHandler = null;
+        }
+        if (this._settingsClickHandler) {
+            modal.removeEventListener('click', this._settingsClickHandler);
+            this._settingsClickHandler = null;
+        }
+    },
+
+    applySettings() {
+        // Store old font settings to detect changes
+        const oldFontFamily = this.fontFamily;
+        const oldFontWeight = this.fontWeight;
+
+        // Read values from form and update app state
+        for (const key of Object.keys(this._configDefs)) {
+            const input = document.getElementById(`setting-${key}`);
+            const def = this._configDefs[key];
+
+            if (def.type === 'number') {
+                this[key] = parseFloat(input.value);
+            } else if (def.type === 'select') {
+                // Check if select values are numeric or string
+                // If first option value is a number, parse as int, otherwise keep as string
+                const firstOptionValue = def.options[0].value;
+                if (typeof firstOptionValue === 'number' || !isNaN(parseInt(firstOptionValue))) {
+                    this[key] = parseInt(input.value);
+                } else {
+                    this[key] = input.value; // Keep as string for non-numeric selects
+                }
+            } else if (def.type === 'checkbox') {
+                this[key] = input.checked;
+            } else {
+                this[key] = input.value;
+            }
+        }
+
+        // Enforce undo limit if maxUndoSteps was changed
+        this.enforceUndoLimit();
+
+        // Auto-calibrate charWidth if font settings changed
+        const fontChanged = (this.fontFamily !== oldFontFamily || this.fontWeight !== oldFontWeight);
+        if (fontChanged) {
+            // Calibrate before render/save so the new charWidth is applied
+            this.calibrateCharWidth(true); // true = automatic
+            // Note: calibrateCharWidth already calls render() and saveToStorage()
+        } else {
+            // Re-render to apply visual changes
+            this.render();
+
+            // Save to localStorage
+            this.saveToStorage();
+        }
+
+        // Hide modal
+        this.hideSettingsModal();
+
+        // Show success feedback
+        this.showToast('Settings applied successfully', 'success');
+    },
+
+    resetSettings() {
+        // Confirm before resetting
+        this.showConfirm(
+            'Reset Settings',
+            'Are you sure you want to reset all settings to their default values?',
+            () => {
+                // Reset all config values to defaults
+                for (const [key, def] of Object.entries(this._configDefs)) {
+                    this[key] = def.default;
+                }
+
+                // Auto-calibrate charWidth for default font settings
+                this.calibrateCharWidth(true); // true = automatic
+                // Note: calibrateCharWidth already calls render() and saveToStorage()
+
+                // Re-populate form with new values
+                this.hideSettingsModal();
+                this.showSettingsModal();
+
+                // Show success feedback
+                this.showToast('Settings reset to defaults', 'success');
+            }
+        );
+    },
+
+    exportSettings() {
+        // Extract configuration parameters
+        const settings = {
+            textLengthThreshold: this.textLengthThreshold,
+            charWidth: this.charWidth,
+            nodePadding: this.nodePadding,
+            wheelZoomSpeed: this.wheelZoomSpeed,
+            minNodeWidth: this.minNodeWidth,
+            fontFamily: this.fontFamily,
+            fontWeight: this.fontWeight
+        };
+
+        // Format as pretty JSON
+        const json = JSON.stringify(settings, null, 2);
+
+        // Copy to clipboard
+        navigator.clipboard.writeText(json).then(() => {
+            this.showToast('Settings copied to clipboard!', 'success');
+        }).catch(err => {
+            this.showAlert('Export Failed', 'Failed to copy to clipboard: ' + err.message);
+        });
+    }
 });
+
+console.log('[settings.js] Settings modal and configuration management loaded');
 
 
 
@@ -6610,53 +6992,207 @@ Object.assign(app, {
  * @order 34
  * @category ui
  *
- * Keyboard shortcuts modal
- *
- * NOTE: Shortcuts functions remain in task-tree.html due to size.
- * This file documents the shortcuts modal architecture.
+ * Keyboard shortcuts modal - comprehensive reference for all keyboard interactions
  *
  * KEY FUNCTIONS:
  *
- * showShortcutsModal() - Line 5324-5445
- * - Generates comprehensive shortcuts reference
- * - Organized into categories:
- *   - ✏️ Editing: Task creation, editing, deletion
- *   - 🎯 Selection: Selecting, multi-selecting, clearing
- *   - 📊 Status & Priority: Status changes, priority cycling
- *   - 🔗 Relationships: Reparenting, dependencies, subtree movement
- *   - 🚀 Navigation: Movement, zooming, jumping, collapsing
- *   - 🔗 Links: Link attachment, opening links
- *   - ⏮️ Undo/Redo: Undo and redo operations
- * - Displays platform-specific modifier keys (Ctrl vs Cmd)
- * - Shows Pro Tips for advanced workflows
- * - Keyboard navigation: Number keys 1-9 to jump to sections
+ * showShortcutsModal() - Display shortcuts reference modal
+ * - Generates comprehensive keyboard shortcuts reference
+ * - Platform-aware key names (Cmd vs Ctrl, Option vs Alt)
+ * - Organized into 7 categories with emojis
+ * - Pro Tips for advanced workflows
+ * - ESC to close, click-outside to close
  *
- * hideShortcutsModal() - Line 5447-5460
- * - Closes modal
- * - Removes event listeners
- *
- * updateShortcutsHelp() - Line 1459-1474
- * - Updates condensed shortcuts help in top-right corner
- * - Shows most important shortcuts only
- * - Platform-aware (Windows/Mac key symbols)
+ * hideShortcutsModal() - Close shortcuts modal
+ * - Removes show class
+ * - Cleans up event listeners
  *
  * SHORTCUT CATEGORIES:
- * Each category has:
- * - category: Name with emoji
- * - items: Array of {keys, description}
- * - tip: Optional Pro Tip for advanced usage
  *
- * Example Pro Tips:
- * - Link auto-detection when editing
- * - Multi-select workflows for bulk operations
- * - Flow state pattern (done → parent)
- * - Box selection for region operations
+ * 1. ✏️ Editing - Task creation, editing, deletion
+ *    - Double-click to edit
+ *    - Cmd+Double-click to create child
+ *    - Backspace to delete
+ *
+ * 2. 🎯 Selection - Selecting, multi-selecting, clearing
+ *    - Click to select
+ *    - Cmd+Click to multi-select
+ *    - Cmd+Drag for box selection
+ *    - Escape to clear
+ *
+ * 3. 📊 Status & Priority - Status changes, priority cycling
+ *    - Middle-click to cycle status
+ *    - P key to cycle priority
+ *
+ * 4. 🔗 Relationships - Reparenting, dependencies, subtree movement
+ *    - Cmd+Drag to reparent
+ *    - Alt+Drag to add dependency
+ *    - Shift+Drag to move subtree
+ *
+ * 5. 🚀 Navigation - Movement, zooming, jumping, collapsing
+ *    - Drag to move
+ *    - Scroll wheel to zoom
+ *    - J to jump to working task
+ *    - Shift+Double-click to collapse
+ *
+ * 6. 🔗 Links - Link attachment, opening links
+ *    - Cmd+K to attach URL
+ *    - Click link icon to open
+ *    - Pro Tip: Auto-detection when editing
+ *
+ * 7. ⏮️ Undo/Redo - Undo and redo operations
+ *    - Cmd+Z to undo
+ *    - Cmd+Shift+Z to redo
+ *
+ * PLATFORM-AWARE KEY NAMES:
+ * - macOS: ⌘ (Cmd), ⌥ (Option), ⇧ (Shift)
+ * - Windows/Linux: Ctrl, Alt, Shift
+ *
+ * Pro Tips are shown as highlighted boxes with blue left border,
+ * providing advanced workflow guidance.
  */
 
 Object.assign(app, {
-    // Placeholder - actual functions stay in main HTML file
-    // This module serves as shortcuts architecture documentation
+    showShortcutsModal() {
+        const modal = document.getElementById('shortcuts-modal');
+        const platformInfo = document.getElementById('shortcuts-platform-info');
+        const content = document.getElementById('shortcuts-content');
+
+        // Set platform info
+        const platform = this.isMac ? 'macOS' : this.isWindows ? 'Windows' : 'Linux';
+        platformInfo.textContent = `Detected platform: ${platform}`;
+
+        // Get platform-specific key names
+        const mod = this.getModifierKey(false); // 'Cmd' or 'Ctrl'
+        const modSymbol = this.getModifierKey(true); // '⌘' or 'Ctrl'
+        const alt = this.getAltKey(false);
+        const altSymbol = this.getAltKey(true);
+        const shift = this.getShiftKey(false);
+        const shiftSymbol = this.getShiftKey(true);
+
+        // Build shortcuts by category
+        const shortcuts = [
+            {
+                category: '✏️ Editing',
+                items: [
+                    { keys: 'Double-click node', description: 'Edit task name' },
+                    { keys: `${modSymbol}+Double-click node`, description: 'Create child task under node' },
+                    { keys: `${modSymbol}+Double-click empty`, description: 'Create root task at cursor' },
+                    { keys: 'Backspace', description: 'Delete selected task(s)' },
+                    { keys: `${altSymbol}+Click node`, description: 'Delete task (alternative method)' }
+                ]
+            },
+            {
+                category: '🎯 Selection',
+                items: [
+                    { keys: 'Click node', description: 'Select task (clears other selections)' },
+                    { keys: `${modSymbol}+Click node`, description: 'Multi-select (toggle selection)' },
+                    { keys: `${modSymbol}+Drag empty`, description: 'Box select (select all nodes in rectangle)' },
+                    { keys: 'Escape', description: 'Clear all selections' }
+                ]
+            },
+            {
+                category: '📊 Status & Priority',
+                items: [
+                    { keys: 'Middle-click', description: 'Cycle task status (pending → working → done → pending)' },
+                    { keys: 'P (hover)', description: 'Cycle priority of hovered task' },
+                    { keys: 'P (selected)', description: 'Cycle priority of selected task(s)' }
+                ]
+            },
+            {
+                category: '🔗 Relationships',
+                items: [
+                    { keys: `${modSymbol}+Drag A → B`, description: 'Reparent: Make task A a child of task B' },
+                    { keys: `${altSymbol}+Drag A → B`, description: 'Add dependency: A depends on B (A waits for B)' },
+                    { keys: `${altSymbol}+Drag on dependency`, description: 'Remove dependency link' },
+                    { keys: `${shiftSymbol}+Drag node`, description: 'Move entire subtree (preserves relative positions)' }
+                ]
+            },
+            {
+                category: '🚀 Navigation',
+                items: [
+                    { keys: 'Drag node', description: 'Move single task to new position' },
+                    { keys: 'Scroll wheel', description: 'Zoom in/out at cursor position' },
+                    { keys: `${modSymbol}++`, description: 'Zoom in' },
+                    { keys: `${modSymbol}+−`, description: 'Zoom out' },
+                    { keys: 'J or 🎯 button', description: 'Jump to currently working task (cinematic animation)' },
+                    { keys: `${shiftSymbol}+Double-click`, description: 'Toggle subtree visibility (collapse/expand)' }
+                ]
+            },
+            {
+                category: '🔗 Links',
+                items: [
+                    { keys: `${modSymbol}+K`, description: 'Attach URL to selected task' },
+                    { keys: 'Click 🔗', description: 'Open attached link in new tab' }
+                ],
+                tip: '💡 <strong>Pro Tip:</strong> Paste a URL as the last text in a task - it will be automatically detected, removed from the task name, and added as a link!'
+            },
+            {
+                category: '⏮️ Undo/Redo',
+                items: [
+                    { keys: `${modSymbol}+Z`, description: 'Undo last action' },
+                    { keys: `${modSymbol}+${shiftSymbol}+Z`, description: 'Redo previously undone action' }
+                ]
+            }
+        ];
+
+        // Build HTML for shortcuts
+        let html = '';
+        shortcuts.forEach(section => {
+            html += `
+                <div class="shortcut-section">
+                    <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; color: ${this.darkMode ? '#fff' : '#333'};">${section.category}</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        ${section.items.map(item => `
+                            <tr style="border-bottom: 1px solid ${this.darkMode ? '#444' : '#eee'};">
+                                <td style="padding: 8px 16px 8px 0; font-family: 'Fira Code', monospace; font-size: 13px; color: ${this.darkMode ? '#4fc3f7' : '#1976d2'}; white-space: nowrap;">${item.keys}</td>
+                                <td style="padding: 8px 0; font-size: 13px; color: ${this.darkMode ? '#ccc' : '#666'};">${item.description}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                    ${section.tip ? `<div style="margin-top: 12px; padding: 10px; background: ${this.darkMode ? 'rgba(76, 195, 247, 0.1)' : 'rgba(25, 118, 210, 0.05)'}; border-left: 3px solid ${this.darkMode ? '#4fc3f7' : '#1976d2'}; border-radius: 4px; font-size: 13px; color: ${this.darkMode ? '#ccc' : '#666'};">${section.tip}</div>` : ''}
+                </div>
+            `;
+        });
+
+        content.innerHTML = html;
+
+        // Add ESC key handler
+        this._shortcutsEscHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.hideShortcutsModal();
+            }
+        };
+        document.addEventListener('keydown', this._shortcutsEscHandler);
+
+        // Add click-outside handler
+        this._shortcutsClickHandler = (e) => {
+            if (e.target === modal) {
+                this.hideShortcutsModal();
+            }
+        };
+        modal.addEventListener('click', this._shortcutsClickHandler);
+
+        modal.classList.add('show');
+    },
+
+    hideShortcutsModal() {
+        const modal = document.getElementById('shortcuts-modal');
+        modal.classList.remove('show');
+
+        // Remove event listeners
+        if (this._shortcutsEscHandler) {
+            document.removeEventListener('keydown', this._shortcutsEscHandler);
+            this._shortcutsEscHandler = null;
+        }
+        if (this._shortcutsClickHandler) {
+            modal.removeEventListener('click', this._shortcutsClickHandler);
+            this._shortcutsClickHandler = null;
+        }
+    }
 });
+
+console.log('[shortcuts.js] Keyboard shortcuts modal loaded');
 
 
 
