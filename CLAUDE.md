@@ -4,6 +4,148 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## 📁 PROJECT STRUCTURE - MODULAR ARCHITECTURE
+
+**This project uses a modular architecture with auto-discovery build system.**
+
+### Directory Structure
+
+```
+graphdo/
+├── src/                          # Source files (EDIT THESE)
+│   ├── index.html                # HTML template with injection markers
+│   ├── styles/                   # CSS modules
+│   │   ├── base.css              # Global resets, body (@order: 10)
+│   │   ├── controls.css          # Top bar, buttons (@order: 20)
+│   │   ├── task-nodes.css        # Task styling (@order: 30)
+│   │   ├── links.css             # Relationships (@order: 40)
+│   │   ├── modals.css            # Dialogs (@order: 50)
+│   │   ├── status-bar.css        # Bottom panel (@order: 60)
+│   │   └── dark-mode.css         # Dark theme (@order: 70)
+│   │
+│   └── js/                       # JavaScript modules
+│       ├── state.js              # App state object (@order: 1)
+│       ├── config.js             # Configuration (@order: 2)
+│       │
+│       ├── utils/                # Utilities (@order: 5-9)
+│       │   ├── platform.js       # Platform detection, keyboard symbols
+│       │   ├── svg.js            # SVG coordinate conversion
+│       │   └── cycle-detection.js # Circular dependency checking
+│       │
+│       ├── data/                 # Data layer (@order: 10-14)
+│       │   ├── undo-redo.js      # Undo/redo system
+│       │   ├── persistence.js    # localStorage save/load
+│       │   ├── import-export.js  # JSON import/export
+│       │   └── clipboard.js      # Copy/paste subtrees
+│       │
+│       ├── core/                 # Domain logic (@order: 15-19)
+│       │   ├── tasks.js          # Task CRUD operations
+│       │   ├── status.js         # Status/priority management
+│       │   └── relationships.js  # Dependencies, reparenting
+│       │
+│       ├── rendering/            # Rendering (@order: 20-24)
+│       │   ├── golden-path.js    # Working task visualization
+│       │   ├── indicators.js     # Off-screen arrows
+│       │   ├── nodes.js          # Node dimensions
+│       │   ├── links.js          # SVG line utilities
+│       │   └── render.js         # Main render orchestration
+│       │
+│       ├── interactions/         # User input (@order: 25-29)
+│       │   ├── mouse.js          # Mouse event handlers
+│       │   ├── keyboard.js       # Keyboard shortcuts
+│       │   ├── drag.js           # Drag modes
+│       │   └── edit.js           # Inline text editing
+│       │
+│       ├── ui/                   # UI components (@order: 30-39)
+│       │   ├── modals.js         # confirm/alert/prompt
+│       │   ├── context-menu.js   # Right-click menus
+│       │   ├── status-bar.js     # Bottom status bar
+│       │   ├── settings.js       # Settings modal
+│       │   ├── shortcuts.js      # Shortcuts modal
+│       │   ├── test-checklist.js # Test data injection
+│       │   └── toast.js          # Toast notifications
+│       │
+│       ├── navigation/           # Navigation (@order: 40-44)
+│       │   ├── viewport.js       # Pan/zoom/fit
+│       │   ├── homes.js          # Bookmark management
+│       │   ├── jump.js           # Jump to working task
+│       │   └── text-lock.js      # Text expansion
+│       │
+│       └── app.js                # Initialization (@order: 100)
+│
+├── dist/                         # Built output (DON'T EDIT)
+│   └── task-tree.html            # Single-file distribution
+│
+├── build.js                      # Smart build script
+├── task-tree.html                # Legacy monolithic file (for reference)
+├── MODULE-MAP.md                 # Quick reference for finding code
+└── README.md                     # Full documentation
+```
+
+### How It Works
+
+1. **@order Headers**: Every module has an `@order: <number>` comment
+   - Lower numbers load first (1, 2, 5, 10, 15...)
+   - Build script auto-discovers and sorts files
+   - No manual file lists needed!
+
+2. **Build System**: `node build.js`
+   - Scans `src/styles/` and `src/js/` recursively
+   - Sorts by @order, then category, then filename
+   - Injects into `src/index.html` at `<!-- CSS_INJECT -->` and `<!-- JS_INJECT -->`
+   - Outputs to `dist/task-tree.html` (single file)
+
+3. **Mixin Pattern**: All JS modules extend the `app` object
+   ```javascript
+   // Example: utils/platform.js
+   Object.assign(app, {
+       isMac: navigator.platform.toUpperCase().indexOf('MAC') >= 0,
+       getModifierKey() { return this.isMac ? '⌘' : 'Ctrl'; }
+   });
+   ```
+
+### Development Workflow
+
+**To add/modify a feature:**
+
+1. **Find the right module** using MODULE-MAP.md
+   - Example: "Add zoom feature" → `navigation/viewport.js`
+
+2. **Edit the source file** in `src/`
+   - NOT `dist/task-tree.html` (that's generated)
+
+3. **Add @order header** if creating a new file:
+   ```javascript
+   // @order: 15
+   // @category: core
+   // @description: What this module does
+   ```
+
+4. **Build**: `node build.js`
+
+5. **Test**: Open `dist/task-tree.html` in browser
+
+6. **Commit**: Stage `src/` changes (build.js auto-discovers new files)
+
+**Adding new files - NO build.js edits needed:**
+- Create file anywhere in `src/js/` or `src/styles/`
+- Add `@order` header
+- Run `node build.js` → auto-discovered!
+
+### Finding Code (Use MODULE-MAP.md)
+
+**Quick lookup for common tasks:**
+- **Task CRUD** → `core/tasks.js`
+- **Undo/Redo** → `data/undo-redo.js`
+- **Keyboard shortcuts** → `interactions/keyboard.js` + `app.js` (setupEventListeners)
+- **Rendering** → `rendering/render.js` (main loop), `rendering/nodes.js`, `rendering/links.js`
+- **Settings modal** → `ui/settings.js`
+- **Zoom/pan** → `navigation/viewport.js`
+
+See **MODULE-MAP.md** for complete function-to-file mapping with line numbers.
+
+---
+
 ## ⚠️ CRITICAL WORKFLOW RULE - READ THIS FIRST
 
 **ALWAYS follow this sequence when working on this project:**
