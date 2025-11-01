@@ -3,126 +3,619 @@
  * @order 41
  * @category navigation
  *
- * Bookmark/home management for quick navigation
+ * Home bookmarks for quick navigation with keyboard shortcuts
  *
- * NOTE: Home navigation functions remain in task-tree.html (lines 6925-7774)
- * due to their size and complexity. This file documents the homes architecture.
+ * Homes are saved viewport positions (centerX, centerY, zoomLevel) that can be:
+ * - Created at current view position
+ * - Navigated to with cinematic 3-phase animation
+ * - Updated to current position
+ * - Assigned keyboard shortcuts (0-9)
+ * - Renamed and deleted
  *
  * KEY FUNCTIONS:
  *
- * createHome(name) - Line 6925-6969
- * - Creates new home bookmark at current viewport position
- * - Stores centerX, centerY, zoomLevel
- * - Assigns unique ID
- * - Saves to localStorage
- * - Updates homes dropdown
+ * createHome(name) - Create new home at current position
+ * - Validates unique name
+ * - Saves center of viewport + zoom level
+ * - Warns if >20 homes exist
  *
- * jumpToHome(homeId) - Line 6971-7080
- * - Animates viewport to home position
- * - Smooth easing animation (60 steps)
- * - Updates viewBox during transition
- * - Restores zoom level
- * - Shows toast notification
+ * jumpToHome(homeId, animate) - Navigate to home
+ * - 3-phase cinematic animation (zoom out → pan → zoom in)
+ * - Smooth easing for professional feel
+ * - Total duration: 1300ms (300ms + 500ms + 500ms)
+ * - Lines fade during animation, reappear perfectly after
  *
- * updateHome(homeId) - Line 7383-7403
- * - Updates existing home to current viewport
- * - Modifies centerX, centerY, zoomLevel
- * - Saves to localStorage
- * - Shows toast notification
+ * updateHome(homeId) - Update home to current position
+ * - Preserves name and keybind
+ * - Updates coordinates and zoom
  *
- * deleteHome(homeId) - Line 7405-7429
- * - Shows confirmation dialog
- * - Removes home from array
- * - Clears keybind if assigned
- * - Saves to localStorage
- * - Re-renders homes dropdown
+ * deleteHome(homeId) - Delete home with confirmation
+ * - Respects showDeleteConfirmation setting
  *
- * setKeybindForHome(homeId) - Line 7431-7497
- * - Shows prompt for number key (0-9)
- * - Validates input
- * - Checks for conflicts
- * - Assigns keybind
- * - Saves to localStorage
- * - Re-renders homes dropdown
+ * setKeybindForHome(homeId) - Assign 0-9 keyboard shortcut
+ * - Validates 0-9 keys only
+ * - Handles conflicts (reassign keybind)
+ * - ESC to clear keybind
  *
- * renameHome(homeId) - Line 7499-7531
- * - Shows prompt for new name
- * - Validates input
- * - Updates home name
- * - Saves to localStorage
- * - Re-renders homes dropdown
+ * renameHome(homeId, newName) - Rename home
+ * - Validates unique name (case-insensitive)
  *
- * toggleHomesDropdown() - Line 7533-7553
- * - Shows/hides homes dropdown
- * - Positioned below button
- * - Lists all homes with keybinds
- * - Shows management actions
+ * SPECIAL HOME:
+ * - "Origin Home" - Migrated from old origin system
+ * - Always shown first in lists
+ * - Special purple styling
  *
- * renderHomesDropdown() - Line 7555-7616
- * - Generates homes list HTML
- * - Shows home name, keybind, actions
- * - Clickable items:
- *   - Name: Jump to home
- *   - 🏷️: Rename
- *   - 🔢: Set keybind
- *   - 📍: Update position
- *   - 🗑️: Delete
- * - "Create New Home" button at bottom
+ * MODAL SYSTEM:
+ * - Create Home modal (simple name input)
+ * - Manage Homes modal (full CRUD interface)
  *
- * showCreateHomeModal() - Line 7618-7625
- * - Shows modal to create new home
- * - Prompts for name
- * - Calls createHome()
- *
- * hideCreateHomeModal() - Line 7627-7630
- * - Closes create home modal
- *
- * createHomeFromModal() - Line 7632-7640
- * - Reads name from modal input
- * - Calls createHome()
- * - Closes modal
- *
- * showManageHomesModal() - Line 7642-7647
- * - Shows full homes management modal
- * - Lists all homes with inline editing
- *
- * hideManageHomesModal() - Line 7649-7652
- * - Closes manage homes modal
- *
- * renderManageHomesModal() - Line 7654-7774
- * - Renders homes management UI
- * - Each home shows:
- *   - Name (editable)
- *   - Keybind (editable dropdown)
- *   - Position (centerX, centerY, zoom)
- *   - Actions (Jump, Update, Delete)
- * - "Add New Home" button
- * - Export/Import homes
- *
- * HOMES DATA STRUCTURE:
- * {
- *   id: number,        // Unique ID
- *   name: string,      // Display name
- *   centerX: number,   // Viewport center X
- *   centerY: number,   // Viewport center Y
- *   zoomLevel: number, // Zoom level (0.1-10)
- *   keybind: string    // Optional number key '0'-'9'
- * }
- *
- * KEYBIND NAVIGATION:
- * - Pressing 0-9 jumps to home with that keybind
- * - Instant navigation (no animation)
- * - Shows toast with home name
- * - Restores zoom level
- *
- * OFF-SCREEN INDICATORS:
- * - Shows house emoji (🏠) at screen edges
- * - Points toward off-screen homes
- * - Tooltip shows home name
- * - Click to jump to home
+ * DROPDOWN MENU:
+ * - Shows all homes sorted (Origin first, then alphabetical)
+ * - Displays keybind if assigned: "Home Name [3]"
+ * - Quick actions: Create New, Manage Homes
  */
 
 export const HomesMixin = {
-    // Placeholder - actual functions stay in main HTML file
-    // This module serves as homes architecture documentation
+    markOrigin() {
+        // Create or update "Origin Home" to current view
+        const originHome = this.homes.find(h => h.name === "Origin Home");
+
+        if (originHome) {
+            // Update existing Origin Home
+            this.updateHome(originHome.id);
+        } else {
+            // Create new Origin Home
+            this.createHome("Origin Home");
+        }
+    },
+
+    createHome(name) {
+        // Create a new home bookmark at current view position
+        // Validates unique name and warns if >20 homes
+
+        if (!name || name.trim() === '') {
+            this.showToast('Home name cannot be empty', 'error');
+            return false;
+        }
+
+        const trimmedName = name.trim();
+
+        // Check for duplicate name (case-insensitive)
+        const duplicate = this.homes.find(h => h.name.toLowerCase() === trimmedName.toLowerCase());
+        if (duplicate) {
+            this.showToast(`Home "${trimmedName}" already exists`, 'error');
+            return false;
+        }
+
+        // Calculate center of current viewport (where user is currently looking)
+        const centerX = this.viewBox.x + this.viewBox.width / 2;
+        const centerY = this.viewBox.y + this.viewBox.height / 2;
+
+        // Create new home
+        const newHome = {
+            id: this.homeIdCounter++,
+            name: trimmedName,
+            centerX: centerX,
+            centerY: centerY,
+            zoomLevel: this.zoomLevel,
+            timestamp: Date.now(),
+            keybind: null  // No keybind by default
+        };
+
+        this.homes.push(newHome);
+        this.saveToStorage();
+
+        // Warn if >20 homes
+        if (this.homes.length > 20) {
+            this.showToast(`⚠️ Home "${trimmedName}" created (${this.homes.length} homes - consider organizing)`, 'warning', 3000);
+        } else {
+            this.showToast(`✓ Home "${trimmedName}" created`, 'success');
+        }
+
+        return true;
+    },
+
+    jumpToHome(homeId, animate = true) {
+        // Navigate to a saved home bookmark
+        // Smoothly animates pan and zoom if animate=true
+
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) {
+            this.showToast('Home not found', 'error');
+            return;
+        }
+
+        if (this.tasks.length === 0) {
+            this.showToast(`No tasks to navigate. Home "${home.name}" will apply when tasks exist.`, 'warning');
+            return;
+        }
+
+        // Calculate absolute viewBox position to center on saved home coordinates
+        // viewBox.x + viewBox.width/2 = home.centerX
+        // Therefore: viewBox.x = home.centerX - viewBox.width/2
+        const targetViewBoxX = home.centerX - this.viewBox.width / 2;
+        const targetViewBoxY = home.centerY - this.viewBox.height / 2;
+
+        if (animate) {
+            // Cinematic 3-phase animation: zoom out → pan → zoom in
+            const svg = document.getElementById('canvas');
+            svg.classList.add('animating-view');
+
+            const startZoom = this.zoomLevel;
+            const endZoom = home.zoomLevel;
+            const overviewZoom = Math.min(startZoom, endZoom) * 0.5; // Zoom out to 50% of minimum
+
+            // Store starting viewBox position for smooth pan interpolation
+            const startViewBoxX = this.viewBox.x;
+            const startViewBoxY = this.viewBox.y;
+
+            const totalDuration = 1300; // ms
+            const zoomOutDuration = 300;
+            const panDuration = 500;
+            const zoomInDuration = 500;
+            const startTime = performance.now();
+
+            // Animation phases
+            const animatePhases = (currentTime) => {
+                const elapsed = currentTime - startTime;
+
+                if (elapsed < zoomOutDuration) {
+                    // Phase 1: Zoom out (0-300ms)
+                    const progress = elapsed / zoomOutDuration;
+                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
+                    this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+                    this.updateZoomDisplay();
+                    this.updateViewBoxOnly();
+                    requestAnimationFrame(animatePhases);
+
+                } else if (elapsed < zoomOutDuration + panDuration) {
+                    // Phase 2: Smoothly pan while zoomed out (300-800ms)
+                    const panProgress = (elapsed - zoomOutDuration) / panDuration;
+                    const panEased = 1 - Math.pow(1 - panProgress, 3); // ease-out
+
+                    // Progressively interpolate viewBox position
+                    this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
+                    this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
+
+                    // Stay at overview zoom during pan
+                    this.zoomLevel = overviewZoom;
+                    this.updateZoomDisplay();
+                    this.updateViewBoxOnly();
+                    requestAnimationFrame(animatePhases);
+
+                } else if (elapsed < totalDuration) {
+                    // Phase 3: Zoom in to target (800-1300ms)
+                    const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
+                    const eased = 1 - Math.pow(1 - progress, 3); // ease-out
+                    this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
+                    this.updateZoomDisplay();
+                    this.updateViewBoxOnly();
+                    requestAnimationFrame(animatePhases);
+
+                } else {
+                    // Animation complete
+                    this.zoomLevel = endZoom;
+                    this.updateZoomDisplay();
+                    svg.classList.remove('animating-view');
+                    this.render(); // Lines reappear with perfect edge-to-edge arrows
+
+                    // Save after animation completes to persist zoom
+                    this.saveToStorage();
+                }
+            };
+
+            requestAnimationFrame(animatePhases);
+
+            // Note: Lines fade out via CSS (opacity: 0 on .animating-view line)
+            // They'll be re-rendered perfectly after animation completes
+
+            this.showToast(`→ Jumped to "${home.name}"`, 'success');
+        } else {
+            // Instant jump (no animation)
+            // SET viewBox to target position (don't add, to avoid accumulation!)
+            this.viewBox.x = targetViewBoxX;
+            this.viewBox.y = targetViewBoxY;
+
+            this.zoomLevel = home.zoomLevel;
+            this.updateZoomDisplay();
+
+            this.saveToStorage();
+            this.render();
+
+            this.showToast(`→ Jumped to "${home.name}"`, 'success');
+        }
+    },
+
+    updateHome(homeId) {
+        // Update an existing home to current view position and zoom
+
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) {
+            this.showToast('Home not found', 'error');
+            return;
+        }
+
+        // Calculate center of current viewport (where user is currently looking)
+        const centerX = this.viewBox.x + this.viewBox.width / 2;
+        const centerY = this.viewBox.y + this.viewBox.height / 2;
+
+        home.centerX = centerX;
+        home.centerY = centerY;
+        home.zoomLevel = this.zoomLevel;
+        home.timestamp = Date.now();
+
+        this.saveToStorage();
+        this.showToast(`✓ Updated "${home.name}" to current view`, 'success');
+    },
+
+    deleteHome(homeId) {
+        // Delete a home bookmark (with confirmation if enabled)
+
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) {
+            this.showToast('Home not found', 'error');
+            return;
+        }
+
+        const confirmDelete = () => {
+            this.homes = this.homes.filter(h => h.id !== homeId);
+            this.saveToStorage();
+            this.showToast(`✓ Deleted home "${home.name}"`, 'success');
+        };
+
+        if (this.showDeleteConfirmation) {
+            this.showConfirmDialog(
+                `Delete home "${home.name}"?`,
+                'This action cannot be undone.',
+                confirmDelete
+            );
+        } else {
+            confirmDelete();
+        }
+    },
+
+    setKeybindForHome(homeId) {
+        // Set a keyboard shortcut for a home
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) return;
+
+        // Show alert instructing user to press a key
+        const message = home.keybind
+            ? `Current keybind for "${home.name}": ${home.keybind}\n\nPress a key (0-9) to set new keybind, or press Escape to clear keybind.`
+            : `Press a key (0-9) to set keybind for "${home.name}", or press Escape to cancel.`;
+
+        this.showAlert('Set Keybind', message);
+
+        // Capture next keypress
+        const keyHandler = (e) => {
+            // Remove listener immediately
+            document.removeEventListener('keydown', keyHandler);
+
+            // Close alert modal
+            this.hideAlert();
+
+            // Handle Escape key
+            if (e.key === 'Escape') {
+                if (home.keybind) {
+                    // Clear existing keybind
+                    home.keybind = null;
+                    this.saveToStorage();
+                    this.renderManageHomesModal();
+                    this.showToast(`✓ Keybind cleared for "${home.name}"`, 'success');
+                }
+                // Otherwise just cancel
+                return;
+            }
+
+            // Only allow 0-9 keys
+            if (!/^[0-9]$/.test(e.key)) {
+                this.showToast('Only keys 0-9 are allowed for keybinds', 'error');
+                return;
+            }
+
+            // Check if keybind is already used by another home
+            const existingHome = this.homes.find(h => h.id !== homeId && h.keybind === e.key);
+            if (existingHome) {
+                this.showConfirm(
+                    'Keybind Conflict',
+                    `Key "${e.key}" is already assigned to "${existingHome.name}". Reassign it to "${home.name}"?`,
+                    () => {
+                        // Remove from old home
+                        existingHome.keybind = null;
+                        // Assign to new home
+                        home.keybind = e.key;
+                        this.saveToStorage();
+                        this.renderManageHomesModal();
+                        this.showToast(`✓ Keybind "${e.key}" assigned to "${home.name}"`, 'success');
+                    }
+                );
+            } else {
+                // No conflict, assign keybind
+                home.keybind = e.key;
+                this.saveToStorage();
+                this.renderManageHomesModal();
+                this.showToast(`✓ Keybind "${e.key}" assigned to "${home.name}"`, 'success');
+            }
+        };
+
+        // Add listener for next keypress
+        document.addEventListener('keydown', keyHandler);
+    },
+
+    renameHome(homeId, newName) {
+        // Rename a home bookmark (validates unique name)
+
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) {
+            this.showToast('Home not found', 'error');
+            return false;
+        }
+
+        if (!newName || newName.trim() === '') {
+            this.showToast('Home name cannot be empty', 'error');
+            return false;
+        }
+
+        const trimmedName = newName.trim();
+
+        // Check for duplicate name (case-insensitive), excluding current home
+        const duplicate = this.homes.find(h =>
+            h.id !== homeId && h.name.toLowerCase() === trimmedName.toLowerCase()
+        );
+        if (duplicate) {
+            this.showToast(`Home "${trimmedName}" already exists`, 'error');
+            return false;
+        }
+
+        const oldName = home.name;
+        home.name = trimmedName;
+        home.timestamp = Date.now();
+
+        this.saveToStorage();
+        this.showToast(`✓ Renamed "${oldName}" to "${trimmedName}"`, 'success');
+        return true;
+    },
+
+    toggleHomesDropdown(event) {
+        // Toggle the Homes dropdown menu
+        event.stopPropagation();
+        const dropdown = document.getElementById('homesDropdown');
+
+        if (dropdown.classList.contains('show')) {
+            dropdown.classList.remove('show');
+        } else {
+            this.renderHomesDropdown();
+            dropdown.classList.add('show');
+
+            // Close dropdown when clicking outside
+            const closeDropdown = (e) => {
+                if (!dropdown.contains(e.target) && !e.target.closest('.dropdown button')) {
+                    dropdown.classList.remove('show');
+                    document.removeEventListener('click', closeDropdown);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+        }
+    },
+
+    renderHomesDropdown() {
+        // Populate the Homes dropdown with current homes
+        const dropdown = document.getElementById('homesDropdown');
+        dropdown.innerHTML = '';
+
+        if (this.homes.length === 0) {
+            dropdown.innerHTML = '<div class="dropdown-empty">No homes created yet</div>';
+        } else {
+            // Sort homes: "Origin Home" first, then alphabetically
+            const sortedHomes = [...this.homes].sort((a, b) => {
+                if (a.name === "Origin Home") return -1;
+                if (b.name === "Origin Home") return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            sortedHomes.forEach(home => {
+                const item = document.createElement('div');
+                item.className = 'dropdown-item';
+                if (home.name === "Origin Home") {
+                    item.classList.add('special');
+                }
+
+                // Display home name with keybind if it exists
+                const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
+                item.textContent = nameText;
+
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    this.jumpToHome(home.id);
+                    dropdown.classList.remove('show');
+                };
+                dropdown.appendChild(item);
+            });
+        }
+
+        // Add divider and actions
+        if (this.homes.length > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'dropdown-divider';
+            dropdown.appendChild(divider);
+        }
+
+        const createItem = document.createElement('div');
+        createItem.className = 'dropdown-item special';
+        createItem.innerHTML = '+ Create New Home';
+        createItem.onclick = (e) => {
+            e.stopPropagation();
+            this.showCreateHomeModal();
+            dropdown.classList.remove('show');
+        };
+        dropdown.appendChild(createItem);
+
+        const manageItem = document.createElement('div');
+        manageItem.className = 'dropdown-item';
+        manageItem.innerHTML = '⚙️ Manage Homes';
+        manageItem.onclick = (e) => {
+            e.stopPropagation();
+            this.showManageHomesModal();
+            dropdown.classList.remove('show');
+        };
+        dropdown.appendChild(manageItem);
+    },
+
+    showCreateHomeModal() {
+        // Show the Create Home modal
+        const modal = document.getElementById('create-home-modal');
+        const input = document.getElementById('home-name-input');
+        input.value = '';
+        modal.style.display = 'flex';
+        setTimeout(() => input.focus(), 100);
+    },
+
+    hideCreateHomeModal() {
+        // Hide the Create Home modal
+        document.getElementById('create-home-modal').style.display = 'none';
+    },
+
+    createHomeFromModal() {
+        // Create a new home from the modal input
+        const input = document.getElementById('home-name-input');
+        const name = input.value.trim();
+
+        if (this.createHome(name)) {
+            this.hideCreateHomeModal();
+        }
+    },
+
+    showManageHomesModal() {
+        // Show the Manage Homes modal
+        const modal = document.getElementById('manage-homes-modal');
+        this.renderManageHomesModal();
+        modal.style.display = 'flex';
+    },
+
+    hideManageHomesModal() {
+        // Hide the Manage Homes modal
+        document.getElementById('manage-homes-modal').style.display = 'none';
+    },
+
+    renderManageHomesModal() {
+        // Populate the Manage Homes modal with current homes
+        const container = document.getElementById('homes-list');
+        container.innerHTML = '';
+
+        if (this.homes.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: #999; padding: 40px; font-style: italic;">No homes created yet</div>';
+            return;
+        }
+
+        // Sort homes: "Origin Home" first, then alphabetically
+        const sortedHomes = [...this.homes].sort((a, b) => {
+            if (a.name === "Origin Home") return -1;
+            if (b.name === "Origin Home") return 1;
+            return a.name.localeCompare(b.name);
+        });
+
+        sortedHomes.forEach(home => {
+            const homeCard = document.createElement('div');
+            homeCard.style.cssText = `
+                background: ${home.name === "Origin Home" ? 'rgba(156, 39, 176, 0.1)' : 'rgba(255, 255, 255, 0.05)'};
+                border: 1px solid ${home.name === "Origin Home" ? 'rgba(156, 39, 176, 0.3)' : 'rgba(255, 255, 255, 0.1)'};
+                border-radius: 8px;
+                padding: 16px;
+                margin-bottom: 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            `;
+
+            const infoDiv = document.createElement('div');
+            infoDiv.style.cssText = 'flex: 1;';
+
+            const nameSpan = document.createElement('div');
+            nameSpan.textContent = home.name;
+            // Use light colors in dark mode for visibility
+            const isDarkMode = document.body.classList.contains('dark-mode');
+            const nameColor = home.name === "Origin Home" ? '#9c27b0' : (isDarkMode ? '#e2e8f0' : '#333');
+            nameSpan.style.cssText = `
+                font-weight: 600;
+                font-size: 15px;
+                margin-bottom: 6px;
+                color: ${nameColor};
+            `;
+
+            const detailsSpan = document.createElement('div');
+            const keybindText = home.keybind ? ` • Keybind: ${home.keybind}` : '';
+            detailsSpan.textContent = `Zoom: ${home.zoomLevel.toFixed(1)}x • Position: (${Math.round(home.centerX)}, ${Math.round(home.centerY)})${keybindText}`;
+            const detailsColor = isDarkMode ? '#94a3b8' : '#666';
+            detailsSpan.style.cssText = `font-size: 12px; color: ${detailsColor};`;
+
+            infoDiv.appendChild(nameSpan);
+            infoDiv.appendChild(detailsSpan);
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.style.cssText = 'display: flex; gap: 8px;';
+
+            // Jump button
+            const jumpBtn = document.createElement('button');
+            jumpBtn.textContent = '→ Jump';
+            jumpBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+            jumpBtn.onclick = () => {
+                this.jumpToHome(home.id);
+                this.hideManageHomesModal();
+            };
+            actionsDiv.appendChild(jumpBtn);
+
+            // Update button
+            const updateBtn = document.createElement('button');
+            updateBtn.className = 'secondary';
+            updateBtn.textContent = '↻ Update';
+            updateBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+            updateBtn.onclick = () => {
+                this.updateHome(home.id);
+                this.renderManageHomesModal();
+            };
+            actionsDiv.appendChild(updateBtn);
+
+            // Keybind button
+            const keybindBtn = document.createElement('button');
+            keybindBtn.className = 'secondary';
+            keybindBtn.textContent = home.keybind ? `⌨ ${home.keybind}` : '⌨ Set Key';
+            keybindBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+            keybindBtn.onclick = () => {
+                this.setKeybindForHome(home.id);
+            };
+            actionsDiv.appendChild(keybindBtn);
+
+            // Rename button
+            const renameBtn = document.createElement('button');
+            renameBtn.className = 'secondary';
+            renameBtn.textContent = '✎ Rename';
+            renameBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+            renameBtn.onclick = () => {
+                const newName = prompt(`Rename "${home.name}" to:`, home.name);
+                if (newName) {
+                    if (this.renameHome(home.id, newName)) {
+                        this.renderManageHomesModal();
+                    }
+                }
+            };
+            actionsDiv.appendChild(renameBtn);
+
+            // Delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'secondary';
+            deleteBtn.textContent = '✕ Delete';
+            deleteBtn.style.cssText = 'padding: 6px 12px; font-size: 13px; color: #f44336;';
+            deleteBtn.onclick = () => {
+                this.deleteHome(home.id);
+                this.renderManageHomesModal();
+            };
+            actionsDiv.appendChild(deleteBtn);
+
+            homeCard.appendChild(infoDiv);
+            homeCard.appendChild(actionsDiv);
+            container.appendChild(homeCard);
+        });
+    }
 };
+
+console.log('[homes.js] Home bookmarks navigation loaded');
