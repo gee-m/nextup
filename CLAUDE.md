@@ -92,16 +92,29 @@ graphdo/
 2. **Build System**: `node build.js`
    - Scans `src/styles/` and `src/js/` recursively
    - Sorts by @order, then category, then filename
+   - **Transforms ES6 modules**: Converts `export const Mixin = {...}` to `Object.assign(app, {...})`
+   - **Validates syntax**: Parses JavaScript before writing output (catches errors early!)
    - Injects into `src/index.html` at `<!-- CSS_INJECT -->` and `<!-- JS_INJECT -->`
    - Outputs to `dist/task-tree.html` (single file)
+   - **Build fails if syntax errors detected** - no broken builds!
 
 3. **Mixin Pattern**: All JS modules extend the `app` object
    ```javascript
    // Example: utils/platform.js
+   // Source can use either pattern:
+
+   // Pattern 1: Direct Object.assign (browser-compatible)
    Object.assign(app, {
        isMac: navigator.platform.toUpperCase().indexOf('MAC') >= 0,
        getModifierKey() { return this.isMac ? '⌘' : 'Ctrl'; }
    });
+
+   // Pattern 2: ES6 export (auto-transformed by build)
+   export const PlatformMixin = {
+       isMac: navigator.platform.toUpperCase().indexOf('MAC') >= 0,
+       getModifierKey() { return this.isMac ? '⌘' : 'Ctrl'; }
+   };
+   // Build transforms to: Object.assign(app, { ... });
    ```
 
 ### Development Workflow
