@@ -1858,7 +1858,7 @@ console.log('✓ Configuration loaded');
  * - wouldCreateCycle() - Check if dependency would create cycle
  */
 
-export const RelationshipsMixin = {
+Object.assign(app, {
     reparentTask({ taskId, newParentId }) {
         const task = this.tasks.find(t => t.id === taskId);
         const newParent = this.tasks.find(t => t.id === newParentId);
@@ -2008,8 +2008,7 @@ export const RelationshipsMixin = {
 
         return false;
     }
-};
-
+});
 
 
 // ============================================================
@@ -2037,7 +2036,7 @@ export const RelationshipsMixin = {
  * - repairWorkingTasks() - Fix multiple working tasks bug
  */
 
-export const StatusMixin = {
+Object.assign(app, {
     cycleStatus(taskId) {
         const task = this.tasks.find(t => t.id === taskId);
         const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
@@ -2480,8 +2479,7 @@ export const StatusMixin = {
             this.showToast(`✓ Fixed ${fixedCount} ${taskWord} marked as working`, 'success', 3000);
         }
     }
-};
-
+});
 
 
 // ============================================================
@@ -2505,7 +2503,7 @@ export const StatusMixin = {
  * - getPathToRoot() - Get title path from task to root
  */
 
-export const TasksMixin = {
+Object.assign(app, {
     addChildTask(parentId) {
         this.saveSnapshot(`Created child task 'New Task'`);
 
@@ -2743,8 +2741,7 @@ export const TasksMixin = {
 
         return path;
     }
-};
-
+});
 
 
 // ============================================================
@@ -3726,11 +3723,10 @@ console.log('[undo-redo.js] Undo/redo system loaded');
  * - Click events: context menu, multi-select toggle
  */
 
-export const DragMixin = {
+Object.assign(app, {
     // Placeholder - drag logic integrated into mouse handlers
     // This module serves as architecture documentation
-};
-
+});
 
 
 // ============================================================
@@ -3745,7 +3741,7 @@ export const DragMixin = {
  * Inline text editing for task nodes
  */
 
-export const EditMixin = {
+Object.assign(app, {
     startEditing(taskId) {
         this.editingTaskId = taskId;
         this.render();
@@ -3848,8 +3844,7 @@ export const EditMixin = {
         // Update textarea rows for better UX
         textarea.rows = Math.max(2, lines.length);
     }
-};
-
+});
 
 
 // ============================================================
@@ -3920,11 +3915,10 @@ export const EditMixin = {
  * - Hover-aware shortcuts (e.g., P cycles priority of hovered task)
  */
 
-export const KeyboardMixin = {
+Object.assign(app, {
     // Placeholder - actual handler stays in setupEventListeners()
     // This module serves as shortcut documentation
-};
-
+});
 
 
 // ============================================================
@@ -3987,11 +3981,10 @@ export const KeyboardMixin = {
  * - SVG coordinates used for task positioning (zoom-aware)
  */
 
-export const MouseMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as architecture documentation
-};
-
+});
 
 
 // ============================================================
@@ -4122,11 +4115,10 @@ export const MouseMixin = {
  * - Click to jump to home
  */
 
-export const HomesMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as homes architecture documentation
-};
-
+});
 
 
 // ============================================================
@@ -4207,11 +4199,10 @@ export const HomesMixin = {
  * - Preserves zoom if task already visible
  */
 
-export const JumpMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as jump navigation documentation
-};
-
+});
 
 
 // ============================================================
@@ -4296,11 +4287,10 @@ export const JumpMixin = {
  * - Declutter canvas with truncation
  */
 
-export const TextLockMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as text expansion documentation
-};
-
+});
 
 
 // ============================================================
@@ -4315,7 +4305,7 @@ export const TextLockMixin = {
  * Zoom and pan viewport controls
  */
 
-export const ViewportMixin = {
+Object.assign(app, {
     zoomIn() {
         this.zoomLevel = Math.min(this.zoomLevel + this.zoomSpeed, this.maxZoom);
         this.updateZoomDisplay();
@@ -4396,8 +4386,7 @@ export const ViewportMixin = {
             `${viewBoxWidth} ${viewBoxHeight}`
         );
     }
-};
-
+});
 
 
 // ============================================================
@@ -4412,7 +4401,7 @@ export const ViewportMixin = {
  * Golden path visualization - tracks working task ancestors and children
  */
 
-export const GoldenPathMixin = {
+Object.assign(app, {
     getWorkingTaskPath() {
         // Returns ancestor and descendant paths for the currently working task
         // Used for golden path visualization
@@ -4447,8 +4436,7 @@ export const GoldenPathMixin = {
             directChildren
         };
     }
-};
-
+});
 
 
 // ============================================================
@@ -4463,7 +4451,7 @@ export const GoldenPathMixin = {
  * Off-screen indicators for working tasks and homes
  */
 
-export const IndicatorsMixin = {
+Object.assign(app, {
     renderOffscreenIndicators() {
         // Show arrows on screen edges pointing to off-screen targets (working tasks and homes)
         const container = document.getElementById('offscreen-indicators');
@@ -4637,8 +4625,7 @@ export const IndicatorsMixin = {
         container.appendChild(indicator);
         container.appendChild(tooltip);
     }
-};
-
+});
 
 
 // ============================================================
@@ -4653,7 +4640,7 @@ export const IndicatorsMixin = {
  * Link rendering - Lines, arrows, curved paths, temp drag lines
  */
 
-export const LinksMixin = {
+Object.assign(app, {
     createLine(x1, y1, x2, y2, className) {
         // Dispatch to appropriate renderer based on arrow style
         if (this.arrowStyle === 'curved') {
@@ -4848,8 +4835,7 @@ export const LinksMixin = {
             this.createHome("Origin Home");
         }
     }
-};
-
+});
 
 
 // ============================================================
@@ -4864,7 +4850,7 @@ export const LinksMixin = {
  * Task node rendering - SVG generation for task rectangles with text
  */
 
-export const NodesMixin = {
+Object.assign(app, {
     calculateTaskDimensions(task) {
         // Helper: Calculate task dimensions with multiline support
         const padding = this.nodePadding;
@@ -4926,8 +4912,7 @@ export const NodesMixin = {
 
         return { rectWidth, rectHeight, lines };
     }
-};
-
+});
 
 
 // ============================================================
@@ -4968,11 +4953,10 @@ export const NodesMixin = {
  * - LinksMixin: createLine(), getLineEndAtRectEdge()
  */
 
-export const RenderMixin = {
+Object.assign(app, {
     // Placeholder - actual render() stays in main HTML file for now
     // Future: Extract when we have proper module loading and can handle the ~600 line function
-};
-
+});
 
 
 // ============================================================
@@ -5068,11 +5052,10 @@ export const RenderMixin = {
  * - Closes links dropdown
  */
 
-export const ContextMenuMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as context menu architecture documentation
-};
-
+});
 
 
 // ============================================================
@@ -5087,7 +5070,7 @@ export const ContextMenuMixin = {
  * Modal dialog system (confirm, alert, prompt)
  */
 
-export const ModalsMixin = {
+Object.assign(app, {
     showConfirm(title, message, onConfirm) {
         document.getElementById('confirm-title').textContent = title;
         document.getElementById('confirm-message').textContent = message;
@@ -5181,8 +5164,7 @@ export const ModalsMixin = {
         const modal = document.getElementById('prompt-modal');
         modal.classList.remove('show');
     }
-};
-
+});
 
 
 // ============================================================
@@ -5253,11 +5235,10 @@ export const ModalsMixin = {
  * - Behavior: wordWrap, enableMultiline, physicsEnabled, darkMode
  */
 
-export const SettingsMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as settings architecture documentation
-};
-
+});
 
 
 // ============================================================
@@ -5312,11 +5293,10 @@ export const SettingsMixin = {
  * - Box selection for region operations
  */
 
-export const ShortcutsMixin = {
+Object.assign(app, {
     // Placeholder - actual functions stay in main HTML file
     // This module serves as shortcuts architecture documentation
-};
-
+});
 
 
 // ============================================================
@@ -5331,7 +5311,7 @@ export const ShortcutsMixin = {
  * Bottom status bar showing working task context
  */
 
-export const StatusBarMixin = {
+Object.assign(app, {
     updateStatusBar() {
         const workingTask = this.tasks.find(t => t.currentlyWorking);
         const statusBar = document.getElementById('status-bar');
@@ -5410,8 +5390,7 @@ export const StatusBarMixin = {
             childrenEl.textContent = '| No children';
         }
     }
-};
-
+});
 
 
 // ============================================================
@@ -5500,11 +5479,10 @@ export const StatusBarMixin = {
  * - Provides known-good state for debugging
  */
 
-export const TestChecklistMixin = {
+Object.assign(app, {
     // Placeholder - actual function stays in main HTML file
     // This module serves as test checklist documentation
-};
-
+});
 
 
 // ============================================================
@@ -5519,7 +5497,7 @@ export const TestChecklistMixin = {
  * Toast notification system
  */
 
-export const ToastMixin = {
+Object.assign(app, {
     showToast(message, type = 'success', duration = 4000) {
         // Create container if it doesn't exist
         let container = document.querySelector('.toast-container');
@@ -5545,8 +5523,7 @@ export const ToastMixin = {
         // Allow clicking to dismiss early
         toast.onclick = () => toast.remove();
     }
-};
-
+});
 
 
 // ============================================================

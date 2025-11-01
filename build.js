@@ -19,8 +19,12 @@
  *   node build.js --validate # Validate only, don't build
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ============================================================
 // CONFIGURATION
@@ -205,6 +209,31 @@ function buildCSS() {
 }
 
 /**
+ * Transform ES6 module syntax to browser-compatible code
+ * Converts: export const MixinName = { ... };
+ * To: Object.assign(app, { ... });
+ */
+function transformModuleSyntax(content) {
+    // Check if this file has an export statement
+    const hasExport = /export\s+const\s+\w+\s*=\s*\{/.test(content);
+
+    if (hasExport) {
+        // Replace: export const SomeName = {
+        // With: Object.assign(app, {
+        content = content.replace(/export\s+const\s+\w+\s*=\s*\{/g, 'Object.assign(app, {');
+
+        // Replace the final closing }; with });
+        // This assumes the export is the main content of the file
+        content = content.replace(/\};\s*$/, '});');
+    }
+
+    // Remove any other standalone export statements
+    content = content.replace(/^export\s+/gm, '');
+
+    return content;
+}
+
+/**
  * Collect and concatenate all JavaScript files
  */
 function buildJS() {
@@ -227,9 +256,12 @@ function buildJS() {
     for (const { path: file, order, category } of sortedFiles) {
         const fileName = path.basename(file);
         const relativePath = path.relative(CONFIG.JS_DIR, file);
-        const content = fs.readFileSync(file, 'utf8');
+        let content = fs.readFileSync(file, 'utf8');
 
         console.log(`  ${String(order).padStart(3)}. ${relativePath.padEnd(40)} [${category}]`);
+
+        // Transform ES6 module syntax to browser-compatible code
+        content = transformModuleSyntax(content);
 
         // Add section header comment
         combinedJS += `\n// ============================================================\n`;
@@ -254,6 +286,33 @@ function buildJS() {
 }
 
 /**
+ * Validate JavaScript syntax using Node's VM module
+ */
+function validateJavaScriptSyntax(js) {
+    console.log('\n🔍 Validating JavaScript syntax...');
+
+    try {
+        // Try to parse the JavaScript
+        // Note: We wrap in an IIFE to avoid issues with top-level declarations
+        new Function(js);
+        console.log('  ✅ JavaScript syntax is valid');
+        return true;
+    } catch (error) {
+        console.error('  ❌ JavaScript syntax error detected:');
+        console.error(`     ${error.message}`);
+
+        // Try to extract line number from error
+        const match = error.message.match(/(\d+):(\d+)/);
+        if (match) {
+            const line = parseInt(match[1]);
+            console.error(`     Problem around line ${line}`);
+        }
+
+        return false;
+    }
+}
+
+/**
  * Build the final HTML file
  */
 function build() {
@@ -272,6 +331,13 @@ function build() {
     // Build CSS and JS
     const css = buildCSS();
     const js = buildJS();
+
+    // Validate JavaScript syntax BEFORE injecting
+    if (!validateJavaScriptSyntax(js)) {
+        console.error('\n❌ Build aborted due to JavaScript syntax errors');
+        console.error('   Fix the errors above and try again');
+        process.exit(1);
+    }
 
     // Inject into template
     console.log('\n🔧 Injecting assets into template...');
@@ -410,9 +476,4 @@ Example:
 }
 
 // Run if called directly
-if (require.main === module) {
-    main();
-}
-
-// Export for testing
-module.exports = { build, validate, findFiles, sortByOrder, extractFileMetadata };
+main();
