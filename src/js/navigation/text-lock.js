@@ -77,6 +77,58 @@
  */
 
 export const TextLockMixin = {
-    // Placeholder - actual functions stay in main HTML file
-    // This module serves as text expansion documentation
+    /**
+     * Update text length threshold from input
+     * Reads value from settings form, validates, and saves
+     */
+    updateTextLengthThreshold() {
+        const input = document.getElementById('textLengthInput');
+        if (!input) return; // Input removed, use Settings modal instead
+        const value = parseInt(input.value);
+        if (value >= 10 && value <= 100) {
+            this.textLengthThreshold = value;
+            this.saveToStorage();
+            this.render();
+        }
+    },
+
+    /**
+     * Expand truncated text temporarily
+     * Sets task.textExpanded = true to show full text
+     * Used when clicking on truncated text or selecting task
+     * @param {number} taskId - Task ID to expand
+     */
+    expandText(taskId) {
+        // Expand text on click
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.textExpanded = true;
+            this.saveToStorage();
+            this.render();
+        }
+    },
+
+    /**
+     * Toggle text expansion lock for a task
+     * When locked, task text stays expanded even when not selected/working
+     * When unlocked and not selected/working, text collapses immediately
+     * @param {number} taskId - Task ID to toggle lock for
+     */
+    toggleTextLock(taskId) {
+        // Toggle lock state
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.textLocked = !task.textLocked;
+
+            // If unlocking and node is NOT selected, collapse immediately
+            if (!task.textLocked && !this.selectedTaskIds.has(taskId) && !task.currentlyWorking) {
+                task.textExpanded = false;
+            }
+
+            this.saveToStorage();
+            this.render();
+        }
+    }
 };
+
+console.log('[text-lock.js] Text expansion and lock controls loaded');

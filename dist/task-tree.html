@@ -7106,9 +7106,198 @@ Object.assign(app, {
  */
 
 Object.assign(app, {
-    // Placeholder - actual functions stay in main HTML file
-    // This module serves as jump navigation documentation
+    jumpToWorkingTask(taskId = null, animate = true) {
+        let workingTask = null;
+        if (taskId) {
+            workingTask = this.tasks.find(t => t.id === taskId && t.currentlyWorking);
+            if (workingTask) {
+                this.lastWorkingTaskId = taskId;
+            }
+        } else if (this.lastWorkingTaskId) {
+            workingTask = this.tasks.find(t => t.id === this.lastWorkingTaskId && t.currentlyWorking);
+        }
+
+        if (!workingTask) {
+            workingTask = this.tasks.find(t => t.currentlyWorking);
+        }
+
+        if (!workingTask) {
+            this.showToast('No task is currently being worked on', 'warning');
+            return;
+        }
+
+        if (this.tasks.length === 0) return;
+
+        const wasHidden = workingTask.hidden;
+        if (wasHidden) {
+            workingTask.hidden = false;
+        }
+
+        const targetViewBoxX = workingTask.x - this.viewBox.width / 2;
+        const targetViewBoxY = workingTask.y - this.viewBox.height / 2;
+        const targetZoom = 1.2;
+
+        if (animate) {
+            const svg = document.getElementById('canvas');
+            svg.classList.add('animating-view');
+            const startZoom = this.zoomLevel;
+            const endZoom = targetZoom;
+            const overviewZoom = Math.min(startZoom, endZoom) * 0.5;
+            const startViewBoxX = this.viewBox.x;
+            const startViewBoxY = this.viewBox.y;
+            const totalDuration = 1300;
+            const zoomOutDuration = 300;
+            const panDuration = 500;
+            const zoomInDuration = 500;
+            const startTime = performance.now();
+
+            const animatePhases = (currentTime) => {
+                const elapsed = currentTime - startTime;
+                if (elapsed < zoomOutDuration) {
+                    const progress = elapsed / zoomOutDuration;
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    this.zoomLevel = startZoom + (overviewZoom - startZoom) * eased;
+                    this.updateZoomDisplay();
+                    this.updateViewBoxOnly();
+                    requestAnimationFrame(animatePhases);
+                } else if (elapsed < zoomOutDuration + panDuration) {
+                    const panProgress = (elapsed - zoomOutDuration) / panDuration;
+                    const panEased = 1 - Math.pow(1 - panProgress, 3);
+                    this.viewBox.x = startViewBoxX + (targetViewBoxX - startViewBoxX) * panEased;
+                    this.viewBox.y = startViewBoxY + (targetViewBoxY - startViewBoxY) * panEased;
+                    this.zoomLevel = overviewZoom;
+                    this.updateZoomDisplay();
+                    this.updateViewBoxOnly();
+                    requestAnimationFrame(animatePhases);
+                } else if (elapsed < totalDuration) {
+                    const progress = (elapsed - zoomOutDuration - panDuration) / zoomInDuration;
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    this.zoomLevel = overviewZoom + (endZoom - overviewZoom) * eased;
+                    this.updateZoomDisplay();
+                    this.updateViewBoxOnly();
+                    requestAnimationFrame(animatePhases);
+                } else {
+                    this.zoomLevel = endZoom;
+                    this.updateZoomDisplay();
+                    svg.classList.remove('animating-view');
+                    this.saveToStorage();
+                    this.render();
+                    const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
+                    this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
+                }
+            };
+            requestAnimationFrame(animatePhases);
+        } else {
+            this.viewBox.x = targetViewBoxX;
+            this.viewBox.y = targetViewBoxY;
+            this.zoomLevel = targetZoom;
+            this.updateZoomDisplay();
+            this.saveToStorage();
+            this.render();
+            const taskTitle = workingTask.title.length > 30 ? workingTask.title.substring(0, 27) + '...' : workingTask.title;
+            this.showToast(`🎯 Jumped to "${taskTitle}"`, 'success');
+        }
+    },
+
+    showWorkingTasksDropdown(event, keyboardMode = false) {
+        if (event) event.stopPropagation();
+        const workingTasks = this.tasks.filter(t => t.currentlyWorking);
+        if (workingTasks.length === 0) {
+            this.showToast('No task is currently being worked on', 'warning');
+            return;
+        }
+        if (workingTasks.length === 1 && !keyboardMode) {
+            this.jumpToWorkingTask();
+            return;
+        }
+        const dropdown = document.createElement('div');
+        dropdown.id = 'working-tasks-dropdown';
+        const bgColor = this.darkMode ? '#1e293b' : 'white';
+        const borderColor = this.darkMode ? '#475569' : '#ccc';
+        dropdown.style.cssText = `position:fixed;bottom:60px;right:10px;background:${bgColor};border:1px solid ${borderColor};border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:3000;min-width:250px;max-height:400px;overflow-y:auto;`;
+
+        const header = document.createElement('div');
+        header.style.cssText = `padding:10px 12px;border-bottom:1px solid ${borderColor};display:flex;justify-content:space-between;align-items:center;`;
+        const headerTitle = document.createElement('span');
+        const textColor = this.darkMode ? '#f1f5f9' : '#333';
+        headerTitle.style.cssText = `font-weight:600;font-size:13px;color:${textColor};`;
+        headerTitle.textContent = 'Working On:';
+        const headerHint = document.createElement('span');
+        const hintColor = this.darkMode ? '#94a3b8' : '#999';
+        headerHint.style.cssText = `font-size:11px;color:${hintColor};font-weight:400;`;
+        headerHint.textContent = 'Press 1-9 or J';
+        header.appendChild(headerTitle);
+        header.appendChild(headerHint);
+        dropdown.appendChild(header);
+
+        workingTasks.forEach((task, index) => {
+            const item = document.createElement('div');
+            const truncatedTitle = task.title.length > 35 ? task.title.substring(0, 32) + '...' : task.title;
+            const isLast = task.id === this.lastWorkingTaskId;
+            const number = index + 1;
+            const itemTextColor = this.darkMode ? '#e2e8f0' : '#333';
+            const lastBg = isLast ? (this.darkMode ? 'rgba(59,130,246,0.2)' : 'rgba(33,150,243,0.1)') : 'transparent';
+            const borderLeftColor = isLast ? '#2196f3' : 'transparent';
+            item.style.cssText = `padding:10px 12px;cursor:pointer;font-size:13px;color:${itemTextColor};background:${lastBg};border-left:3px solid ${borderLeftColor};display:flex;align-items:center;gap:10px;`;
+
+            const badge = document.createElement('span');
+            const badgeBg = this.darkMode ? 'rgba(59,130,246,0.4)' : 'rgba(33,150,243,0.2)';
+            const badgeColor = this.darkMode ? '#93c5fd' : '#1565c0';
+            badge.style.cssText = `background:${badgeBg};color:${badgeColor};padding:2px 7px;border-radius:3px;font-size:11px;font-weight:600;min-width:18px;text-align:center;`;
+            badge.textContent = number;
+
+            const text = document.createElement('span');
+            text.textContent = `🔄 ${truncatedTitle}${isLast ? ' (last)' : ''}`;
+            item.appendChild(badge);
+            item.appendChild(text);
+
+            const hoverBg = this.darkMode ? 'rgba(59,130,246,0.3)' : 'rgba(33,150,243,0.2)';
+            item.onmouseover = () => { item.style.background = hoverBg; };
+            item.onmouseout = () => { item.style.background = lastBg; };
+            item.onclick = () => {
+                this.jumpToWorkingTask(task.id);
+                dropdown.remove();
+            };
+            dropdown.appendChild(item);
+        });
+
+        const keyboardHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                dropdown.remove();
+                document.removeEventListener('keydown', keyboardHandler);
+                document.removeEventListener('click', closeDropdown);
+                return;
+            }
+            if (/^[1-9]$/.test(e.key)) {
+                e.preventDefault();
+                const index = parseInt(e.key) - 1;
+                if (index < workingTasks.length) {
+                    this.jumpToWorkingTask(workingTasks[index].id);
+                    dropdown.remove();
+                    document.removeEventListener('keydown', keyboardHandler);
+                    document.removeEventListener('click', closeDropdown);
+                }
+            }
+        };
+
+        const closeDropdown = (e) => {
+            if (!dropdown.contains(e.target) && e.target.id !== 'jump-dropdown-btn') {
+                dropdown.remove();
+                document.removeEventListener('click', closeDropdown);
+                document.removeEventListener('keydown', keyboardHandler);
+            }
+        };
+
+        document.body.appendChild(dropdown);
+        setTimeout(() => {
+            document.addEventListener('click', closeDropdown);
+            document.addEventListener('keydown', keyboardHandler);
+        }, 10);
+    }
 });
+
+console.log('[jump.js] Jump to working task navigation loaded');
 
 
 
@@ -7195,9 +7384,61 @@ Object.assign(app, {
  */
 
 Object.assign(app, {
-    // Placeholder - actual functions stay in main HTML file
-    // This module serves as text expansion documentation
+    /**
+     * Update text length threshold from input
+     * Reads value from settings form, validates, and saves
+     */
+    updateTextLengthThreshold() {
+        const input = document.getElementById('textLengthInput');
+        if (!input) return; // Input removed, use Settings modal instead
+        const value = parseInt(input.value);
+        if (value >= 10 && value <= 100) {
+            this.textLengthThreshold = value;
+            this.saveToStorage();
+            this.render();
+        }
+    },
+
+    /**
+     * Expand truncated text temporarily
+     * Sets task.textExpanded = true to show full text
+     * Used when clicking on truncated text or selecting task
+     * @param {number} taskId - Task ID to expand
+     */
+    expandText(taskId) {
+        // Expand text on click
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.textExpanded = true;
+            this.saveToStorage();
+            this.render();
+        }
+    },
+
+    /**
+     * Toggle text expansion lock for a task
+     * When locked, task text stays expanded even when not selected/working
+     * When unlocked and not selected/working, text collapses immediately
+     * @param {number} taskId - Task ID to toggle lock for
+     */
+    toggleTextLock(taskId) {
+        // Toggle lock state
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.textLocked = !task.textLocked;
+
+            // If unlocking and node is NOT selected, collapse immediately
+            if (!task.textLocked && !this.selectedTaskIds.has(taskId) && !task.currentlyWorking) {
+                task.textExpanded = false;
+            }
+
+            this.saveToStorage();
+            this.render();
+        }
+    }
 });
+
+console.log('[text-lock.js] Text expansion and lock controls loaded');
 
 
 
