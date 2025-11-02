@@ -10,6 +10,7 @@
     <div id="controls">
         <button style="background: #9c27b0; color: white;" onclick="app.loadTestChecklist()" title="Load testing tasks for recent features">🧪 Test Checklist</button>
         <button class="secondary" onclick="app.toggleDarkMode()" id="darkModeToggle">🌙 Dark Mode</button>
+        <button class="secondary" onclick="app.toggleDebugCtrlMode()" id="debugCtrlToggle" title="Debug mode: All clicks/drags act as if Ctrl is pressed">🔧 Debug: Ctrl OFF</button>
         <button class="secondary" onclick="app.showSettingsModal()" title="Customize appearance and behavior">⚙️ Settings</button>
         <button class="secondary" onclick="app.showShortcutsModal()" title="View all keyboard shortcuts">❓ Shortcuts</button>
         <div class="dropdown">
@@ -42,6 +43,9 @@
                 </marker>
                 <marker id="arrowhead-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
                     <polygon points="0 0, 10 3, 0 6" fill="#4caf50" />
+                </marker>
+                <marker id="arrowhead-temp-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                    <polygon points="0 0, 10 3, 0 6" fill="#28a745" />
                 </marker>
 
                 <!-- Priority stripe patterns for light mode (thin solid stripes) -->

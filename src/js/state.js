@@ -64,6 +64,7 @@ const app = {
     // ========================================
     darkMode: false,             // Dark theme enabled
     editingTaskId: null,         // Task currently being edited inline (null if not editing)
+    debugCtrlMode: false,        // Debug mode: treat all clicks/drags as if Ctrl is pressed
 
     // ========================================
     // Text & Typography Configuration

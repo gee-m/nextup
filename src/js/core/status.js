@@ -391,6 +391,29 @@ export const StatusMixin = {
         this.render();
     },
 
+    /**
+     * Toggle debug Ctrl mode - all clicks/drags act as if Ctrl is pressed
+     * Useful for testing Ctrl+drag features without holding Ctrl
+     */
+    toggleDebugCtrlMode() {
+        this.debugCtrlMode = !this.debugCtrlMode;
+        const btn = document.getElementById('debugCtrlToggle');
+        if (this.debugCtrlMode) {
+            btn.textContent = '🔧 Debug: Ctrl ON';
+            btn.style.background = '#ff9800';
+            btn.style.color = 'white';
+            btn.style.fontWeight = 'bold';
+            this.showToast('🔧 Debug mode ON: All clicks/drags act as Ctrl+click/drag', 'info', 3000);
+        } else {
+            btn.textContent = '🔧 Debug: Ctrl OFF';
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.style.fontWeight = '';
+            this.showToast('Debug mode OFF', 'info', 2000);
+        }
+        // Don't save to storage - debug mode should not persist
+    },
+
     repairWorkingTasks(silent = false) {
         // Detect and fix data corruption where multiple tasks are marked as working
         const workingTasks = this.tasks.filter(t => t.currentlyWorking);

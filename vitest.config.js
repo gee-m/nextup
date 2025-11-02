@@ -24,6 +24,13 @@ export default defineConfig({
             'tests/**/*.spec.js'
         ],
 
+        // Exclude Playwright browser tests (run those separately with playwright)
+        exclude: [
+            'node_modules/**',
+            'dist/**',
+            'tests/browser/**'
+        ],
+
         // Globals (optional - makes test functions available without imports)
         globals: false,
 

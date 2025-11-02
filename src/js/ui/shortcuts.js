@@ -114,10 +114,12 @@ export const ShortcutsMixin = {
                 category: '🔗 Relationships',
                 items: [
                     { keys: `${modSymbol}+Drag A → B`, description: 'Reparent: Make task A a child of task B' },
+                    { keys: `${modSymbol}+Drag A → empty`, description: 'Create child task at cursor position (with preview)' },
                     { keys: `${altSymbol}+Drag A → B`, description: 'Add dependency: A depends on B (A waits for B)' },
                     { keys: `${altSymbol}+Drag on dependency`, description: 'Remove dependency link' },
                     { keys: `${shiftSymbol}+Drag node`, description: 'Move entire subtree (preserves relative positions)' }
-                ]
+                ],
+                tip: '💡 <strong>Pro Tip:</strong> When Ctrl+dragging, a ghost preview node shows where the new child will be created!'
             },
             {
                 category: '🚀 Navigation',

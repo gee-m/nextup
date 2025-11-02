@@ -100,8 +100,8 @@ describe('Cycle Detection', () => {
             { id: 4, dependencies: [2, 3] }   // D → B, D → C
         ];
 
-        // Adding A → D is safe (no cycle)
-        expect(app.wouldCreateCycle(1, 4)).toBe(false);
+        // Adding A → D would create a cycle: A → D → B → A
+        expect(app.wouldCreateCycle(1, 4)).toBe(true);
     });
 
     test('self-loop detection', () => {

@@ -21,7 +21,7 @@ export const MouseMixin = {
             const taskId = parseInt(node.dataset.id);
 
             if (e.button === 0) { // Left click
-                if (e.ctrlKey || e.metaKey) {
+                if (e.ctrlKey || e.metaKey || this.debugCtrlMode) {
                     // Prepare for potential reparent drag (will activate on mousemove >5px)
                     // If no drag occurs, click event will handle multi-select
                     this.dragMode = 'reparent-pending';
@@ -74,7 +74,7 @@ export const MouseMixin = {
             e.stopPropagation();
         } else {
             // Clicked on empty space
-            if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
+            if (e.button === 0 && (e.ctrlKey || e.metaKey || this.debugCtrlMode)) {
                 // Ctrl+Drag on empty space: prepare for box selection (Windows standard)
                 const pt = this.getSVGPoint(e);
                 this.dragMode = 'box-select';
@@ -232,17 +232,74 @@ export const MouseMixin = {
                 }
             }
         } else if (this.dragMode === 'reparent' && this.tempLine) {
-            // Get source task for cursor arrow rotation
             const sourceTask = this.tasks.find(t => t.id === this.selectedNode);
             if (sourceTask) {
-                this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
+                // Check if cursor is over empty space (not over another task)
+                const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
+                const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
 
-                // Update line from source to cursor (A → B)
-                // Arrow follows drag motion for intuitive UX
-                this.tempLine.setAttribute('x1', sourceTask.x);
-                this.tempLine.setAttribute('y1', sourceTask.y);
-                this.tempLine.setAttribute('x2', pt.x);
-                this.tempLine.setAttribute('y2', pt.y);
+                if (!targetNode) {
+                    // Over empty space → Show preview ghost node for new child creation
+                    // Hide cursor arrow (only show for reparenting, not child creation)
+                    if (this.cursorArrow) {
+                        this.cursorArrow.style.display = 'none';
+                    }
+
+                    // Remove existing preview if any
+                    const existingPreview = document.getElementById('preview-ghost-node');
+                    if (existingPreview) existingPreview.remove();
+
+                    // Calculate preview node dimensions - MUST match actual created task
+                    // Created tasks have title: '' (empty), so preview must too
+                    const previewDims = this.calculateTaskDimensions({ title: '' });
+
+                    // Calculate arrow endpoint at preview node edge (not center)
+                    // Use same approach as permanent arrows in render.js
+                    const arrowEnd = this.getLineEndAtRectEdge(
+                        sourceTask.x, sourceTask.y,  // From source task center
+                        pt.x, pt.y,                   // To preview node center
+                        previewDims.width,
+                        previewDims.height
+                    );
+
+                    // Update line from source to edge (same as permanent arrows)
+                    this.tempLine.setAttribute('x1', sourceTask.x);
+                    this.tempLine.setAttribute('y1', sourceTask.y);
+                    this.tempLine.setAttribute('x2', arrowEnd.x);
+                    this.tempLine.setAttribute('y2', arrowEnd.y);
+                    // Add green arrowhead marker to match temp line color
+                    this.tempLine.setAttribute('marker-end', 'url(#arrowhead-temp-green)');
+
+                    // Create preview ghost node rectangle
+                    const ghostNode = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    ghostNode.id = 'preview-ghost-node';
+                    ghostNode.setAttribute('x', pt.x - previewDims.width / 2);
+                    ghostNode.setAttribute('y', pt.y - previewDims.height / 2);
+                    ghostNode.setAttribute('width', previewDims.width);
+                    ghostNode.setAttribute('height', previewDims.height);
+                    ghostNode.setAttribute('rx', '8');
+                    ghostNode.setAttribute('fill', 'rgba(255, 255, 255, 0.3)');
+                    ghostNode.setAttribute('stroke', '#2196f3');
+                    ghostNode.setAttribute('stroke-width', '2');
+                    ghostNode.setAttribute('stroke-dasharray', '5,5');
+                    ghostNode.setAttribute('pointer-events', 'none');
+                    document.getElementById('canvas').appendChild(ghostNode);
+                } else {
+                    // Over another task → Show cursor arrow for reparenting
+                    this.updateCursorArrow(e.clientX, e.clientY, sourceTask);
+
+                    // Remove preview ghost if exists
+                    const existingPreview = document.getElementById('preview-ghost-node');
+                    if (existingPreview) existingPreview.remove();
+
+                    // Update line to cursor (no preview node to clip to)
+                    this.tempLine.setAttribute('x1', sourceTask.x);
+                    this.tempLine.setAttribute('y1', sourceTask.y);
+                    this.tempLine.setAttribute('x2', pt.x);
+                    this.tempLine.setAttribute('y2', pt.y);
+                    // Remove arrowhead marker (cursor arrow shows direction)
+                    this.tempLine.removeAttribute('marker-end');
+                }
             }
         } else if ((this.dragMode === 'dependency') && this.tempLine) {
             // Get source task for cursor arrow rotation
@@ -318,7 +375,9 @@ export const MouseMixin = {
             // Complete reparent: Make target a child of source
             const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
             const targetNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
+
             if (targetNode && this.tempLine) {
+                // Dropped on another task → Reparent
                 const targetId = parseInt(targetNode.dataset.id);
 
                 // Reparent target to source (source becomes parent of target)
@@ -326,8 +385,24 @@ export const MouseMixin = {
                 if (targetId !== this.selectedNode) {
                     this.reparentTask({ taskId: targetId, newParentId: this.selectedNode });
                 }
+            } else if (!targetNode && this.tempLine) {
+                // Dropped on empty space → Create child task at cursor position
+                const pt = this.getSVGPoint(e);
+
+                // DEFENSIVE: Validate coordinates
+                if (this.validateTaskCoordinates({ x: pt.x, y: pt.y })) {
+                    this.createChildAtPosition({
+                        parentId: this.selectedNode,
+                        x: pt.x,
+                        y: pt.y
+                    });
+                }
             }
+
+            // Clean up visual elements
             this.removeTempLine();
+            const previewGhost = document.getElementById('preview-ghost-node');
+            if (previewGhost) previewGhost.remove();
         } else if (this.dragMode === 'reparent-pending') {
             // Ctrl+click without dragging - don't interfere, let click event handle multi-select
             // Don't do anything here, just clear the dragMode
