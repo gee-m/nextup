@@ -71,6 +71,9 @@ export const RenderMixin = {
             `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`
         );
 
+        // Render grid (if enabled)
+        this.renderGrid();
+
         // PERF: Calculate visible viewport bounds for culling
         // Add margin so tasks smoothly appear when scrolling
         const VIEWPORT_MARGIN = 300;

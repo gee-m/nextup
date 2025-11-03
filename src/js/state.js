@@ -147,6 +147,14 @@ const app = {
     activeSnapLines: [],         // Current snap lines to render: [{type: 'vertical'|'horizontal', position: number, alignType: 'edge'|'center'}]
 
     // ========================================
+    // Grid System
+    // ========================================
+    gridEnabled: false,          // Show grid on canvas
+    gridSize: 20,                // Grid cell size in pixels
+    gridSnapEnabled: true,       // Snap tasks to grid when grid is enabled
+    gridColor: 'rgba(200, 200, 200, 0.2)', // Grid line color (light gray, semi-transparent)
+
+    // ========================================
     // Homes/Bookmarks
     // ========================================
     homes: [],                   // Array of {id, name, centerX, centerY, zoomLevel, timestamp, keybind}

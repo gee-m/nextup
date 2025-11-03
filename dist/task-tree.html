@@ -1724,6 +1724,14 @@ const app = {
     activeSnapLines: [],         // Current snap lines to render: [{type: 'vertical'|'horizontal', position: number, alignType: 'edge'|'center'}]
 
     // ========================================
+    // Grid System
+    // ========================================
+    gridEnabled: false,          // Show grid on canvas
+    gridSize: 20,                // Grid cell size in pixels
+    gridSnapEnabled: true,       // Snap tasks to grid when grid is enabled
+    gridColor: 'rgba(200, 200, 200, 0.2)', // Grid line color (light gray, semi-transparent)
+
+    // ========================================
     // Homes/Bookmarks
     // ========================================
     homes: [],                   // Array of {id, name, centerX, centerY, zoomLevel, timestamp, keybind}
@@ -3968,11 +3976,16 @@ Object.assign(app, {
             console.trace('Stack trace:');
         }
 
+        // Calculate position with random offset
+        const rawX = parent.x + Math.random() * 200 - 100;
+        const rawY = parent.y + 150 + Math.random() * 50;
+        const snapped = this.snapPointToGrid(rawX, rawY);
+
         const task = {
             id: this.taskIdCounter++,
             title: 'New Task',
-            x: parent.x + Math.random() * 200 - 100,
-            y: parent.y + 150 + Math.random() * 50,
+            x: snapped.x,
+            y: snapped.y,
             vx: 0,
             vy: 0,
             mainParent: parentId,
@@ -4013,13 +4026,16 @@ Object.assign(app, {
             y = parent.y + 100;
         }
 
+        // Snap to grid if enabled
+        const snapped = this.snapPointToGrid(x, y);
+
         this.saveSnapshot(`Created child task`);
 
         const task = {
             id: this.taskIdCounter++,
             title: '',  // Empty - user will edit immediately
-            x: x,
-            y: y,
+            x: snapped.x,
+            y: snapped.y,
             vx: 0,
             vy: 0,
             mainParent: parentId,
@@ -4058,13 +4074,16 @@ Object.assign(app, {
             y = 300;
         }
 
+        // Snap to grid if enabled
+        const snapped = this.snapPointToGrid(x, y);
+
         this.saveSnapshot(`Created root task`);
 
         const newTask = {
             id: this.taskIdCounter++,
             title: '',  // Empty - user will edit immediately
-            x: x,
-            y: y,
+            x: snapped.x,
+            y: snapped.y,
             vx: 0,
             vy: 0,
             mainParent: null,
@@ -4963,6 +4982,137 @@ Object.assign(app, {
         return false;
     }
 });
+
+
+
+// ============================================================
+// RENDERING/GRID.JS (Order: 19, Category: rendering)
+// ============================================================
+
+/**
+ * @module rendering/grid
+ * @order 19
+ * @category rendering
+ * @description Grid rendering - draws background grid for visual alignment
+ *
+ * KEY FUNCTIONS:
+ *
+ * renderGrid() - Renders grid lines on canvas
+ * - Calculates visible grid lines based on viewport
+ * - Creates SVG line elements for grid
+ * - Updates on pan/zoom changes
+ * - Performance optimized: only renders visible lines
+ *
+ * clearGrid() - Removes all grid lines from canvas
+ * - Clears existing grid group
+ * - Called when grid is disabled
+ *
+ * Grid is rendered behind all other elements (order: 19, before nodes/links)
+ */
+
+Object.assign(app, {
+    /**
+     * Render grid lines on the canvas
+     * Only renders lines visible in current viewport for performance
+     */
+    renderGrid() {
+        if (!this.gridEnabled) {
+            this.clearGrid();
+            return;
+        }
+
+        const svg = document.getElementById('canvas');
+        let gridGroup = document.getElementById('grid-group');
+
+        // Create grid group if it doesn't exist (should be first child)
+        if (!gridGroup) {
+            gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            gridGroup.id = 'grid-group';
+            // Insert as first child so grid renders behind everything
+            svg.insertBefore(gridGroup, svg.firstChild);
+        }
+
+        // Clear existing grid lines
+        gridGroup.innerHTML = '';
+
+        const { x, y, width, height } = this.viewBox;
+        const size = this.gridSize;
+
+        // Calculate grid bounds with some padding for smooth panning
+        const startX = Math.floor(x / size) * size - size;
+        const endX = Math.ceil((x + width) / size) * size + size;
+        const startY = Math.floor(y / size) * size - size;
+        const endY = Math.ceil((y + height) / size) * size + size;
+
+        // Use dark mode aware color
+        const color = this.darkMode
+            ? 'rgba(255, 255, 255, 0.1)'
+            : this.gridColor;
+
+        // Draw vertical lines
+        for (let i = startX; i <= endX; i += size) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', i);
+            line.setAttribute('y1', startY);
+            line.setAttribute('x2', i);
+            line.setAttribute('y2', endY);
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', '1');
+            line.style.pointerEvents = 'none'; // Grid doesn't intercept clicks
+            gridGroup.appendChild(line);
+        }
+
+        // Draw horizontal lines
+        for (let i = startY; i <= endY; i += size) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', startX);
+            line.setAttribute('y1', i);
+            line.setAttribute('x2', endX);
+            line.setAttribute('y2', i);
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', '1');
+            line.style.pointerEvents = 'none';
+            gridGroup.appendChild(line);
+        }
+    },
+
+    /**
+     * Clear all grid lines from canvas
+     */
+    clearGrid() {
+        const gridGroup = document.getElementById('grid-group');
+        if (gridGroup) {
+            gridGroup.innerHTML = '';
+        }
+    },
+
+    /**
+     * Snap coordinate to grid
+     * @param {number} coord - The coordinate to snap
+     * @returns {number} - Snapped coordinate
+     */
+    snapToGrid(coord) {
+        if (!this.gridEnabled || !this.gridSnapEnabled) {
+            return coord;
+        }
+        return Math.round(coord / this.gridSize) * this.gridSize;
+    },
+
+    /**
+     * Snap a point (x, y) to grid
+     * @param {number} x - X coordinate
+     * @param {number} y - Y coordinate
+     * @returns {{x: number, y: number}} - Snapped coordinates
+     */
+    snapPointToGrid(x, y) {
+        return {
+            x: this.snapToGrid(x),
+            y: this.snapToGrid(y)
+        };
+    }
+});
+
+console.log('[grid.js] Grid rendering module loaded');
 
 
 
@@ -5957,6 +6107,9 @@ Object.assign(app, {
         svg.setAttribute('viewBox',
             `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`
         );
+
+        // Render grid (if enabled)
+        this.renderGrid();
 
         // PERF: Calculate visible viewport bounds for culling
         // Add margin so tasks smoothly appear when scrolling
@@ -7322,8 +7475,9 @@ Object.assign(app, {
                     });
                 } else {
                     // Dragging an unselected node - move just this one
-                    task.x = newX;
-                    task.y = newY;
+                    const snapped = this.snapPointToGrid(newX, newY);
+                    task.x = snapped.x;
+                    task.y = snapped.y;
                     task.vx = 0;
                     task.vy = 0;
                 }
@@ -7377,8 +7531,14 @@ Object.assign(app, {
                 this.activeSnapLines = [];
             }
 
-            const dx = newX - this.dragOriginalPos.x;
-            const dy = newY - this.dragOriginalPos.y;
+            let dx = newX - this.dragOriginalPos.x;
+            let dy = newY - this.dragOriginalPos.y;
+
+            // Snap the offset if grid snap is enabled
+            if (this.gridEnabled && this.gridSnapEnabled) {
+                dx = this.snapToGrid(dx);
+                dy = this.snapToGrid(dy);
+            }
 
             // Move entire subtree by same offset
             this.draggedSubtree.forEach(id => {
@@ -10526,6 +10686,27 @@ Object.assign(app, {
                 max: 50,
                 step: 1,
                 description: 'Distance in pixels for snap to activate. Higher values make snapping more aggressive.'
+            },
+            gridEnabled: {
+                label: 'Show Grid',
+                type: 'checkbox',
+                default: false,
+                description: 'Display a visual grid on the canvas for alignment reference'
+            },
+            gridSize: {
+                label: 'Grid Cell Size (px)',
+                type: 'number',
+                default: 20,
+                min: 5,
+                max: 100,
+                step: 5,
+                description: 'Size of grid cells in pixels. Common values: 20 (fine), 50 (medium), 100 (coarse)'
+            },
+            gridSnapEnabled: {
+                label: 'Snap to Grid',
+                type: 'checkbox',
+                default: true,
+                description: 'Snap task positions to grid when grid is enabled. Disable for free positioning with visible grid.'
             },
             maxUndoSteps: {
                 label: 'Max Undo History',

@@ -31,11 +31,16 @@ export const TasksMixin = {
             console.trace('Stack trace:');
         }
 
+        // Calculate position with random offset
+        const rawX = parent.x + Math.random() * 200 - 100;
+        const rawY = parent.y + 150 + Math.random() * 50;
+        const snapped = this.snapPointToGrid(rawX, rawY);
+
         const task = {
             id: this.taskIdCounter++,
             title: 'New Task',
-            x: parent.x + Math.random() * 200 - 100,
-            y: parent.y + 150 + Math.random() * 50,
+            x: snapped.x,
+            y: snapped.y,
             vx: 0,
             vy: 0,
             mainParent: parentId,
@@ -76,13 +81,16 @@ export const TasksMixin = {
             y = parent.y + 100;
         }
 
+        // Snap to grid if enabled
+        const snapped = this.snapPointToGrid(x, y);
+
         this.saveSnapshot(`Created child task`);
 
         const task = {
             id: this.taskIdCounter++,
             title: '',  // Empty - user will edit immediately
-            x: x,
-            y: y,
+            x: snapped.x,
+            y: snapped.y,
             vx: 0,
             vy: 0,
             mainParent: parentId,
@@ -121,13 +129,16 @@ export const TasksMixin = {
             y = 300;
         }
 
+        // Snap to grid if enabled
+        const snapped = this.snapPointToGrid(x, y);
+
         this.saveSnapshot(`Created root task`);
 
         const newTask = {
             id: this.taskIdCounter++,
             title: '',  // Empty - user will edit immediately
-            x: x,
-            y: y,
+            x: snapped.x,
+            y: snapped.y,
             vx: 0,
             vy: 0,
             mainParent: null,

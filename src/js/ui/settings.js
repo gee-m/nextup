@@ -231,6 +231,27 @@ export const SettingsMixin = {
                 step: 1,
                 description: 'Distance in pixels for snap to activate. Higher values make snapping more aggressive.'
             },
+            gridEnabled: {
+                label: 'Show Grid',
+                type: 'checkbox',
+                default: false,
+                description: 'Display a visual grid on the canvas for alignment reference'
+            },
+            gridSize: {
+                label: 'Grid Cell Size (px)',
+                type: 'number',
+                default: 20,
+                min: 5,
+                max: 100,
+                step: 5,
+                description: 'Size of grid cells in pixels. Common values: 20 (fine), 50 (medium), 100 (coarse)'
+            },
+            gridSnapEnabled: {
+                label: 'Snap to Grid',
+                type: 'checkbox',
+                default: true,
+                description: 'Snap task positions to grid when grid is enabled. Disable for free positioning with visible grid.'
+            },
             maxUndoSteps: {
                 label: 'Max Undo History',
                 type: 'number',

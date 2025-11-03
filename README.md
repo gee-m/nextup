@@ -574,6 +574,31 @@ Attach multiple URLs to any task for quick access to related resources (PRs, doc
 - **Fit All**: Ctrl+1 or click "Fit" button
 - **Mouse Wheel Zoom**: Ctrl+Scroll
 
+#### 📐 Grid System
+**Visual alignment guide with automatic snapping**
+
+- **Show Grid**: Enable in ⚙️ Settings → "Show Grid"
+  - Displays lightweight grid lines on canvas
+  - Grid renders behind all tasks and arrows
+  - Color adapts to dark mode (semi-transparent for minimal distraction)
+  - Updates automatically on pan/zoom
+
+- **Grid Size**: Customizable cell size (⚙️ Settings → "Grid Cell Size")
+  - Default: 20px (fine grid)
+  - Common sizes: 20px (fine), 50px (medium), 100px (coarse)
+  - Range: 5-100px in 5px increments
+
+- **Snap to Grid**: Automatic position snapping (⚙️ Settings → "Snap to Grid")
+  - Enabled by default when grid is visible
+  - Tasks snap to nearest grid intersection when:
+    - Creating new tasks (Ctrl+Double-click)
+    - Dragging tasks
+    - Creating child tasks
+    - Moving with arrow keys
+  - Disable for free positioning with visible grid reference
+
+- **Performance Optimized**: Only renders visible grid lines for smooth performance
+
 #### 🏠 Homes - Named Bookmarks for Quick Navigation
 Navigate to different areas of your graph instantly with saved view bookmarks:
 

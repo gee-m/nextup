@@ -269,8 +269,9 @@ export const MouseMixin = {
                     });
                 } else {
                     // Dragging an unselected node - move just this one
-                    task.x = newX;
-                    task.y = newY;
+                    const snapped = this.snapPointToGrid(newX, newY);
+                    task.x = snapped.x;
+                    task.y = snapped.y;
                     task.vx = 0;
                     task.vy = 0;
                 }
@@ -324,8 +325,14 @@ export const MouseMixin = {
                 this.activeSnapLines = [];
             }
 
-            const dx = newX - this.dragOriginalPos.x;
-            const dy = newY - this.dragOriginalPos.y;
+            let dx = newX - this.dragOriginalPos.x;
+            let dy = newY - this.dragOriginalPos.y;
+
+            // Snap the offset if grid snap is enabled
+            if (this.gridEnabled && this.gridSnapEnabled) {
+                dx = this.snapToGrid(dx);
+                dy = this.snapToGrid(dy);
+            }
 
             // Move entire subtree by same offset
             this.draggedSubtree.forEach(id => {
