@@ -354,7 +354,9 @@ export const CurveControlMixin = {
             editingIndex: null,
             isNewPoint: false,
             initialX: 0,
-            initialY: 0
+            initialY: 0,
+            lastClickTime: 0,
+            lastClickedDotId: null
         };
 
         const canvasContainer = document.getElementById('canvas-container');
@@ -378,13 +380,61 @@ export const CurveControlMixin = {
             editingIndex: null,
             isNewPoint: false,
             initialX: 0,
-            initialY: 0
+            initialY: 0,
+            lastClickTime: 0,
+            lastClickedDotId: null
         };
 
         const canvasContainer = document.getElementById('canvas-container');
         canvasContainer.style.cursor = 'default';
 
         this.render();
+    },
+
+    /**
+     * Remove a specific control point from a curve
+     * Called on double-click of curve control dot
+     *
+     * @param {object} linkInfo - {linkType, taskId, relatedTaskId, pointIndex}
+     */
+    removeControlPoint(linkInfo) {
+        if (!linkInfo || !linkInfo.taskId || !linkInfo.relatedTaskId) return;
+
+        const task = this.tasks.find(t => t.id === linkInfo.taskId);
+        if (!task || !task.curveControlPoints || !task.curveControlPoints[linkInfo.relatedTaskId]) {
+            return;
+        }
+
+        const controlPoints = task.curveControlPoints[linkInfo.relatedTaskId];
+        const pointIndex = linkInfo.pointIndex;
+
+        // Check if this is a valid existing point (not a preview point)
+        if (pointIndex < 0 || pointIndex >= controlPoints.length) {
+            return;
+        }
+
+        this.saveSnapshot('Remove curve control point');
+
+        // Remove the specific control point
+        controlPoints.splice(pointIndex, 1);
+
+        // If no control points left, remove the curve entirely (becomes straight line)
+        if (controlPoints.length === 0) {
+            delete task.curveControlPoints[linkInfo.relatedTaskId];
+
+            // Clean up empty object
+            if (Object.keys(task.curveControlPoints).length === 0) {
+                delete task.curveControlPoints;
+            }
+        }
+
+        this.saveToStorage();
+        this.render();
+
+        const message = controlPoints.length === 0 ?
+            'Curve reset to straight line' :
+            'Control point removed';
+        this.showToast(message, 'success', 2000);
     }
 };
 

@@ -191,6 +191,12 @@ export const SettingsMixin = {
                 step: 0.05,
                 description: 'Intensity of curve for curved arrows (0.05 = subtle, 0.5 = dramatic)'
             },
+            arrowOppositeEdge: {
+                label: 'Arrows Land on Opposite Edge',
+                type: 'checkbox',
+                default: true,
+                description: 'Arrows land on the opposite edge (center of far side) instead of the nearest edge. Creates more consistent, organized layouts.'
+            },
             maxUndoSteps: {
                 label: 'Max Undo History',
                 type: 'number',

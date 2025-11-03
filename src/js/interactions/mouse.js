@@ -54,9 +54,34 @@ export const MouseMixin = {
 
         // Check if clicking on curve control dot (second priority)
         // Use hoveredCurveDot state (Miro-style proximity detection)
-        if (e.target.classList && e.target.classList.contains('curve-dot') && this.hoveredCurveDot) {
-            // Use the hover info to start drag
-            this.startCurveDotDrag(this.hoveredCurveDot);
+        // ONLY works when Ctrl is held
+        if (e.target.classList && e.target.classList.contains('curve-dot') && this.hoveredCurveDot && (e.ctrlKey || e.metaKey)) {
+            const now = performance.now();
+            const dotId = `curve-${this.hoveredCurveDot.taskId}-${this.hoveredCurveDot.parentId}`;
+            const timeSinceLastClick = now - this.curveDotDrag.lastClickTime;
+
+            // Check for double-click (< 300ms, same dot)
+            if (timeSinceLastClick < 300 && this.curveDotDrag.lastClickedDotId === dotId) {
+                // This is a double-click - don't start drag, let dblclick handler process it
+                this.curveDotDrag.lastClickTime = 0;
+                this.curveDotDrag.lastClickedDotId = null;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Single click - track for future double-click detection
+            this.curveDotDrag.lastClickTime = now;
+            this.curveDotDrag.lastClickedDotId = dotId;
+
+            // Start drag after short delay to allow double-click detection
+            setTimeout(() => {
+                // Only start drag if not double-clicked in the meantime
+                if (this.curveDotDrag.lastClickedDotId === dotId) {
+                    this.startCurveDotDrag(this.hoveredCurveDot);
+                }
+            }, 250);
+
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -154,9 +179,15 @@ export const MouseMixin = {
             this.updateArrowDotHover(pt.x, pt.y);
         }
 
-        // Update curve dot hover detection (even when not dragging)
-        if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
+        // Update curve dot hover detection (only when Ctrl is held and not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active && (e.ctrlKey || e.metaKey)) {
             this.updateCurveDotHover(pt.x, pt.y);
+        } else if (!this.curveDotDrag.active) {
+            // Clear curve dot hover if Ctrl not held
+            if (this.hoveredCurveDot) {
+                this.hoveredCurveDot = null;
+                this.render();
+            }
         }
 
         // Handle arrow dot drag

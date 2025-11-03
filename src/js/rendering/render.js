@@ -177,7 +177,10 @@ export const RenderMixin = {
                     const controlPoints = task.curveControlPoints?.[task.mainParent];
                     const hasControlPoints = controlPoints && Array.isArray(controlPoints) && controlPoints.length > 0;
 
-                    // Get arrow endpoint FIRST (needed for both hit line and visible line)
+                    // Get arrow start point (source)
+                    const arrowStart = this.getArrowEndpoint(parent, task, 'source');
+
+                    // Get arrow endpoint (target)
                     const isDraggingThisArrow = this.arrowDotDrag.active &&
                                                  this.arrowDotDrag.taskId === task.id &&
                                                  this.arrowDotDrag.relatedTaskId === task.mainParent;
@@ -206,7 +209,7 @@ export const RenderMixin = {
 
                     // Create hit line and visible line
                     const hitLine = this.createMultiSegmentCurvedLine(
-                        parent.x, parent.y,
+                        arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
                         'link parent-hit'
@@ -224,7 +227,7 @@ export const RenderMixin = {
 
                     // Create visible line
                     const line = this.createMultiSegmentCurvedLine(
-                        parent.x, parent.y,
+                        arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
                         'link parent-visible'
@@ -284,7 +287,10 @@ export const RenderMixin = {
                     // Get curve control points
                     const controlPoints = task.curveControlPoints?.[parentId];
 
-                    // Get arrow endpoint
+                    // Get arrow start point (source)
+                    const arrowStart = this.getArrowEndpoint(parent, task, 'source');
+
+                    // Get arrow endpoint (target)
                     const isDraggingThisArrow = this.arrowDotDrag.active &&
                                                  this.arrowDotDrag.taskId === task.id &&
                                                  this.arrowDotDrag.relatedTaskId === parentId;
@@ -313,7 +319,7 @@ export const RenderMixin = {
 
                     // Create hit line
                     const hitLine = this.createMultiSegmentCurvedLine(
-                        parent.x, parent.y,
+                        arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
                         'link other-parent-hit'
@@ -331,7 +337,7 @@ export const RenderMixin = {
 
                     // Create visible line
                     const line = this.createMultiSegmentCurvedLine(
-                        parent.x, parent.y,
+                        arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
                         'link other-parent'
@@ -864,9 +870,12 @@ export const RenderMixin = {
         // ========================================
         if (this.hoveredCurveDot || this.curveDotDrag.active) {
             let dotsToRender = [];
+            let taskId, parentId;
 
             if (this.curveDotDrag.active) {
                 // During drag: show all control points being edited
+                taskId = this.curveDotDrag.taskId;
+                parentId = this.curveDotDrag.parentId;
                 const controlPoints = this.curveDotDrag.controlPoints || [];
                 dotsToRender = controlPoints.map((cp, idx) => ({
                     x: cp.x,
@@ -877,6 +886,8 @@ export const RenderMixin = {
                 }));
             } else if (this.hoveredCurveDot) {
                 // Hovering: show all existing control points + potential new point
+                taskId = this.hoveredCurveDot.taskId;
+                parentId = this.hoveredCurveDot.parentId;
                 const { controlPoints, nearestPointIndex, addNewPoint, mouseX, mouseY } = this.hoveredCurveDot;
 
                 // Add existing control points
@@ -932,6 +943,12 @@ export const RenderMixin = {
                 dot.classList.add('curve-dot');
                 dot.style.pointerEvents = 'all';
                 dot.style.cursor = this.curveDotDrag.active ? 'grabbing' : 'grab';
+
+                // Add data attributes for double-click reset handler
+                dot.setAttribute('data-link-type', 'parent');
+                dot.setAttribute('data-task-id', taskId);
+                dot.setAttribute('data-related-id', parentId);
+                dot.setAttribute('data-point-index', dotInfo.index); // Which control point this is
 
                 nodesGroup.appendChild(dot);
             }

@@ -100,7 +100,9 @@ const app = {
         editingIndex: null,      // Index of point being dragged
         isNewPoint: false,       // True if adding new point
         initialX: 0,             // Initial position for cancel check
-        initialY: 0
+        initialY: 0,
+        lastClickTime: 0,        // For double-click detection
+        lastClickedDotId: null   // For double-click detection
     },
     hoveredCurveDot: null,       // Currently hovered curve control dot {linkType, taskId, relatedTaskId, x, y}
     curveDotRadius: 15,          // Hover detection radius (px)
@@ -133,6 +135,7 @@ const app = {
     // ========================================
     arrowStyle: 'straight',      // Arrow path style: 'straight' or 'curved'
     arrowCurvature: 0.25,        // Curve intensity for curved arrows (0.1 to 0.5)
+    arrowOppositeEdge: true,     // Arrows land on opposite edge (center of far side) instead of nearest edge
 
     // ========================================
     // Homes/Bookmarks

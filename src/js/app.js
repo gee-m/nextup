@@ -119,16 +119,19 @@ Object.assign(app, {
                 return;
             }
 
-            // Check if double-clicking on curve control dot (reset to straight line)
-            if (e.target.classList && e.target.classList.contains('curve-dot')) {
+            // Check if double-clicking on curve control dot (remove this control point)
+            // ONLY works when Ctrl is held
+            if (e.target.classList && e.target.classList.contains('curve-dot') && (e.ctrlKey || e.metaKey)) {
                 const linkType = e.target.getAttribute('data-link-type');
                 const taskId = parseInt(e.target.getAttribute('data-task-id'));
                 const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+                const pointIndex = parseInt(e.target.getAttribute('data-point-index'));
 
-                this.resetLineCurve({
+                this.removeControlPoint({
                     linkType: linkType,
                     taskId: taskId,
-                    relatedTaskId: relatedId
+                    relatedTaskId: relatedId,
+                    pointIndex: pointIndex
                 });
 
                 e.preventDefault();
