@@ -200,19 +200,47 @@ export const RenderMixin = {
                         arrowEnd = this.getArrowEndpoint(parent, task, 'target');
                     }
 
-                    // Determine control points to use (live drag or saved)
+                    // Determine control points to use (live drag, orthogonal, or saved)
                     const isDraggingThisCurve = this.curveDotDrag.active &&
                                                 this.curveDotDrag.taskId === task.id &&
                                                 this.curveDotDrag.parentId === task.mainParent;
-                    const effectiveControlPoints = isDraggingThisCurve ?
-                        this.curveDotDrag.controlPoints : controlPoints;
+
+                    let effectiveControlPoints;
+
+                    // Get effective routing mode from PARENT (arrows go FROM parent TO children)
+                    const taskRoutingMode = this.getEffectiveArrowRouting(parent);
+
+                    if (taskRoutingMode === 'orthogonal') {
+                        // Orthogonal routing: calculate waypoints
+                        const parentDims = this.calculateTaskDimensions(parent);
+                        const taskDims = this.calculateTaskDimensions(task);
+
+                        const startEdge = this.getEdgeFromPoint(arrowStart.x, arrowStart.y, parent.x, parent.y, parentDims.width, parentDims.height);
+                        const endEdge = this.getEdgeFromPoint(arrowEnd.x, arrowEnd.y, task.x, task.y, taskDims.width, taskDims.height);
+
+                        const waypoints = this.calculateOrthogonalPath(
+                            arrowStart.x, arrowStart.y, startEdge,
+                            arrowEnd.x, arrowEnd.y, endEdge,
+                            parent.x, parent.y, task.x, task.y
+                        );
+
+                        // Remove first and last points (they're the start/end positions)
+                        effectiveControlPoints = waypoints.slice(1, -1);
+                    } else if (isDraggingThisCurve) {
+                        effectiveControlPoints = this.curveDotDrag.controlPoints;
+                    } else {
+                        effectiveControlPoints = controlPoints;
+                    }
 
                     // Create hit line and visible line
+                    const useStraightSegments = taskRoutingMode === 'orthogonal';
                     const hitLine = this.createMultiSegmentCurvedLine(
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link parent-hit'
+                        'link parent-hit',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
                     hitLine.dataset.type = 'parent';
                     hitLine.dataset.taskId = task.id;
@@ -230,7 +258,9 @@ export const RenderMixin = {
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link parent-visible'
+                        'link parent-visible',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
                     line.style.pointerEvents = 'none';
                     // ⭐ NEW: Add data attributes so we can update during animation
@@ -268,6 +298,10 @@ export const RenderMixin = {
                             line.style.stroke = '#f44336';  // Red (same as incomplete children indicator)
                             line.style.strokeWidth = '2.5';
                         }
+                    } else if (task.status === 'done') {
+                        // Child is done - use green arrow
+                        line.setAttribute('marker-end', 'url(#arrowhead-green)');
+                        line.style.stroke = '#4caf50';  // Green
                     } else {
                         line.setAttribute('marker-end', 'url(#arrowhead)'); // Normal arrow
                     }
@@ -310,19 +344,47 @@ export const RenderMixin = {
                         arrowEnd = this.getArrowEndpoint(parent, task, 'target');
                     }
 
-                    // Determine control points to use (live drag or saved)
+                    // Determine control points to use (live drag, orthogonal, or saved)
                     const isDraggingThisCurve = this.curveDotDrag.active &&
                                                 this.curveDotDrag.taskId === task.id &&
                                                 this.curveDotDrag.parentId === parentId;
-                    const effectiveControlPoints = isDraggingThisCurve ?
-                        this.curveDotDrag.controlPoints : controlPoints;
+
+                    let effectiveControlPoints;
+
+                    // Get effective routing mode from PARENT (arrows go FROM parent TO children)
+                    const taskRoutingMode = this.getEffectiveArrowRouting(parent);
+
+                    if (taskRoutingMode === 'orthogonal') {
+                        // Orthogonal routing: calculate waypoints
+                        const parentDims = this.calculateTaskDimensions(parent);
+                        const taskDims = this.calculateTaskDimensions(task);
+
+                        const startEdge = this.getEdgeFromPoint(arrowStart.x, arrowStart.y, parent.x, parent.y, parentDims.width, parentDims.height);
+                        const endEdge = this.getEdgeFromPoint(arrowEnd.x, arrowEnd.y, task.x, task.y, taskDims.width, taskDims.height);
+
+                        const waypoints = this.calculateOrthogonalPath(
+                            arrowStart.x, arrowStart.y, startEdge,
+                            arrowEnd.x, arrowEnd.y, endEdge,
+                            parent.x, parent.y, task.x, task.y
+                        );
+
+                        // Remove first and last points (they're the start/end positions)
+                        effectiveControlPoints = waypoints.slice(1, -1);
+                    } else if (isDraggingThisCurve) {
+                        effectiveControlPoints = this.curveDotDrag.controlPoints;
+                    } else {
+                        effectiveControlPoints = controlPoints;
+                    }
 
                     // Create hit line
+                    const useStraightSegments = taskRoutingMode === 'orthogonal';
                     const hitLine = this.createMultiSegmentCurvedLine(
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link other-parent-hit'
+                        'link other-parent-hit',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
                     hitLine.dataset.type = 'parent';
                     hitLine.dataset.taskId = task.id;
@@ -340,9 +402,19 @@ export const RenderMixin = {
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link other-parent'
+                        'link other-parent',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
-                    line.setAttribute('marker-end', 'url(#arrowhead)'); // Arrow pointing to child
+
+                    // Color arrow based on task status
+                    if (task.status === 'done') {
+                        line.setAttribute('marker-end', 'url(#arrowhead-green)');
+                        line.style.stroke = '#4caf50';  // Green
+                    } else {
+                        line.setAttribute('marker-end', 'url(#arrowhead)'); // Normal arrow
+                    }
+
                     line.style.pointerEvents = 'none';
                     // ⭐ NEW: Add data attributes so we can update during animation
                     line.dataset.type = 'parent';
@@ -396,6 +468,19 @@ export const RenderMixin = {
                 }
             });
         });
+
+        // ========================================
+        // Prioritize golden path and selected lines (render on top)
+        // ========================================
+        // Re-append golden path and selected lines to move them to the top of z-order
+        const goldenPathLines = linksGroup.querySelectorAll('.golden-path-ancestor, .golden-path-child-done, .golden-path-child-incomplete');
+        const selectedLines = linksGroup.querySelectorAll('.selected');
+
+        // Re-append golden path lines (moves them to end = top of z-order)
+        goldenPathLines.forEach(line => linksGroup.appendChild(line));
+
+        // Re-append selected lines last (so they're on top of everything including golden path)
+        selectedLines.forEach(line => linksGroup.appendChild(line));
 
         // PERF: Render nodes - only for visible tasks
         visibleTasks.forEach(task => {
@@ -952,6 +1037,40 @@ export const RenderMixin = {
 
                 nodesGroup.appendChild(dot);
             }
+        }
+
+        // ========================================
+        // Alignment Snap Guide Lines
+        // ========================================
+        if (this.activeSnapLines && this.activeSnapLines.length > 0) {
+            this.activeSnapLines.forEach(snapLine => {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+                if (snapLine.type === 'vertical') {
+                    // Vertical snap line (spans entire viewport height)
+                    line.setAttribute('x1', snapLine.position);
+                    line.setAttribute('y1', this.viewBox.y);
+                    line.setAttribute('x2', snapLine.position);
+                    line.setAttribute('y2', this.viewBox.y + this.viewBox.height);
+                } else if (snapLine.type === 'horizontal') {
+                    // Horizontal snap line (spans entire viewport width)
+                    line.setAttribute('x1', this.viewBox.x);
+                    line.setAttribute('y1', snapLine.position);
+                    line.setAttribute('x2', this.viewBox.x + this.viewBox.width);
+                    line.setAttribute('y2', snapLine.position);
+                }
+
+                // Style: semi-transparent, dashed line
+                // Use different colors for edge vs center alignment
+                const isCenter = snapLine.alignType === 'center';
+                line.setAttribute('stroke', isCenter ? '#ff6b6b' : '#4dabf7');
+                line.setAttribute('stroke-width', '1.5');
+                line.setAttribute('stroke-dasharray', '5,5');
+                line.setAttribute('opacity', '0.6');
+                line.setAttribute('pointer-events', 'none');
+
+                nodesGroup.appendChild(line);
+            });
         }
 
         // Render off-screen indicators for working tasks

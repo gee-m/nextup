@@ -63,6 +63,11 @@ app.saveToStorage = function() {
             wordWrap: this.wordWrap,
             arrowStyle: this.arrowStyle,
             arrowCurvature: this.arrowCurvature,
+            arrowOppositeEdge: this.arrowOppositeEdge,
+            arrowRoutingMode: this.arrowRoutingMode,
+            orthogonalCornerRadius: this.orthogonalCornerRadius,
+            enableSnapping: this.enableSnapping,
+            snapThreshold: this.snapThreshold,
             // Undo/redo history
             undoStack: this.undoStack,
             redoStack: this.redoStack
@@ -100,6 +105,11 @@ app.saveToStorage = function() {
                     wordWrap: this.wordWrap,
                     arrowStyle: this.arrowStyle,
                     arrowCurvature: this.arrowCurvature,
+                    arrowOppositeEdge: this.arrowOppositeEdge,
+                    arrowRoutingMode: this.arrowRoutingMode,
+                    orthogonalCornerRadius: this.orthogonalCornerRadius,
+                    enableSnapping: this.enableSnapping,
+                    snapThreshold: this.snapThreshold,
                     undoStack: this.undoStack,
                     redoStack: this.redoStack
                 }));
@@ -181,6 +191,11 @@ app.loadFromStorage = function() {
         this.wordWrap = parsed.wordWrap ?? true;
         this.arrowStyle = parsed.arrowStyle ?? 'straight';
         this.arrowCurvature = parsed.arrowCurvature ?? 0.25;
+        this.arrowOppositeEdge = parsed.arrowOppositeEdge ?? true;
+        this.arrowRoutingMode = parsed.arrowRoutingMode ?? 'direct';
+        this.orthogonalCornerRadius = parsed.orthogonalCornerRadius ?? 15;
+        this.enableSnapping = parsed.enableSnapping ?? true;
+        this.snapThreshold = parsed.snapThreshold ?? 10;
         // Undo/redo history
         this.undoStack = parsed.undoStack || [];
         this.redoStack = parsed.redoStack || [];

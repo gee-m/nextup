@@ -62,9 +62,11 @@ export const LinksMixin = {
      * @param {number} y2 - End Y
      * @param {Array<{x: number, y: number}>} controlPoints - Points ON the curve
      * @param {string} className - CSS class
+     * @param {boolean} useStraightSegments - Use straight lines instead of curves (for orthogonal routing)
+     * @param {number} cornerRadius - Corner radius for orthogonal routing (default from app.orthogonalCornerRadius)
      * @returns {SVGPathElement} Curved path element
      */
-    createMultiSegmentCurvedLine(x1, y1, x2, y2, controlPoints, className) {
+    createMultiSegmentCurvedLine(x1, y1, x2, y2, controlPoints, className, useStraightSegments = false, cornerRadius = null) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('class', className);
         path.setAttribute('fill', 'none');
@@ -80,6 +82,62 @@ export const LinksMixin = {
         // No control points - straight line
         if (!controlPoints || !Array.isArray(controlPoints) || controlPoints.length === 0) {
             path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+            return path;
+        }
+
+        // Use straight segments with rounded corners for orthogonal routing
+        if (useStraightSegments) {
+            // Use default corner radius if not provided
+            const radius = cornerRadius !== null ? cornerRadius : (this.orthogonalCornerRadius || 15);
+
+            // Build array of all points
+            const allPoints = [
+                { x: x1, y: y1 },
+                ...controlPoints,
+                { x: x2, y: y2 }
+            ];
+
+            let pathData = `M ${allPoints[0].x} ${allPoints[0].y}`;
+
+            for (let i = 1; i < allPoints.length; i++) {
+                const prev = allPoints[i - 1];
+                const curr = allPoints[i];
+                const next = i < allPoints.length - 1 ? allPoints[i + 1] : null;
+
+                if (radius > 0 && next) {
+                    // Calculate vectors
+                    const dx1 = curr.x - prev.x;
+                    const dy1 = curr.y - prev.y;
+                    const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+
+                    const dx2 = next.x - curr.x;
+                    const dy2 = next.y - curr.y;
+                    const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+                    // Use smaller radius if segment is too short
+                    const effectiveRadius = Math.min(radius, len1 / 2, len2 / 2);
+
+                    // Calculate points for rounded corner
+                    const beforeCorner = {
+                        x: curr.x - (dx1 / len1) * effectiveRadius,
+                        y: curr.y - (dy1 / len1) * effectiveRadius
+                    };
+
+                    const afterCorner = {
+                        x: curr.x + (dx2 / len2) * effectiveRadius,
+                        y: curr.y + (dy2 / len2) * effectiveRadius
+                    };
+
+                    // Draw line to before corner, then curve around corner
+                    pathData += ` L ${beforeCorner.x} ${beforeCorner.y}`;
+                    pathData += ` Q ${curr.x} ${curr.y}, ${afterCorner.x} ${afterCorner.y}`;
+                } else {
+                    // Last point or no rounding - just draw straight line
+                    pathData += ` L ${curr.x} ${curr.y}`;
+                }
+            }
+
+            path.setAttribute('d', pathData);
             return path;
         }
 

@@ -136,6 +136,15 @@ const app = {
     arrowStyle: 'straight',      // Arrow path style: 'straight' or 'curved'
     arrowCurvature: 0.25,        // Curve intensity for curved arrows (0.1 to 0.5)
     arrowOppositeEdge: true,     // Arrows land on opposite edge (center of far side) instead of nearest edge
+    arrowRoutingMode: 'direct',  // Arrow routing: 'direct' (straight/curved) or 'orthogonal' (90-degree turns)
+    orthogonalCornerRadius: 15,  // Corner radius for orthogonal routing (0 = sharp corners, 30 = smooth)
+
+    // ========================================
+    // Alignment Snapping
+    // ========================================
+    enableSnapping: true,        // Enable alignment snapping when dragging
+    snapThreshold: 10,           // Distance in pixels for snap to activate
+    activeSnapLines: [],         // Current snap lines to render: [{type: 'vertical'|'horizontal', position: number, alignType: 'edge'|'center'}]
 
     // ========================================
     // Homes/Bookmarks

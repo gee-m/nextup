@@ -235,6 +235,54 @@ export const StatusMixin = {
         this.setPriority(taskId, nextPriority);
     },
 
+    setArrowRouting(taskId, routing) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+        const routingLabel = routing === 'direct' ? 'Direct' : routing === 'orthogonal' ? 'Orthogonal' : 'Inherit';
+
+        this.saveSnapshot(`Set arrow routing of '${truncatedTitle}' to ${routingLabel}`);
+
+        task.arrowRouting = routing;
+        this.saveToStorage();
+        this.render();
+
+        // Show toast notification
+        const emoji = routing === 'direct' ? '↗️' : routing === 'orthogonal' ? '↪️' : '⚙️';
+        this.showToast(`${emoji} Arrow routing set to ${routingLabel}`, 'success', 2000);
+    },
+
+    /**
+     * Get effective arrow routing mode for a node's OUTGOING arrows (to its children)
+     * If node has 'inherit' or no setting, walks up parent chain until finding a setting
+     * Falls back to global arrowRoutingMode if no ancestor has a setting
+     * @param {Object} task - Parent task whose outgoing arrow style to determine
+     * @returns {string} 'direct' or 'orthogonal'
+     */
+    getEffectiveArrowRouting(task) {
+        // If task has explicit routing (not 'inherit'), use it
+        if (task.arrowRouting && task.arrowRouting !== 'inherit') {
+            return task.arrowRouting;
+        }
+
+        // Otherwise, walk up parent chain to find a setting
+        let current = task.mainParent;
+        while (current !== null) {
+            const parent = this.tasks.find(t => t.id === current);
+            if (!parent) break;
+
+            if (parent.arrowRouting && parent.arrowRouting !== 'inherit') {
+                return parent.arrowRouting;
+            }
+
+            current = parent.mainParent;
+        }
+
+        // No parent has a setting, use global default
+        return this.arrowRoutingMode;
+    },
+
     selectNode(taskId) {
         // Single-node selection (clears others)
         this.selectedTaskIds.clear();

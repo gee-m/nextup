@@ -155,9 +155,112 @@ export const ArrowSnapMixin = {
     },
 
     /**
-     * Get edge center based on quadrant
-     * Divides space around rectangle into 4 quadrants using diagonal lines through corners
-     * Returns center of the edge corresponding to the source's quadrant
+     * Determine which edge a point is on
+     * @param {number} pointX - Point X
+     * @param {number} pointY - Point Y
+     * @param {number} centerX - Rectangle center X
+     * @param {number} centerY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @returns {string} 'top', 'bottom', 'left', or 'right'
+     */
+    getEdgeFromPoint(pointX, pointY, centerX, centerY, rectWidth, rectHeight) {
+        const halfWidth = rectWidth / 2;
+        const halfHeight = rectHeight / 2;
+
+        const dx = pointX - centerX;
+        const dy = pointY - centerY;
+
+        // Use same quadrant logic as getOppositeEdgeCenter
+        if (Math.abs(dy) * halfWidth < Math.abs(dx) * halfHeight) {
+            return dx > 0 ? 'right' : 'left';
+        } else {
+            return dy > 0 ? 'bottom' : 'top';
+        }
+    },
+
+    /**
+     * Calculate orthogonal routing path with 90-degree turns
+     * @param {number} startX - Start point X (arrow start on edge)
+     * @param {number} startY - Start point Y (arrow start on edge)
+     * @param {string} startEdge - Start edge: 'top', 'bottom', 'left', 'right'
+     * @param {number} endX - End point X (arrow end on edge)
+     * @param {number} endY - End point Y (arrow end on edge)
+     * @param {string} endEdge - End edge: 'top', 'bottom', 'left', 'right'
+     * @param {number} startNodeX - Start node center X (for alignment detection)
+     * @param {number} startNodeY - Start node center Y (for alignment detection)
+     * @param {number} endNodeX - End node center X (for alignment detection)
+     * @param {number} endNodeY - End node center Y (for alignment detection)
+     * @returns {Array<{x: number, y: number}>} Array of waypoints
+     */
+    calculateOrthogonalPath(startX, startY, startEdge, endX, endY, endEdge, startNodeX, startNodeY, endNodeX, endNodeY) {
+        const waypoints = [];
+
+        // Always start at source
+        waypoints.push({ x: startX, y: startY });
+
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const alignmentThreshold = 5; // Consider aligned if within 5px
+
+        // Check if NODES are aligned (not arrow endpoints!)
+        const nodesVerticallyAligned = startNodeX !== undefined && endNodeX !== undefined &&
+                                       Math.abs(startNodeX - endNodeX) < alignmentThreshold;
+        const nodesHorizontallyAligned = startNodeY !== undefined && endNodeY !== undefined &&
+                                         Math.abs(startNodeY - endNodeY) < alignmentThreshold;
+
+        // Calculate based on edge directions
+        if (startEdge === 'right' || startEdge === 'left') {
+            // Horizontal exit
+
+            // If nodes are horizontally aligned (same Y), just draw a straight line!
+            if (nodesHorizontallyAligned) {
+                // Straight horizontal arrow - no turns needed
+                // (waypoints already has start, will add end below)
+            } else if (nodesVerticallyAligned) {
+                // Nodes vertically aligned - need to route around
+                const direction = startEdge === 'right' ? 1 : -1;
+                const offset = 60 * direction;
+                waypoints.push({ x: startX + offset, y: startY });
+                waypoints.push({ x: startX + offset, y: endY });
+            } else {
+                // Normal case: 2 turns at midpoint
+                const midX = startX + dx / 2;
+                waypoints.push({ x: midX, y: startY });
+                waypoints.push({ x: midX, y: endY });
+            }
+
+        } else {
+            // Vertical exit (top or bottom)
+
+            // If nodes are vertically aligned (same X), just draw a straight line!
+            if (nodesVerticallyAligned) {
+                // Straight vertical arrow - no turns needed
+                // (waypoints already has start, will add end below)
+            } else if (nodesHorizontallyAligned) {
+                // Nodes horizontally aligned - need to route around
+                const direction = startEdge === 'bottom' ? 1 : -1;
+                const offset = 60 * direction;
+                waypoints.push({ x: startX, y: startY + offset });
+                waypoints.push({ x: endX, y: startY + offset });
+            } else {
+                // Normal case: 2 turns at midpoint
+                const midY = startY + dy / 2;
+                waypoints.push({ x: startX, y: midY });
+                waypoints.push({ x: endX, y: midY });
+            }
+        }
+
+        // Always end at target
+        waypoints.push({ x: endX, y: endY });
+
+        return waypoints;
+    },
+
+    /**
+     * Get edge center based on direction from target to source
+     * Uses simple dominant-axis approach: whichever direction (horizontal/vertical)
+     * has greater distance determines which edge to use
      *
      * @param {number} sourceX - Source X position
      * @param {number} sourceY - Source Y position
@@ -165,42 +268,34 @@ export const ArrowSnapMixin = {
      * @param {number} targetY - Target center Y
      * @param {number} rectWidth - Target rectangle width
      * @param {number} rectHeight - Target rectangle height
-     * @returns {{x: number, y: number}} Center point of edge in source's quadrant
+     * @returns {{x: number, y: number}} Center point of appropriate edge
      */
     getOppositeEdgeCenter(sourceX, sourceY, targetX, targetY, rectWidth, rectHeight) {
         const halfWidth = rectWidth / 2;
         const halfHeight = rectHeight / 2;
 
-        // Calculate relative position of source to target center
+        // Calculate direction from target to source
         const dx = sourceX - targetX;
         const dy = sourceY - targetY;
 
-        // The diagonal lines from center through corners divide the space into 4 regions
-        // Each region corresponds to one edge of the rectangle
-        // We use the slope of the diagonal lines to determine which region the source is in
-
-        // Slope of diagonal from center to top-right corner: dy/dx = -halfHeight/halfWidth
-        // Slope of diagonal from center to bottom-right corner: dy/dx = halfHeight/halfWidth
-
-        // Calculate which quadrant the source is in based on diagonal boundaries
-        // Compare the actual slope (dy/dx) with the diagonal slopes
-
-        if (Math.abs(dy) * halfWidth < Math.abs(dx) * halfHeight) {
-            // Source is in left or right quadrant (horizontal dominates)
+        // Pick edge based on dominant axis
+        // Use absolute values to determine which direction is stronger
+        if (Math.abs(dx) > Math.abs(dy)) {
+            // Horizontal direction dominates
             if (dx > 0) {
-                // Right quadrant: arrow lands on right edge center
+                // Source is to the right
                 return { x: targetX + halfWidth, y: targetY };
             } else {
-                // Left quadrant: arrow lands on left edge center
+                // Source is to the left
                 return { x: targetX - halfWidth, y: targetY };
             }
         } else {
-            // Source is in top or bottom quadrant (vertical dominates)
+            // Vertical direction dominates
             if (dy > 0) {
-                // Bottom quadrant: arrow lands on bottom edge center
+                // Source is below
                 return { x: targetX, y: targetY + halfHeight };
             } else {
-                // Top quadrant: arrow lands on top edge center
+                // Source is above
                 return { x: targetX, y: targetY - halfHeight };
             }
         }

@@ -344,6 +344,17 @@ Object.assign(app, {
                     selectedArray.forEach(id => this.cyclePriority(id));
                 }
             }
+
+            // Ctrl+Alt+A to toggle arrow routing mode
+            if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey) && e.altKey && this.editingTaskId === null) {
+                e.preventDefault();
+                // Toggle between 'direct' and 'orthogonal'
+                this.arrowRoutingMode = this.arrowRoutingMode === 'direct' ? 'orthogonal' : 'direct';
+                const modeName = this.arrowRoutingMode === 'direct' ? 'Direct' : 'Orthogonal';
+                this.showToast(`Arrow routing: ${modeName}`, 'info', 2000);
+                this.saveToStorage();
+                this.render();
+            }
         });
 
         // ========================================
@@ -396,10 +407,13 @@ Object.assign(app, {
         });
 
         // ========================================
-        // Mouse Wheel Zoom
+        // Mouse Wheel Zoom (zooms toward cursor position)
         // ========================================
         svg.addEventListener('wheel', (e) => {
             e.preventDefault();
+
+            // Get cursor position in SVG coordinates BEFORE zoom
+            const cursorBeforeZoom = this.getSVGPoint(e);
 
             // Normalize deltaY based on deltaMode
             // deltaMode: 0 = pixels, 1 = lines, 2 = pages
@@ -414,10 +428,27 @@ Object.assign(app, {
             const zoomChange = (delta / 100) * this.wheelZoomSpeed;
             const zoomFactor = 1 + zoomChange;
 
+            const oldZoomLevel = this.zoomLevel;
             this.zoomLevel = Math.max(
                 this.minZoom,
                 Math.min(this.maxZoom, this.zoomLevel * zoomFactor)
             );
+
+            // Calculate how viewBox dimensions change
+            const oldWidth = this.viewBox.width;
+            const oldHeight = this.viewBox.height;
+            const newWidth = window.innerWidth / this.zoomLevel;
+            const newHeight = (window.innerHeight - 60) / this.zoomLevel;
+
+            // Calculate cursor position as ratio in old viewBox
+            const cursorRatioX = (cursorBeforeZoom.x - this.viewBox.x) / oldWidth;
+            const cursorRatioY = (cursorBeforeZoom.y - this.viewBox.y) / oldHeight;
+
+            // Adjust viewBox position to keep cursor at same SVG coordinate
+            this.viewBox.x = cursorBeforeZoom.x - (cursorRatioX * newWidth);
+            this.viewBox.y = cursorBeforeZoom.y - (cursorRatioY * newHeight);
+            this.viewBox.width = newWidth;
+            this.viewBox.height = newHeight;
 
             this.updateZoomDisplay();
             this.render();
@@ -438,6 +469,34 @@ Object.assign(app, {
             if (anyModalOpen) return;
 
             if (this.editingTaskId !== null) return; // Don't run shortcuts while editing text
+
+            // Arrow keys = move selected nodes 1 pixel
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                if (this.selectedTaskIds.size > 0) {
+                    e.preventDefault();
+
+                    const selectedTasks = Array.from(this.selectedTaskIds)
+                        .map(id => this.tasks.find(t => t.id === id))
+                        .filter(t => t);
+
+                    if (selectedTasks.length === 0) return;
+
+                    // Save snapshot for undo
+                    const taskNames = selectedTasks.map(t => this.truncateTitle(t.title || 'Untitled', 20)).join(', ');
+                    this.saveSnapshot(`Move ${selectedTasks.length} task(s): ${taskNames}`);
+
+                    // Move all selected tasks by 1 pixel
+                    selectedTasks.forEach(task => {
+                        if (e.key === 'ArrowUp') task.y -= 1;
+                        else if (e.key === 'ArrowDown') task.y += 1;
+                        else if (e.key === 'ArrowLeft') task.x -= 1;
+                        else if (e.key === 'ArrowRight') task.x += 1;
+                    });
+
+                    this.render();
+                    this.saveToStorage();
+                }
+            }
 
             // Ctrl/Cmd + Plus/Equals = zoom in
             if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {

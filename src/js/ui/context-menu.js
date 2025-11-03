@@ -117,6 +117,11 @@ export const ContextMenuMixin = {
             const currentPriorityEmoji = task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟠' : '⚪';
             buttons.push({ label: `${currentPriorityEmoji} Set Priority`, isPrioritySubmenu: true, currentPriority: task.priority });
 
+            // Arrow routing submenu
+            const currentRouting = task.arrowRouting || 'inherit';
+            const routingEmoji = currentRouting === 'direct' ? '↗️' : currentRouting === 'orthogonal' ? '↪️' : '⚙️';
+            buttons.push({ label: `${routingEmoji} Arrow Routing`, isArrowRoutingSubmenu: true, currentRouting: currentRouting });
+
             // Add hide option if task has a parent (not a root task)
             if (task.mainParent !== null) {
                 buttons.push({ label: task.hidden ? '👁️ Show' : '🙈 Hide', action: () => this.toggleHiddenSelf(taskId) });
@@ -164,8 +169,79 @@ export const ContextMenuMixin = {
             buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
         }
 
-        buttons.forEach(({ label, action, isLinksSubmenu, isPrioritySubmenu, currentPriority }) => {
-            if (isPrioritySubmenu) {
+        buttons.forEach(({ label, action, isLinksSubmenu, isPrioritySubmenu, currentPriority, isArrowRoutingSubmenu, currentRouting }) => {
+            if (isArrowRoutingSubmenu) {
+                // Create arrow routing submenu
+                const routingBtn = document.createElement('button');
+                routingBtn.className = 'menu-item-with-submenu';
+                routingBtn.textContent = label;
+
+                const routingSubmenu = document.createElement('div');
+                routingSubmenu.className = 'submenu-nested';
+                routingSubmenu.style.display = 'none';
+
+                let hideTimeout = null;
+
+                routingBtn.addEventListener('mouseenter', () => {
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                        hideTimeout = null;
+                    }
+                    const rect = routingBtn.getBoundingClientRect();
+                    routingSubmenu.style.left = `${rect.right}px`;
+                    routingSubmenu.style.top = `${rect.top}px`;
+                    routingSubmenu.style.display = 'block';
+                });
+
+                routingBtn.addEventListener('mouseleave', (evt) => {
+                    hideTimeout = setTimeout(() => {
+                        const hoveredElement = document.elementFromPoint(evt.clientX, evt.clientY);
+                        if (!routingSubmenu.contains(hoveredElement)) {
+                            routingSubmenu.style.display = 'none';
+                        }
+                    }, 100);
+                });
+
+                routingSubmenu.addEventListener('mouseenter', () => {
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                        hideTimeout = null;
+                    }
+                });
+
+                routingSubmenu.addEventListener('mouseleave', () => {
+                    routingSubmenu.style.display = 'none';
+                });
+
+                // Add routing options
+                const routingOptions = [
+                    { value: 'inherit', label: 'Inherit from Parent', emoji: '⚙️' },
+                    { value: 'direct', label: 'Direct (Straight/Curved)', emoji: '↗️' },
+                    { value: 'orthogonal', label: 'Orthogonal (90° Turns)', emoji: '↪️' }
+                ];
+
+                routingOptions.forEach(({ value, label: routingLabel, emoji }) => {
+                    const item = document.createElement('div');
+                    item.className = 'submenu-item';
+                    item.textContent = `${emoji} ${routingLabel}`;
+
+                    // Add checkmark if this is the current routing
+                    if (value === currentRouting) {
+                        item.textContent = `✓ ${emoji} ${routingLabel}`;
+                        item.style.fontWeight = '600';
+                    }
+
+                    item.onclick = (evt) => {
+                        evt.stopPropagation();
+                        this.closeMenu();
+                        this.setArrowRouting(taskId, value);
+                    };
+                    routingSubmenu.appendChild(item);
+                });
+
+                document.body.appendChild(routingSubmenu);
+                menu.appendChild(routingBtn);
+            } else if (isPrioritySubmenu) {
                 // Create priority submenu
                 const priorityBtn = document.createElement('button');
                 priorityBtn.className = 'menu-item-with-submenu';

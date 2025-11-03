@@ -99,8 +99,10 @@ export const ShortcutsMixin = {
                     { keys: 'Click node', description: 'Select task (clears other selections)' },
                     { keys: `${modSymbol}+Click node`, description: 'Multi-select (toggle selection)' },
                     { keys: `${modSymbol}+Drag empty`, description: 'Box select (select all nodes in rectangle)' },
-                    { keys: 'Escape', description: 'Clear all selections' }
-                ]
+                    { keys: 'Escape', description: 'Clear all selections' },
+                    { keys: '← → ↑ ↓ Arrow keys', description: 'Move selected task(s) 1 pixel in direction' }
+                ],
+                tip: '💡 <strong>Pro Tip:</strong> Use arrow keys for precise positioning of selected tasks - great for perfect alignment!'
             },
             {
                 category: '📊 Status & Priority',

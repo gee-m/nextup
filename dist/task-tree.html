@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Tree</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%234f46e5'/%3E%3Cstop offset='100%25' style='stop-color:%237c3aed'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='32' height='32' rx='6'/%3E%3Cpath stroke='%23fff' stroke-width='2' fill='none' d='M16 8v6m0 0l-6 4m6-4l6 4'/%3E%3Ccircle cx='16' cy='8' r='2.5' fill='%23fff'/%3E%3Ccircle cx='10' cy='18' r='2.5' fill='%23fff'/%3E%3Ccircle cx='22' cy='18' r='2.5' fill='%23fff'/%3E%3Cpath stroke='%23fff' stroke-width='1.5' fill='none' d='M10 20.5v3.5m12-3.5v3.5'/%3E%3Ccircle cx='10' cy='26' r='2' fill='%23fbbf24'/%3E%3Ccircle cx='22' cy='26' r='2' fill='%2310b981'/%3E%3C/svg%3E">
     <style>
 
 /* ============================================================
@@ -1712,6 +1713,15 @@ const app = {
     arrowStyle: 'straight',      // Arrow path style: 'straight' or 'curved'
     arrowCurvature: 0.25,        // Curve intensity for curved arrows (0.1 to 0.5)
     arrowOppositeEdge: true,     // Arrows land on opposite edge (center of far side) instead of nearest edge
+    arrowRoutingMode: 'direct',  // Arrow routing: 'direct' (straight/curved) or 'orthogonal' (90-degree turns)
+    orthogonalCornerRadius: 15,  // Corner radius for orthogonal routing (0 = sharp corners, 30 = smooth)
+
+    // ========================================
+    // Alignment Snapping
+    // ========================================
+    enableSnapping: true,        // Enable alignment snapping when dragging
+    snapThreshold: 10,           // Distance in pixels for snap to activate
+    activeSnapLines: [],         // Current snap lines to render: [{type: 'vertical'|'horizontal', position: number, alignType: 'edge'|'center'}]
 
     // ========================================
     // Homes/Bookmarks
@@ -3282,6 +3292,11 @@ app.saveToStorage = function() {
             wordWrap: this.wordWrap,
             arrowStyle: this.arrowStyle,
             arrowCurvature: this.arrowCurvature,
+            arrowOppositeEdge: this.arrowOppositeEdge,
+            arrowRoutingMode: this.arrowRoutingMode,
+            orthogonalCornerRadius: this.orthogonalCornerRadius,
+            enableSnapping: this.enableSnapping,
+            snapThreshold: this.snapThreshold,
             // Undo/redo history
             undoStack: this.undoStack,
             redoStack: this.redoStack
@@ -3319,6 +3334,11 @@ app.saveToStorage = function() {
                     wordWrap: this.wordWrap,
                     arrowStyle: this.arrowStyle,
                     arrowCurvature: this.arrowCurvature,
+                    arrowOppositeEdge: this.arrowOppositeEdge,
+                    arrowRoutingMode: this.arrowRoutingMode,
+                    orthogonalCornerRadius: this.orthogonalCornerRadius,
+                    enableSnapping: this.enableSnapping,
+                    snapThreshold: this.snapThreshold,
                     undoStack: this.undoStack,
                     redoStack: this.redoStack
                 }));
@@ -3400,6 +3420,11 @@ app.loadFromStorage = function() {
         this.wordWrap = parsed.wordWrap ?? true;
         this.arrowStyle = parsed.arrowStyle ?? 'straight';
         this.arrowCurvature = parsed.arrowCurvature ?? 0.25;
+        this.arrowOppositeEdge = parsed.arrowOppositeEdge ?? true;
+        this.arrowRoutingMode = parsed.arrowRoutingMode ?? 'direct';
+        this.orthogonalCornerRadius = parsed.orthogonalCornerRadius ?? 15;
+        this.enableSnapping = parsed.enableSnapping ?? true;
+        this.snapThreshold = parsed.snapThreshold ?? 10;
         // Undo/redo history
         this.undoStack = parsed.undoStack || [];
         this.redoStack = parsed.redoStack || [];
@@ -4464,6 +4489,54 @@ Object.assign(app, {
         this.setPriority(taskId, nextPriority);
     },
 
+    setArrowRouting(taskId, routing) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+        const routingLabel = routing === 'direct' ? 'Direct' : routing === 'orthogonal' ? 'Orthogonal' : 'Inherit';
+
+        this.saveSnapshot(`Set arrow routing of '${truncatedTitle}' to ${routingLabel}`);
+
+        task.arrowRouting = routing;
+        this.saveToStorage();
+        this.render();
+
+        // Show toast notification
+        const emoji = routing === 'direct' ? '↗️' : routing === 'orthogonal' ? '↪️' : '⚙️';
+        this.showToast(`${emoji} Arrow routing set to ${routingLabel}`, 'success', 2000);
+    },
+
+    /**
+     * Get effective arrow routing mode for a node's OUTGOING arrows (to its children)
+     * If node has 'inherit' or no setting, walks up parent chain until finding a setting
+     * Falls back to global arrowRoutingMode if no ancestor has a setting
+     * @param {Object} task - Parent task whose outgoing arrow style to determine
+     * @returns {string} 'direct' or 'orthogonal'
+     */
+    getEffectiveArrowRouting(task) {
+        // If task has explicit routing (not 'inherit'), use it
+        if (task.arrowRouting && task.arrowRouting !== 'inherit') {
+            return task.arrowRouting;
+        }
+
+        // Otherwise, walk up parent chain to find a setting
+        let current = task.mainParent;
+        while (current !== null) {
+            const parent = this.tasks.find(t => t.id === current);
+            if (!parent) break;
+
+            if (parent.arrowRouting && parent.arrowRouting !== 'inherit') {
+                return parent.arrowRouting;
+            }
+
+            current = parent.mainParent;
+        }
+
+        // No parent has a setting, use global default
+        return this.arrowRoutingMode;
+    },
+
     selectNode(taskId) {
         // Single-node selection (clears others)
         this.selectedTaskIds.clear();
@@ -5362,9 +5435,11 @@ Object.assign(app, {
      * @param {number} y2 - End Y
      * @param {Array<{x: number, y: number}>} controlPoints - Points ON the curve
      * @param {string} className - CSS class
+     * @param {boolean} useStraightSegments - Use straight lines instead of curves (for orthogonal routing)
+     * @param {number} cornerRadius - Corner radius for orthogonal routing (default from app.orthogonalCornerRadius)
      * @returns {SVGPathElement} Curved path element
      */
-    createMultiSegmentCurvedLine(x1, y1, x2, y2, controlPoints, className) {
+    createMultiSegmentCurvedLine(x1, y1, x2, y2, controlPoints, className, useStraightSegments = false, cornerRadius = null) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('class', className);
         path.setAttribute('fill', 'none');
@@ -5380,6 +5455,62 @@ Object.assign(app, {
         // No control points - straight line
         if (!controlPoints || !Array.isArray(controlPoints) || controlPoints.length === 0) {
             path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+            return path;
+        }
+
+        // Use straight segments with rounded corners for orthogonal routing
+        if (useStraightSegments) {
+            // Use default corner radius if not provided
+            const radius = cornerRadius !== null ? cornerRadius : (this.orthogonalCornerRadius || 15);
+
+            // Build array of all points
+            const allPoints = [
+                { x: x1, y: y1 },
+                ...controlPoints,
+                { x: x2, y: y2 }
+            ];
+
+            let pathData = `M ${allPoints[0].x} ${allPoints[0].y}`;
+
+            for (let i = 1; i < allPoints.length; i++) {
+                const prev = allPoints[i - 1];
+                const curr = allPoints[i];
+                const next = i < allPoints.length - 1 ? allPoints[i + 1] : null;
+
+                if (radius > 0 && next) {
+                    // Calculate vectors
+                    const dx1 = curr.x - prev.x;
+                    const dy1 = curr.y - prev.y;
+                    const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+
+                    const dx2 = next.x - curr.x;
+                    const dy2 = next.y - curr.y;
+                    const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+                    // Use smaller radius if segment is too short
+                    const effectiveRadius = Math.min(radius, len1 / 2, len2 / 2);
+
+                    // Calculate points for rounded corner
+                    const beforeCorner = {
+                        x: curr.x - (dx1 / len1) * effectiveRadius,
+                        y: curr.y - (dy1 / len1) * effectiveRadius
+                    };
+
+                    const afterCorner = {
+                        x: curr.x + (dx2 / len2) * effectiveRadius,
+                        y: curr.y + (dy2 / len2) * effectiveRadius
+                    };
+
+                    // Draw line to before corner, then curve around corner
+                    pathData += ` L ${beforeCorner.x} ${beforeCorner.y}`;
+                    pathData += ` Q ${curr.x} ${curr.y}, ${afterCorner.x} ${afterCorner.y}`;
+                } else {
+                    // Last point or no rounding - just draw straight line
+                    pathData += ` L ${curr.x} ${curr.y}`;
+                }
+            }
+
+            path.setAttribute('d', pathData);
             return path;
         }
 
@@ -5956,19 +6087,47 @@ Object.assign(app, {
                         arrowEnd = this.getArrowEndpoint(parent, task, 'target');
                     }
 
-                    // Determine control points to use (live drag or saved)
+                    // Determine control points to use (live drag, orthogonal, or saved)
                     const isDraggingThisCurve = this.curveDotDrag.active &&
                                                 this.curveDotDrag.taskId === task.id &&
                                                 this.curveDotDrag.parentId === task.mainParent;
-                    const effectiveControlPoints = isDraggingThisCurve ?
-                        this.curveDotDrag.controlPoints : controlPoints;
+
+                    let effectiveControlPoints;
+
+                    // Get effective routing mode from PARENT (arrows go FROM parent TO children)
+                    const taskRoutingMode = this.getEffectiveArrowRouting(parent);
+
+                    if (taskRoutingMode === 'orthogonal') {
+                        // Orthogonal routing: calculate waypoints
+                        const parentDims = this.calculateTaskDimensions(parent);
+                        const taskDims = this.calculateTaskDimensions(task);
+
+                        const startEdge = this.getEdgeFromPoint(arrowStart.x, arrowStart.y, parent.x, parent.y, parentDims.width, parentDims.height);
+                        const endEdge = this.getEdgeFromPoint(arrowEnd.x, arrowEnd.y, task.x, task.y, taskDims.width, taskDims.height);
+
+                        const waypoints = this.calculateOrthogonalPath(
+                            arrowStart.x, arrowStart.y, startEdge,
+                            arrowEnd.x, arrowEnd.y, endEdge,
+                            parent.x, parent.y, task.x, task.y
+                        );
+
+                        // Remove first and last points (they're the start/end positions)
+                        effectiveControlPoints = waypoints.slice(1, -1);
+                    } else if (isDraggingThisCurve) {
+                        effectiveControlPoints = this.curveDotDrag.controlPoints;
+                    } else {
+                        effectiveControlPoints = controlPoints;
+                    }
 
                     // Create hit line and visible line
+                    const useStraightSegments = taskRoutingMode === 'orthogonal';
                     const hitLine = this.createMultiSegmentCurvedLine(
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link parent-hit'
+                        'link parent-hit',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
                     hitLine.dataset.type = 'parent';
                     hitLine.dataset.taskId = task.id;
@@ -5986,7 +6145,9 @@ Object.assign(app, {
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link parent-visible'
+                        'link parent-visible',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
                     line.style.pointerEvents = 'none';
                     // ⭐ NEW: Add data attributes so we can update during animation
@@ -6024,6 +6185,10 @@ Object.assign(app, {
                             line.style.stroke = '#f44336';  // Red (same as incomplete children indicator)
                             line.style.strokeWidth = '2.5';
                         }
+                    } else if (task.status === 'done') {
+                        // Child is done - use green arrow
+                        line.setAttribute('marker-end', 'url(#arrowhead-green)');
+                        line.style.stroke = '#4caf50';  // Green
                     } else {
                         line.setAttribute('marker-end', 'url(#arrowhead)'); // Normal arrow
                     }
@@ -6066,19 +6231,47 @@ Object.assign(app, {
                         arrowEnd = this.getArrowEndpoint(parent, task, 'target');
                     }
 
-                    // Determine control points to use (live drag or saved)
+                    // Determine control points to use (live drag, orthogonal, or saved)
                     const isDraggingThisCurve = this.curveDotDrag.active &&
                                                 this.curveDotDrag.taskId === task.id &&
                                                 this.curveDotDrag.parentId === parentId;
-                    const effectiveControlPoints = isDraggingThisCurve ?
-                        this.curveDotDrag.controlPoints : controlPoints;
+
+                    let effectiveControlPoints;
+
+                    // Get effective routing mode from PARENT (arrows go FROM parent TO children)
+                    const taskRoutingMode = this.getEffectiveArrowRouting(parent);
+
+                    if (taskRoutingMode === 'orthogonal') {
+                        // Orthogonal routing: calculate waypoints
+                        const parentDims = this.calculateTaskDimensions(parent);
+                        const taskDims = this.calculateTaskDimensions(task);
+
+                        const startEdge = this.getEdgeFromPoint(arrowStart.x, arrowStart.y, parent.x, parent.y, parentDims.width, parentDims.height);
+                        const endEdge = this.getEdgeFromPoint(arrowEnd.x, arrowEnd.y, task.x, task.y, taskDims.width, taskDims.height);
+
+                        const waypoints = this.calculateOrthogonalPath(
+                            arrowStart.x, arrowStart.y, startEdge,
+                            arrowEnd.x, arrowEnd.y, endEdge,
+                            parent.x, parent.y, task.x, task.y
+                        );
+
+                        // Remove first and last points (they're the start/end positions)
+                        effectiveControlPoints = waypoints.slice(1, -1);
+                    } else if (isDraggingThisCurve) {
+                        effectiveControlPoints = this.curveDotDrag.controlPoints;
+                    } else {
+                        effectiveControlPoints = controlPoints;
+                    }
 
                     // Create hit line
+                    const useStraightSegments = taskRoutingMode === 'orthogonal';
                     const hitLine = this.createMultiSegmentCurvedLine(
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link other-parent-hit'
+                        'link other-parent-hit',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
                     hitLine.dataset.type = 'parent';
                     hitLine.dataset.taskId = task.id;
@@ -6096,9 +6289,19 @@ Object.assign(app, {
                         arrowStart.x, arrowStart.y,
                         arrowEnd.x, arrowEnd.y,
                         effectiveControlPoints,
-                        'link other-parent'
+                        'link other-parent',
+                        useStraightSegments,
+                        this.orthogonalCornerRadius
                     );
-                    line.setAttribute('marker-end', 'url(#arrowhead)'); // Arrow pointing to child
+
+                    // Color arrow based on task status
+                    if (task.status === 'done') {
+                        line.setAttribute('marker-end', 'url(#arrowhead-green)');
+                        line.style.stroke = '#4caf50';  // Green
+                    } else {
+                        line.setAttribute('marker-end', 'url(#arrowhead)'); // Normal arrow
+                    }
+
                     line.style.pointerEvents = 'none';
                     // ⭐ NEW: Add data attributes so we can update during animation
                     line.dataset.type = 'parent';
@@ -6152,6 +6355,19 @@ Object.assign(app, {
                 }
             });
         });
+
+        // ========================================
+        // Prioritize golden path and selected lines (render on top)
+        // ========================================
+        // Re-append golden path and selected lines to move them to the top of z-order
+        const goldenPathLines = linksGroup.querySelectorAll('.golden-path-ancestor, .golden-path-child-done, .golden-path-child-incomplete');
+        const selectedLines = linksGroup.querySelectorAll('.selected');
+
+        // Re-append golden path lines (moves them to end = top of z-order)
+        goldenPathLines.forEach(line => linksGroup.appendChild(line));
+
+        // Re-append selected lines last (so they're on top of everything including golden path)
+        selectedLines.forEach(line => linksGroup.appendChild(line));
 
         // PERF: Render nodes - only for visible tasks
         visibleTasks.forEach(task => {
@@ -6710,6 +6926,40 @@ Object.assign(app, {
             }
         }
 
+        // ========================================
+        // Alignment Snap Guide Lines
+        // ========================================
+        if (this.activeSnapLines && this.activeSnapLines.length > 0) {
+            this.activeSnapLines.forEach(snapLine => {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+                if (snapLine.type === 'vertical') {
+                    // Vertical snap line (spans entire viewport height)
+                    line.setAttribute('x1', snapLine.position);
+                    line.setAttribute('y1', this.viewBox.y);
+                    line.setAttribute('x2', snapLine.position);
+                    line.setAttribute('y2', this.viewBox.y + this.viewBox.height);
+                } else if (snapLine.type === 'horizontal') {
+                    // Horizontal snap line (spans entire viewport width)
+                    line.setAttribute('x1', this.viewBox.x);
+                    line.setAttribute('y1', snapLine.position);
+                    line.setAttribute('x2', this.viewBox.x + this.viewBox.width);
+                    line.setAttribute('y2', snapLine.position);
+                }
+
+                // Style: semi-transparent, dashed line
+                // Use different colors for edge vs center alignment
+                const isCenter = snapLine.alignType === 'center';
+                line.setAttribute('stroke', isCenter ? '#ff6b6b' : '#4dabf7');
+                line.setAttribute('stroke-width', '1.5');
+                line.setAttribute('stroke-dasharray', '5,5');
+                line.setAttribute('opacity', '0.6');
+                line.setAttribute('pointer-events', 'none');
+
+                nodesGroup.appendChild(line);
+            });
+        }
+
         // Render off-screen indicators for working tasks
         this.renderOffscreenIndicators();
 
@@ -6982,11 +7232,11 @@ Object.assign(app, {
             this.updateArrowDotHover(pt.x, pt.y);
         }
 
-        // Update curve dot hover detection (only when Ctrl is held and not dragging)
-        if (!this.arrowDotDrag.active && !this.curveDotDrag.active && (e.ctrlKey || e.metaKey)) {
+        // Update curve dot hover detection (only when Ctrl is held, not in orthogonal mode, and not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active && (e.ctrlKey || e.metaKey) && this.arrowRoutingMode !== 'orthogonal') {
             this.updateCurveDotHover(pt.x, pt.y);
         } else if (!this.curveDotDrag.active) {
-            // Clear curve dot hover if Ctrl not held
+            // Clear curve dot hover if Ctrl not held or in orthogonal mode
             if (this.hoveredCurveDot) {
                 this.hoveredCurveDot = null;
                 this.render();
@@ -7040,8 +7290,20 @@ Object.assign(app, {
         } else if (this.dragMode === 'node' && this.selectedNode !== null) {
             const task = this.tasks.find(t => t.id === this.selectedNode);
             if (task) {
-                const newX = pt.x - this.dragStart.x;
-                const newY = pt.y - this.dragStart.y;
+                let newX = pt.x - this.dragStart.x;
+                let newY = pt.y - this.dragStart.y;
+
+                // Apply snapping
+                if (this.enableSnapping) {
+                    const dims = this.calculateTaskDimensions(task);
+                    const excludeIds = this.selectedTaskIds.has(this.selectedNode) ? this.selectedTaskIds : new Set([this.selectedNode]);
+                    const snapped = this.calculateSnapping(newX, newY, dims.width, dims.height, excludeIds);
+                    newX = snapped.x;
+                    newY = snapped.y;
+                    this.activeSnapLines = snapped.snapLines;
+                } else {
+                    this.activeSnapLines = [];
+                }
 
                 // Check if we're dragging a selected node
                 if (this.selectedTaskIds.has(this.selectedNode)) {
@@ -7099,8 +7361,21 @@ Object.assign(app, {
             }
         } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
             // Calculate offset from original root position
-            const newX = pt.x - this.dragStart.x;
-            const newY = pt.y - this.dragStart.y;
+            let newX = pt.x - this.dragStart.x;
+            let newY = pt.y - this.dragStart.y;
+
+            // Apply snapping to root node
+            if (this.enableSnapping) {
+                const rootTask = this.tasks.find(t => t.id === this.selectedNode);
+                const dims = this.calculateTaskDimensions(rootTask);
+                const excludeIds = new Set(this.draggedSubtree);
+                const snapped = this.calculateSnapping(newX, newY, dims.width, dims.height, excludeIds);
+                newX = snapped.x;
+                newY = snapped.y;
+                this.activeSnapLines = snapped.snapLines;
+            } else {
+                this.activeSnapLines = [];
+            }
 
             const dx = newX - this.dragOriginalPos.x;
             const dy = newY - this.dragOriginalPos.y;
@@ -7410,6 +7685,9 @@ Object.assign(app, {
         // Remove custom cursor arrow if it exists
         this.removeCursorArrow();
 
+        // Clear snap lines
+        this.activeSnapLines = [];
+
         this.dragMode = null;
         this.selectedNode = null;
         this.isBoxSelecting = false;
@@ -7469,6 +7747,7 @@ console.log('[mouse.js] Mouse event handlers loaded');
  * - Escape: Clear selections
  * - Ctrl/Cmd+A: Select all tasks
  * - A: Select all tasks in subtree of selected
+ * - Arrow Keys: Move selected task(s) 1 pixel in direction
  *
  * Navigation:
  * - 0-9: Jump to home with keybind
@@ -7491,6 +7770,7 @@ console.log('[mouse.js] Mouse event handlers loaded');
  * - -/_: Zoom out
  * - 0: Reset zoom to 100%
  * - T: Toggle dark mode
+ * - Ctrl/Cmd+Alt+A: Toggle arrow routing mode (Direct/Orthogonal)
  *
  * System:
  * - ?: Show shortcuts modal
@@ -7584,6 +7864,146 @@ Object.assign(app, {
     // Placeholder - drag logic integrated into mouse handlers
     // This module serves as architecture documentation
 });
+
+
+
+// ============================================================
+// INTERACTIONS/SNAPPING.JS (Order: 27, Category: interactions)
+// ============================================================
+
+/**
+ * @module interactions/snapping
+ * @order 27
+ * @category interactions
+ *
+ * Alignment snapping for node positioning
+ * Provides visual feedback and snap-to-align behavior when dragging nodes
+ */
+
+Object.assign(app, {
+    /**
+     * Calculate snap position for a dragged node
+     * Returns adjusted position and snap lines to display
+     *
+     * @param {number} draggedX - Proposed X position of dragged node center
+     * @param {number} draggedY - Proposed Y position of dragged node center
+     * @param {number} draggedWidth - Width of dragged node
+     * @param {number} draggedHeight - Height of dragged node
+     * @param {Set<number>} excludeIds - Task IDs to exclude from snapping (e.g., dragged tasks)
+     * @returns {{x: number, y: number, snapLines: Array}} Adjusted position and snap lines
+     */
+    calculateSnapping(draggedX, draggedY, draggedWidth, draggedHeight, excludeIds = new Set()) {
+        if (!this.enableSnapping) {
+            return { x: draggedX, y: draggedY, snapLines: [] };
+        }
+
+        const threshold = this.snapThreshold;
+        const snapLines = [];
+
+        // Calculate dragged node bounds
+        const dragged = {
+            left: draggedX - draggedWidth / 2,
+            right: draggedX + draggedWidth / 2,
+            top: draggedY - draggedHeight / 2,
+            bottom: draggedY + draggedHeight / 2,
+            centerX: draggedX,
+            centerY: draggedY
+        };
+
+        let snapX = null;
+        let snapY = null;
+        let minDistX = threshold;
+        let minDistY = threshold;
+        let snapLineX = null;
+        let snapLineY = null;
+
+        // Check all other tasks (only those visible in viewport)
+        for (const task of this.tasks) {
+            if (excludeIds.has(task.id) || task.hidden) continue;
+
+            // Skip tasks outside the viewport
+            const margin = 100; // Extra margin to include near-viewport tasks
+            if (task.x < this.viewBox.x - margin ||
+                task.x > this.viewBox.x + this.viewBox.width + margin ||
+                task.y < this.viewBox.y - margin ||
+                task.y > this.viewBox.y + this.viewBox.height + margin) {
+                continue;
+            }
+
+            const dims = this.calculateTaskDimensions(task);
+            const other = {
+                left: task.x - dims.width / 2,
+                right: task.x + dims.width / 2,
+                top: task.y - dims.height / 2,
+                bottom: task.y + dims.height / 2,
+                centerX: task.x,
+                centerY: task.y
+            };
+
+            // Check vertical alignments (affects X position)
+            const verticalChecks = [
+                // Edge alignments
+                { pos: other.left, dragPos: dragged.left, type: 'left-edge', line: other.left },
+                { pos: other.right, dragPos: dragged.right, type: 'right-edge', line: other.right },
+                { pos: other.left, dragPos: dragged.right, type: 'right-to-left', line: other.left },
+                { pos: other.right, dragPos: dragged.left, type: 'left-to-right', line: other.right },
+                // Center alignment
+                { pos: other.centerX, dragPos: dragged.centerX, type: 'center-x', line: other.centerX, isCenter: true }
+            ];
+
+            for (const check of verticalChecks) {
+                const dist = Math.abs(check.pos - check.dragPos);
+                if (dist < minDistX) {
+                    minDistX = dist;
+                    const offset = check.pos - check.dragPos;
+                    snapX = draggedX + offset;
+                    snapLineX = {
+                        type: 'vertical',
+                        position: check.line,
+                        alignType: check.isCenter ? 'center' : 'edge'
+                    };
+                }
+            }
+
+            // Check horizontal alignments (affects Y position)
+            const horizontalChecks = [
+                // Edge alignments
+                { pos: other.top, dragPos: dragged.top, type: 'top-edge', line: other.top },
+                { pos: other.bottom, dragPos: dragged.bottom, type: 'bottom-edge', line: other.bottom },
+                { pos: other.top, dragPos: dragged.bottom, type: 'bottom-to-top', line: other.top },
+                { pos: other.bottom, dragPos: dragged.top, type: 'top-to-bottom', line: other.bottom },
+                // Center alignment
+                { pos: other.centerY, dragPos: dragged.centerY, type: 'center-y', line: other.centerY, isCenter: true }
+            ];
+
+            for (const check of horizontalChecks) {
+                const dist = Math.abs(check.pos - check.dragPos);
+                if (dist < minDistY) {
+                    minDistY = dist;
+                    const offset = check.pos - check.dragPos;
+                    snapY = draggedY + offset;
+                    snapLineY = {
+                        type: 'horizontal',
+                        position: check.line,
+                        alignType: check.isCenter ? 'center' : 'edge'
+                    };
+                }
+            }
+        }
+
+        // Build snap lines array
+        if (snapLineX) snapLines.push(snapLineX);
+        if (snapLineY) snapLines.push(snapLineY);
+
+        return {
+            x: snapX !== null ? snapX : draggedX,
+            y: snapY !== null ? snapY : draggedY,
+            snapLines
+        };
+    }
+});
+
+console.log('[snapping.js] Alignment snapping loaded');
 
 
 
@@ -7748,9 +8168,112 @@ Object.assign(app, {
     },
 
     /**
-     * Get edge center based on quadrant
-     * Divides space around rectangle into 4 quadrants using diagonal lines through corners
-     * Returns center of the edge corresponding to the source's quadrant
+     * Determine which edge a point is on
+     * @param {number} pointX - Point X
+     * @param {number} pointY - Point Y
+     * @param {number} centerX - Rectangle center X
+     * @param {number} centerY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @returns {string} 'top', 'bottom', 'left', or 'right'
+     */
+    getEdgeFromPoint(pointX, pointY, centerX, centerY, rectWidth, rectHeight) {
+        const halfWidth = rectWidth / 2;
+        const halfHeight = rectHeight / 2;
+
+        const dx = pointX - centerX;
+        const dy = pointY - centerY;
+
+        // Use same quadrant logic as getOppositeEdgeCenter
+        if (Math.abs(dy) * halfWidth < Math.abs(dx) * halfHeight) {
+            return dx > 0 ? 'right' : 'left';
+        } else {
+            return dy > 0 ? 'bottom' : 'top';
+        }
+    },
+
+    /**
+     * Calculate orthogonal routing path with 90-degree turns
+     * @param {number} startX - Start point X (arrow start on edge)
+     * @param {number} startY - Start point Y (arrow start on edge)
+     * @param {string} startEdge - Start edge: 'top', 'bottom', 'left', 'right'
+     * @param {number} endX - End point X (arrow end on edge)
+     * @param {number} endY - End point Y (arrow end on edge)
+     * @param {string} endEdge - End edge: 'top', 'bottom', 'left', 'right'
+     * @param {number} startNodeX - Start node center X (for alignment detection)
+     * @param {number} startNodeY - Start node center Y (for alignment detection)
+     * @param {number} endNodeX - End node center X (for alignment detection)
+     * @param {number} endNodeY - End node center Y (for alignment detection)
+     * @returns {Array<{x: number, y: number}>} Array of waypoints
+     */
+    calculateOrthogonalPath(startX, startY, startEdge, endX, endY, endEdge, startNodeX, startNodeY, endNodeX, endNodeY) {
+        const waypoints = [];
+
+        // Always start at source
+        waypoints.push({ x: startX, y: startY });
+
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const alignmentThreshold = 5; // Consider aligned if within 5px
+
+        // Check if NODES are aligned (not arrow endpoints!)
+        const nodesVerticallyAligned = startNodeX !== undefined && endNodeX !== undefined &&
+                                       Math.abs(startNodeX - endNodeX) < alignmentThreshold;
+        const nodesHorizontallyAligned = startNodeY !== undefined && endNodeY !== undefined &&
+                                         Math.abs(startNodeY - endNodeY) < alignmentThreshold;
+
+        // Calculate based on edge directions
+        if (startEdge === 'right' || startEdge === 'left') {
+            // Horizontal exit
+
+            // If nodes are horizontally aligned (same Y), just draw a straight line!
+            if (nodesHorizontallyAligned) {
+                // Straight horizontal arrow - no turns needed
+                // (waypoints already has start, will add end below)
+            } else if (nodesVerticallyAligned) {
+                // Nodes vertically aligned - need to route around
+                const direction = startEdge === 'right' ? 1 : -1;
+                const offset = 60 * direction;
+                waypoints.push({ x: startX + offset, y: startY });
+                waypoints.push({ x: startX + offset, y: endY });
+            } else {
+                // Normal case: 2 turns at midpoint
+                const midX = startX + dx / 2;
+                waypoints.push({ x: midX, y: startY });
+                waypoints.push({ x: midX, y: endY });
+            }
+
+        } else {
+            // Vertical exit (top or bottom)
+
+            // If nodes are vertically aligned (same X), just draw a straight line!
+            if (nodesVerticallyAligned) {
+                // Straight vertical arrow - no turns needed
+                // (waypoints already has start, will add end below)
+            } else if (nodesHorizontallyAligned) {
+                // Nodes horizontally aligned - need to route around
+                const direction = startEdge === 'bottom' ? 1 : -1;
+                const offset = 60 * direction;
+                waypoints.push({ x: startX, y: startY + offset });
+                waypoints.push({ x: endX, y: startY + offset });
+            } else {
+                // Normal case: 2 turns at midpoint
+                const midY = startY + dy / 2;
+                waypoints.push({ x: startX, y: midY });
+                waypoints.push({ x: endX, y: midY });
+            }
+        }
+
+        // Always end at target
+        waypoints.push({ x: endX, y: endY });
+
+        return waypoints;
+    },
+
+    /**
+     * Get edge center based on direction from target to source
+     * Uses simple dominant-axis approach: whichever direction (horizontal/vertical)
+     * has greater distance determines which edge to use
      *
      * @param {number} sourceX - Source X position
      * @param {number} sourceY - Source Y position
@@ -7758,42 +8281,34 @@ Object.assign(app, {
      * @param {number} targetY - Target center Y
      * @param {number} rectWidth - Target rectangle width
      * @param {number} rectHeight - Target rectangle height
-     * @returns {{x: number, y: number}} Center point of edge in source's quadrant
+     * @returns {{x: number, y: number}} Center point of appropriate edge
      */
     getOppositeEdgeCenter(sourceX, sourceY, targetX, targetY, rectWidth, rectHeight) {
         const halfWidth = rectWidth / 2;
         const halfHeight = rectHeight / 2;
 
-        // Calculate relative position of source to target center
+        // Calculate direction from target to source
         const dx = sourceX - targetX;
         const dy = sourceY - targetY;
 
-        // The diagonal lines from center through corners divide the space into 4 regions
-        // Each region corresponds to one edge of the rectangle
-        // We use the slope of the diagonal lines to determine which region the source is in
-
-        // Slope of diagonal from center to top-right corner: dy/dx = -halfHeight/halfWidth
-        // Slope of diagonal from center to bottom-right corner: dy/dx = halfHeight/halfWidth
-
-        // Calculate which quadrant the source is in based on diagonal boundaries
-        // Compare the actual slope (dy/dx) with the diagonal slopes
-
-        if (Math.abs(dy) * halfWidth < Math.abs(dx) * halfHeight) {
-            // Source is in left or right quadrant (horizontal dominates)
+        // Pick edge based on dominant axis
+        // Use absolute values to determine which direction is stronger
+        if (Math.abs(dx) > Math.abs(dy)) {
+            // Horizontal direction dominates
             if (dx > 0) {
-                // Right quadrant: arrow lands on right edge center
+                // Source is to the right
                 return { x: targetX + halfWidth, y: targetY };
             } else {
-                // Left quadrant: arrow lands on left edge center
+                // Source is to the left
                 return { x: targetX - halfWidth, y: targetY };
             }
         } else {
-            // Source is in top or bottom quadrant (vertical dominates)
+            // Vertical direction dominates
             if (dy > 0) {
-                // Bottom quadrant: arrow lands on bottom edge center
+                // Source is below
                 return { x: targetX, y: targetY + halfHeight };
             } else {
-                // Top quadrant: arrow lands on top edge center
+                // Source is above
                 return { x: targetX, y: targetY - halfHeight };
             }
         }
@@ -9032,6 +9547,11 @@ Object.assign(app, {
             const currentPriorityEmoji = task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟠' : '⚪';
             buttons.push({ label: `${currentPriorityEmoji} Set Priority`, isPrioritySubmenu: true, currentPriority: task.priority });
 
+            // Arrow routing submenu
+            const currentRouting = task.arrowRouting || 'inherit';
+            const routingEmoji = currentRouting === 'direct' ? '↗️' : currentRouting === 'orthogonal' ? '↪️' : '⚙️';
+            buttons.push({ label: `${routingEmoji} Arrow Routing`, isArrowRoutingSubmenu: true, currentRouting: currentRouting });
+
             // Add hide option if task has a parent (not a root task)
             if (task.mainParent !== null) {
                 buttons.push({ label: task.hidden ? '👁️ Show' : '🙈 Hide', action: () => this.toggleHiddenSelf(taskId) });
@@ -9079,8 +9599,79 @@ Object.assign(app, {
             buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
         }
 
-        buttons.forEach(({ label, action, isLinksSubmenu, isPrioritySubmenu, currentPriority }) => {
-            if (isPrioritySubmenu) {
+        buttons.forEach(({ label, action, isLinksSubmenu, isPrioritySubmenu, currentPriority, isArrowRoutingSubmenu, currentRouting }) => {
+            if (isArrowRoutingSubmenu) {
+                // Create arrow routing submenu
+                const routingBtn = document.createElement('button');
+                routingBtn.className = 'menu-item-with-submenu';
+                routingBtn.textContent = label;
+
+                const routingSubmenu = document.createElement('div');
+                routingSubmenu.className = 'submenu-nested';
+                routingSubmenu.style.display = 'none';
+
+                let hideTimeout = null;
+
+                routingBtn.addEventListener('mouseenter', () => {
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                        hideTimeout = null;
+                    }
+                    const rect = routingBtn.getBoundingClientRect();
+                    routingSubmenu.style.left = `${rect.right}px`;
+                    routingSubmenu.style.top = `${rect.top}px`;
+                    routingSubmenu.style.display = 'block';
+                });
+
+                routingBtn.addEventListener('mouseleave', (evt) => {
+                    hideTimeout = setTimeout(() => {
+                        const hoveredElement = document.elementFromPoint(evt.clientX, evt.clientY);
+                        if (!routingSubmenu.contains(hoveredElement)) {
+                            routingSubmenu.style.display = 'none';
+                        }
+                    }, 100);
+                });
+
+                routingSubmenu.addEventListener('mouseenter', () => {
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                        hideTimeout = null;
+                    }
+                });
+
+                routingSubmenu.addEventListener('mouseleave', () => {
+                    routingSubmenu.style.display = 'none';
+                });
+
+                // Add routing options
+                const routingOptions = [
+                    { value: 'inherit', label: 'Inherit from Parent', emoji: '⚙️' },
+                    { value: 'direct', label: 'Direct (Straight/Curved)', emoji: '↗️' },
+                    { value: 'orthogonal', label: 'Orthogonal (90° Turns)', emoji: '↪️' }
+                ];
+
+                routingOptions.forEach(({ value, label: routingLabel, emoji }) => {
+                    const item = document.createElement('div');
+                    item.className = 'submenu-item';
+                    item.textContent = `${emoji} ${routingLabel}`;
+
+                    // Add checkmark if this is the current routing
+                    if (value === currentRouting) {
+                        item.textContent = `✓ ${emoji} ${routingLabel}`;
+                        item.style.fontWeight = '600';
+                    }
+
+                    item.onclick = (evt) => {
+                        evt.stopPropagation();
+                        this.closeMenu();
+                        this.setArrowRouting(taskId, value);
+                    };
+                    routingSubmenu.appendChild(item);
+                });
+
+                document.body.appendChild(routingSubmenu);
+                menu.appendChild(routingBtn);
+            } else if (isPrioritySubmenu) {
                 // Create priority submenu
                 const priorityBtn = document.createElement('button');
                 priorityBtn.className = 'menu-item-with-submenu';
@@ -9902,6 +10493,40 @@ Object.assign(app, {
                 default: true,
                 description: 'Arrows land on the opposite edge (center of far side) instead of the nearest edge. Creates more consistent, organized layouts.'
             },
+            arrowRoutingMode: {
+                label: 'Arrow Routing Mode',
+                type: 'select',
+                default: 'direct',
+                options: [
+                    { value: 'direct', label: 'Direct (Straight/Curved)' },
+                    { value: 'orthogonal', label: 'Orthogonal (90° Turns)' }
+                ],
+                description: 'Direct: arrows go straight from source to target. Orthogonal: arrows use 90-degree turns for a structured, circuit-board look. Toggle with Ctrl+Alt+A.'
+            },
+            orthogonalCornerRadius: {
+                label: 'Orthogonal Corner Radius',
+                type: 'number',
+                default: 15,
+                min: 0,
+                max: 30,
+                step: 1,
+                description: 'Roundness of corners in orthogonal routing mode (0 = sharp 90° angles, 30 = smooth curves)'
+            },
+            enableSnapping: {
+                label: 'Enable Alignment Snapping',
+                type: 'checkbox',
+                default: true,
+                description: 'Snap nodes to align with edges and centers of nearby nodes when dragging. Shows visual guide lines during drag.'
+            },
+            snapThreshold: {
+                label: 'Snap Detection Distance (px)',
+                type: 'number',
+                default: 10,
+                min: 0,
+                max: 50,
+                step: 1,
+                description: 'Distance in pixels for snap to activate. Higher values make snapping more aggressive.'
+            },
             maxUndoSteps: {
                 label: 'Max Undo History',
                 type: 'number',
@@ -10267,8 +10892,10 @@ Object.assign(app, {
                     { keys: 'Click node', description: 'Select task (clears other selections)' },
                     { keys: `${modSymbol}+Click node`, description: 'Multi-select (toggle selection)' },
                     { keys: `${modSymbol}+Drag empty`, description: 'Box select (select all nodes in rectangle)' },
-                    { keys: 'Escape', description: 'Clear all selections' }
-                ]
+                    { keys: 'Escape', description: 'Clear all selections' },
+                    { keys: '← → ↑ ↓ Arrow keys', description: 'Move selected task(s) 1 pixel in direction' }
+                ],
+                tip: '💡 <strong>Pro Tip:</strong> Use arrow keys for precise positioning of selected tasks - great for perfect alignment!'
             },
             {
                 category: '📊 Status & Priority',
@@ -12206,6 +12833,17 @@ Object.assign(app, {
                     selectedArray.forEach(id => this.cyclePriority(id));
                 }
             }
+
+            // Ctrl+Alt+A to toggle arrow routing mode
+            if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey) && e.altKey && this.editingTaskId === null) {
+                e.preventDefault();
+                // Toggle between 'direct' and 'orthogonal'
+                this.arrowRoutingMode = this.arrowRoutingMode === 'direct' ? 'orthogonal' : 'direct';
+                const modeName = this.arrowRoutingMode === 'direct' ? 'Direct' : 'Orthogonal';
+                this.showToast(`Arrow routing: ${modeName}`, 'info', 2000);
+                this.saveToStorage();
+                this.render();
+            }
         });
 
         // ========================================
@@ -12258,10 +12896,13 @@ Object.assign(app, {
         });
 
         // ========================================
-        // Mouse Wheel Zoom
+        // Mouse Wheel Zoom (zooms toward cursor position)
         // ========================================
         svg.addEventListener('wheel', (e) => {
             e.preventDefault();
+
+            // Get cursor position in SVG coordinates BEFORE zoom
+            const cursorBeforeZoom = this.getSVGPoint(e);
 
             // Normalize deltaY based on deltaMode
             // deltaMode: 0 = pixels, 1 = lines, 2 = pages
@@ -12276,10 +12917,27 @@ Object.assign(app, {
             const zoomChange = (delta / 100) * this.wheelZoomSpeed;
             const zoomFactor = 1 + zoomChange;
 
+            const oldZoomLevel = this.zoomLevel;
             this.zoomLevel = Math.max(
                 this.minZoom,
                 Math.min(this.maxZoom, this.zoomLevel * zoomFactor)
             );
+
+            // Calculate how viewBox dimensions change
+            const oldWidth = this.viewBox.width;
+            const oldHeight = this.viewBox.height;
+            const newWidth = window.innerWidth / this.zoomLevel;
+            const newHeight = (window.innerHeight - 60) / this.zoomLevel;
+
+            // Calculate cursor position as ratio in old viewBox
+            const cursorRatioX = (cursorBeforeZoom.x - this.viewBox.x) / oldWidth;
+            const cursorRatioY = (cursorBeforeZoom.y - this.viewBox.y) / oldHeight;
+
+            // Adjust viewBox position to keep cursor at same SVG coordinate
+            this.viewBox.x = cursorBeforeZoom.x - (cursorRatioX * newWidth);
+            this.viewBox.y = cursorBeforeZoom.y - (cursorRatioY * newHeight);
+            this.viewBox.width = newWidth;
+            this.viewBox.height = newHeight;
 
             this.updateZoomDisplay();
             this.render();
@@ -12300,6 +12958,34 @@ Object.assign(app, {
             if (anyModalOpen) return;
 
             if (this.editingTaskId !== null) return; // Don't run shortcuts while editing text
+
+            // Arrow keys = move selected nodes 1 pixel
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                if (this.selectedTaskIds.size > 0) {
+                    e.preventDefault();
+
+                    const selectedTasks = Array.from(this.selectedTaskIds)
+                        .map(id => this.tasks.find(t => t.id === id))
+                        .filter(t => t);
+
+                    if (selectedTasks.length === 0) return;
+
+                    // Save snapshot for undo
+                    const taskNames = selectedTasks.map(t => this.truncateTitle(t.title || 'Untitled', 20)).join(', ');
+                    this.saveSnapshot(`Move ${selectedTasks.length} task(s): ${taskNames}`);
+
+                    // Move all selected tasks by 1 pixel
+                    selectedTasks.forEach(task => {
+                        if (e.key === 'ArrowUp') task.y -= 1;
+                        else if (e.key === 'ArrowDown') task.y += 1;
+                        else if (e.key === 'ArrowLeft') task.x -= 1;
+                        else if (e.key === 'ArrowRight') task.x += 1;
+                    });
+
+                    this.render();
+                    this.saveToStorage();
+                }
+            }
 
             // Ctrl/Cmd + Plus/Equals = zoom in
             if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {

@@ -197,6 +197,40 @@ export const SettingsMixin = {
                 default: true,
                 description: 'Arrows land on the opposite edge (center of far side) instead of the nearest edge. Creates more consistent, organized layouts.'
             },
+            arrowRoutingMode: {
+                label: 'Arrow Routing Mode',
+                type: 'select',
+                default: 'direct',
+                options: [
+                    { value: 'direct', label: 'Direct (Straight/Curved)' },
+                    { value: 'orthogonal', label: 'Orthogonal (90° Turns)' }
+                ],
+                description: 'Direct: arrows go straight from source to target. Orthogonal: arrows use 90-degree turns for a structured, circuit-board look. Toggle with Ctrl+Alt+A.'
+            },
+            orthogonalCornerRadius: {
+                label: 'Orthogonal Corner Radius',
+                type: 'number',
+                default: 15,
+                min: 0,
+                max: 30,
+                step: 1,
+                description: 'Roundness of corners in orthogonal routing mode (0 = sharp 90° angles, 30 = smooth curves)'
+            },
+            enableSnapping: {
+                label: 'Enable Alignment Snapping',
+                type: 'checkbox',
+                default: true,
+                description: 'Snap nodes to align with edges and centers of nearby nodes when dragging. Shows visual guide lines during drag.'
+            },
+            snapThreshold: {
+                label: 'Snap Detection Distance (px)',
+                type: 'number',
+                default: 10,
+                min: 0,
+                max: 50,
+                step: 1,
+                description: 'Distance in pixels for snap to activate. Higher values make snapping more aggressive.'
+            },
             maxUndoSteps: {
                 label: 'Max Undo History',
                 type: 'number',

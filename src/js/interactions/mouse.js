@@ -179,11 +179,11 @@ export const MouseMixin = {
             this.updateArrowDotHover(pt.x, pt.y);
         }
 
-        // Update curve dot hover detection (only when Ctrl is held and not dragging)
-        if (!this.arrowDotDrag.active && !this.curveDotDrag.active && (e.ctrlKey || e.metaKey)) {
+        // Update curve dot hover detection (only when Ctrl is held, not in orthogonal mode, and not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active && (e.ctrlKey || e.metaKey) && this.arrowRoutingMode !== 'orthogonal') {
             this.updateCurveDotHover(pt.x, pt.y);
         } else if (!this.curveDotDrag.active) {
-            // Clear curve dot hover if Ctrl not held
+            // Clear curve dot hover if Ctrl not held or in orthogonal mode
             if (this.hoveredCurveDot) {
                 this.hoveredCurveDot = null;
                 this.render();
@@ -237,8 +237,20 @@ export const MouseMixin = {
         } else if (this.dragMode === 'node' && this.selectedNode !== null) {
             const task = this.tasks.find(t => t.id === this.selectedNode);
             if (task) {
-                const newX = pt.x - this.dragStart.x;
-                const newY = pt.y - this.dragStart.y;
+                let newX = pt.x - this.dragStart.x;
+                let newY = pt.y - this.dragStart.y;
+
+                // Apply snapping
+                if (this.enableSnapping) {
+                    const dims = this.calculateTaskDimensions(task);
+                    const excludeIds = this.selectedTaskIds.has(this.selectedNode) ? this.selectedTaskIds : new Set([this.selectedNode]);
+                    const snapped = this.calculateSnapping(newX, newY, dims.width, dims.height, excludeIds);
+                    newX = snapped.x;
+                    newY = snapped.y;
+                    this.activeSnapLines = snapped.snapLines;
+                } else {
+                    this.activeSnapLines = [];
+                }
 
                 // Check if we're dragging a selected node
                 if (this.selectedTaskIds.has(this.selectedNode)) {
@@ -296,8 +308,21 @@ export const MouseMixin = {
             }
         } else if (this.dragMode === 'subtree' && this.selectedNode !== null) {
             // Calculate offset from original root position
-            const newX = pt.x - this.dragStart.x;
-            const newY = pt.y - this.dragStart.y;
+            let newX = pt.x - this.dragStart.x;
+            let newY = pt.y - this.dragStart.y;
+
+            // Apply snapping to root node
+            if (this.enableSnapping) {
+                const rootTask = this.tasks.find(t => t.id === this.selectedNode);
+                const dims = this.calculateTaskDimensions(rootTask);
+                const excludeIds = new Set(this.draggedSubtree);
+                const snapped = this.calculateSnapping(newX, newY, dims.width, dims.height, excludeIds);
+                newX = snapped.x;
+                newY = snapped.y;
+                this.activeSnapLines = snapped.snapLines;
+            } else {
+                this.activeSnapLines = [];
+            }
 
             const dx = newX - this.dragOriginalPos.x;
             const dy = newY - this.dragOriginalPos.y;
@@ -606,6 +631,9 @@ export const MouseMixin = {
 
         // Remove custom cursor arrow if it exists
         this.removeCursorArrow();
+
+        // Clear snap lines
+        this.activeSnapLines = [];
 
         this.dragMode = null;
         this.selectedNode = null;

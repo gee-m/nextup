@@ -25,6 +25,7 @@
  * - Escape: Clear selections
  * - Ctrl/Cmd+A: Select all tasks
  * - A: Select all tasks in subtree of selected
+ * - Arrow Keys: Move selected task(s) 1 pixel in direction
  *
  * Navigation:
  * - 0-9: Jump to home with keybind
@@ -47,6 +48,7 @@
  * - -/_: Zoom out
  * - 0: Reset zoom to 100%
  * - T: Toggle dark mode
+ * - Ctrl/Cmd+Alt+A: Toggle arrow routing mode (Direct/Orthogonal)
  *
  * System:
  * - ?: Show shortcuts modal
