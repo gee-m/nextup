@@ -67,6 +67,49 @@ const app = {
     debugCtrlMode: false,        // Debug mode: treat all clicks/drags as if Ctrl is pressed
 
     // ========================================
+    // Arrow Snap Points
+    // ========================================
+    arrowDotDrag: {
+        active: false,           // Is arrow dot drag in progress?
+        dotType: null,           // 'source' or 'target' (which end of arrow)
+        taskId: null,            // Task being modified
+        relatedTaskId: null,     // Parent (for target) or child (for source)
+        edge: null,              // Current edge: 'top'|'right'|'bottom'|'left'
+        normalized: 0.5,         // Position along edge (0-1)
+        lastRenderTime: 0,       // For throttling renders during drag
+        lastClickTime: 0,        // Track last click time for double-click detection
+        lastClickedDotId: null   // Track which dot was last clicked (taskId-parentId)
+    },
+    hoveredArrowDot: null,       // Currently hovered arrow dot {type, taskId, relatedTaskId}
+    arrowDotRadius: 15,          // Hover detection radius (px) - increased for easier detection
+    arrowDotHideRadius: 30,      // Hide dot when cursor is further than this (px)
+    arrowDotSize: 4,             // Default dot size (px) - very small
+    arrowDotHoverSize: 5,        // Hover dot size (px) - very small
+    arrowDotDragSize: 7,         // Dragging dot size (px) - small
+    arrowSnapThreshold: 10,      // Snap detection threshold (px) - increased for easier snapping
+    arrowDragThrottleFps: 60,    // Render throttle during drag (not used - real-time now)
+
+    // ========================================
+    // Curve Control Points (Bezier handles)
+    // ========================================
+    curveDotDrag: {
+        active: false,           // Is curve control point drag in progress?
+        taskId: null,            // Task ID
+        parentId: null,          // Parent ID
+        controlPoints: [],       // Array of control points being edited
+        editingIndex: null,      // Index of point being dragged
+        isNewPoint: false,       // True if adding new point
+        initialX: 0,             // Initial position for cancel check
+        initialY: 0
+    },
+    hoveredCurveDot: null,       // Currently hovered curve control dot {linkType, taskId, relatedTaskId, x, y}
+    curveDotRadius: 15,          // Hover detection radius (px)
+    curveDotHideRadius: 40,      // Hide dot when cursor is further than this (px)
+    curveDotSize: 5,             // Default dot size (px)
+    curveDotHoverSize: 6,        // Hover dot size (px)
+    curveDotDragSize: 8,         // Dragging dot size (px)
+
+    // ========================================
     // Text & Typography Configuration
     // ========================================
     textLengthThreshold: 80,     // Character limit before truncation
@@ -118,6 +161,14 @@ const app = {
     // Performance
     // ========================================
     saveDebounceTimer: null,     // Timer for debounced saves (canvas pan, etc.)
+
+    // FPS Counter
+    showFpsCounter: true,        // Show FPS counter overlay
+    fpsFrameTimes: [],           // Array of recent frame timestamps
+    fpsLastFrameTime: 0,         // Last frame timestamp
+    fpsCurrentFps: 0,            // Current FPS
+    fpsAverageFps: 0,            // Average FPS over last second
+    fpsLagThreshold: 30,         // FPS below this triggers lag warning
 
     // ========================================
     // User Preferences

@@ -102,6 +102,40 @@ Object.assign(app, {
         svg.addEventListener('dblclick', (e) => {
             if (this.editingTaskId !== null) return; // Already editing
 
+            // Check if double-clicking on arrow dot (reset to default position)
+            if (e.target.classList && e.target.classList.contains('arrow-dot')) {
+                const dotType = e.target.getAttribute('data-dot-type');
+                const taskId = parseInt(e.target.getAttribute('data-task-id'));
+                const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+
+                this.resetArrowPosition({
+                    type: dotType,
+                    taskId: taskId,
+                    parentId: relatedId
+                });
+
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Check if double-clicking on curve control dot (reset to straight line)
+            if (e.target.classList && e.target.classList.contains('curve-dot')) {
+                const linkType = e.target.getAttribute('data-link-type');
+                const taskId = parseInt(e.target.getAttribute('data-task-id'));
+                const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+
+                this.resetLineCurve({
+                    linkType: linkType,
+                    taskId: taskId,
+                    relatedTaskId: relatedId
+                });
+
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
             // Try to find task-node by traversing up DOM
             let element = e.target;
             while (element && element !== svg) {

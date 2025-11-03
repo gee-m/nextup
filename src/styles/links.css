@@ -6,6 +6,8 @@
     stroke-width: 2;
     fill: none;
     transition: all 0.3s ease;
+    /* GPU acceleration for smooth rendering */
+    will-change: auto;
 }
 
 .link.dependency {

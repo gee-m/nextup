@@ -1,0 +1,130 @@
+/* @order: 45 */
+/* @category: styles */
+
+/* GPU Acceleration for frequently updated elements */
+/* Uses will-change and transform to create GPU layers for smooth rendering */
+
+/* Arrow dots - frequently updated during drag */
+.arrow-dot {
+    /* Force GPU compositing layer */
+    transform: translateZ(0);
+    /* Hint to browser that these properties will change */
+    will-change: transform, cx, cy;
+    /* Enable hardware acceleration */
+    backface-visibility: hidden;
+    /* Subpixel antialiasing for smoother rendering */
+    -webkit-font-smoothing: subpixel-antialiased;
+}
+
+/* Snap indicators - updated during drag */
+.snap-indicator {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: opacity, fill;
+    backface-visibility: hidden;
+}
+
+/* Temp drag lines - updated on every mousemove */
+.temp-line {
+    /* Force GPU layer for smooth updates */
+    transform: translateZ(0);
+    will-change: transform, x1, y1, x2, y2;
+    backface-visibility: hidden;
+}
+
+/* Parent links being dragged - arrow endpoint updates */
+.parent-link {
+    /* Enable GPU acceleration for arrow updates */
+    will-change: auto; /* Start with auto */
+    backface-visibility: hidden;
+}
+
+/* Active drag state - stronger GPU hints */
+.parent-link.dragging-arrow {
+    /* Force GPU layer during active drag */
+    transform: translateZ(0);
+    will-change: transform, d, x2, y2;
+}
+
+/* Cursor arrow - follows mouse during relationship drags */
+.cursor-arrow {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: transform, left, top;
+    backface-visibility: hidden;
+    /* Isolate rendering to prevent repaints of other elements */
+    contain: layout style paint;
+}
+
+/* Task nodes during drag */
+.task-node.dragging {
+    /* Force GPU layer for smooth dragging */
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+/* Canvas container - isolate rendering */
+#canvas-container {
+    /* Enable GPU rendering for entire canvas */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    /* Isolate rendering updates */
+    contain: layout style paint;
+}
+
+/* SVG canvas - GPU acceleration */
+#canvas {
+    /* Force GPU compositing */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* FPS Counter - overlay, frequently updated */
+#fps-counter {
+    /* Force GPU layer for overlay */
+    transform: translateZ(0);
+    will-change: contents;
+    backface-visibility: hidden;
+    contain: layout style paint;
+}
+
+/* Preview ghost node during Ctrl+drag */
+#preview-ghost-node {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: transform, x, y;
+    backface-visibility: hidden;
+}
+
+/* Box selection rectangle */
+#box-selection-rect {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: transform, x, y, width, height;
+    backface-visibility: hidden;
+}
+
+/* Snap indicators group - container for all snap dots */
+#snap-indicators-group {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: layout style paint;
+}
+
+/* Performance: Reduce paint complexity */
+/* Use contain property to isolate rendering updates */
+.task-node {
+    /* Isolate each task node rendering */
+    contain: layout style;
+}
+
+/* Use GPU for smooth transitions */
+.link,
+.link.dependency,
+.link.parent-visible,
+.link.other-parent {
+    /* Smooth GPU-accelerated transitions */
+    backface-visibility: hidden;
+}

@@ -48,7 +48,9 @@ export const TasksMixin = {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
-            priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+            priority: 'normal',  // Priority: 'high', 'medium', 'normal'
+            customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
+            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
         };
 
         parent.children.push(task.id);
@@ -93,7 +95,9 @@ export const TasksMixin = {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
-            priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+            priority: 'normal',  // Priority: 'high', 'medium', 'normal'
+            customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
+            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
         };
 
         parent.children.push(task.id);
@@ -136,7 +140,9 @@ export const TasksMixin = {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
-            priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+            priority: 'normal',  // Priority: 'high', 'medium', 'normal'
+            customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
+            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
         };
 
         this.tasks.push(newTask);

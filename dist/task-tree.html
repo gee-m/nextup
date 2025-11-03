@@ -699,6 +699,8 @@ input:focus {
     stroke-width: 2;
     fill: none;
     transition: all 0.3s ease;
+    /* GPU acceleration for smooth rendering */
+    will-change: auto;
 }
 
 .link.dependency {
@@ -762,6 +764,143 @@ input:focus {
 .links-dropdown {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
+}
+
+
+
+/* ============================================================
+   GPU-ACCELERATION.CSS (Category: styles)
+   ============================================================ */
+
+/* @order: 45 */
+/* @category: styles */
+
+/* GPU Acceleration for frequently updated elements */
+/* Uses will-change and transform to create GPU layers for smooth rendering */
+
+/* Arrow dots - frequently updated during drag */
+.arrow-dot {
+    /* Force GPU compositing layer */
+    transform: translateZ(0);
+    /* Hint to browser that these properties will change */
+    will-change: transform, cx, cy;
+    /* Enable hardware acceleration */
+    backface-visibility: hidden;
+    /* Subpixel antialiasing for smoother rendering */
+    -webkit-font-smoothing: subpixel-antialiased;
+}
+
+/* Snap indicators - updated during drag */
+.snap-indicator {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: opacity, fill;
+    backface-visibility: hidden;
+}
+
+/* Temp drag lines - updated on every mousemove */
+.temp-line {
+    /* Force GPU layer for smooth updates */
+    transform: translateZ(0);
+    will-change: transform, x1, y1, x2, y2;
+    backface-visibility: hidden;
+}
+
+/* Parent links being dragged - arrow endpoint updates */
+.parent-link {
+    /* Enable GPU acceleration for arrow updates */
+    will-change: auto; /* Start with auto */
+    backface-visibility: hidden;
+}
+
+/* Active drag state - stronger GPU hints */
+.parent-link.dragging-arrow {
+    /* Force GPU layer during active drag */
+    transform: translateZ(0);
+    will-change: transform, d, x2, y2;
+}
+
+/* Cursor arrow - follows mouse during relationship drags */
+.cursor-arrow {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: transform, left, top;
+    backface-visibility: hidden;
+    /* Isolate rendering to prevent repaints of other elements */
+    contain: layout style paint;
+}
+
+/* Task nodes during drag */
+.task-node.dragging {
+    /* Force GPU layer for smooth dragging */
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+/* Canvas container - isolate rendering */
+#canvas-container {
+    /* Enable GPU rendering for entire canvas */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    /* Isolate rendering updates */
+    contain: layout style paint;
+}
+
+/* SVG canvas - GPU acceleration */
+#canvas {
+    /* Force GPU compositing */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* FPS Counter - overlay, frequently updated */
+#fps-counter {
+    /* Force GPU layer for overlay */
+    transform: translateZ(0);
+    will-change: contents;
+    backface-visibility: hidden;
+    contain: layout style paint;
+}
+
+/* Preview ghost node during Ctrl+drag */
+#preview-ghost-node {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: transform, x, y;
+    backface-visibility: hidden;
+}
+
+/* Box selection rectangle */
+#box-selection-rect {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    will-change: transform, x, y, width, height;
+    backface-visibility: hidden;
+}
+
+/* Snap indicators group - container for all snap dots */
+#snap-indicators-group {
+    /* Force GPU layer */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: layout style paint;
+}
+
+/* Performance: Reduce paint complexity */
+/* Use contain property to isolate rendering updates */
+.task-node {
+    /* Isolate each task node rendering */
+    contain: layout style;
+}
+
+/* Use GPU for smooth transitions */
+.link,
+.link.dependency,
+.link.parent-visible,
+.link.other-parent {
+    /* Smooth GPU-accelerated transitions */
+    backface-visibility: hidden;
 }
 
 
@@ -1504,6 +1643,49 @@ const app = {
     debugCtrlMode: false,        // Debug mode: treat all clicks/drags as if Ctrl is pressed
 
     // ========================================
+    // Arrow Snap Points
+    // ========================================
+    arrowDotDrag: {
+        active: false,           // Is arrow dot drag in progress?
+        dotType: null,           // 'source' or 'target' (which end of arrow)
+        taskId: null,            // Task being modified
+        relatedTaskId: null,     // Parent (for target) or child (for source)
+        edge: null,              // Current edge: 'top'|'right'|'bottom'|'left'
+        normalized: 0.5,         // Position along edge (0-1)
+        lastRenderTime: 0,       // For throttling renders during drag
+        lastClickTime: 0,        // Track last click time for double-click detection
+        lastClickedDotId: null   // Track which dot was last clicked (taskId-parentId)
+    },
+    hoveredArrowDot: null,       // Currently hovered arrow dot {type, taskId, relatedTaskId}
+    arrowDotRadius: 15,          // Hover detection radius (px) - increased for easier detection
+    arrowDotHideRadius: 30,      // Hide dot when cursor is further than this (px)
+    arrowDotSize: 4,             // Default dot size (px) - very small
+    arrowDotHoverSize: 5,        // Hover dot size (px) - very small
+    arrowDotDragSize: 7,         // Dragging dot size (px) - small
+    arrowSnapThreshold: 10,      // Snap detection threshold (px) - increased for easier snapping
+    arrowDragThrottleFps: 60,    // Render throttle during drag (not used - real-time now)
+
+    // ========================================
+    // Curve Control Points (Bezier handles)
+    // ========================================
+    curveDotDrag: {
+        active: false,           // Is curve control point drag in progress?
+        taskId: null,            // Task ID
+        parentId: null,          // Parent ID
+        controlPoints: [],       // Array of control points being edited
+        editingIndex: null,      // Index of point being dragged
+        isNewPoint: false,       // True if adding new point
+        initialX: 0,             // Initial position for cancel check
+        initialY: 0
+    },
+    hoveredCurveDot: null,       // Currently hovered curve control dot {linkType, taskId, relatedTaskId, x, y}
+    curveDotRadius: 15,          // Hover detection radius (px)
+    curveDotHideRadius: 40,      // Hide dot when cursor is further than this (px)
+    curveDotSize: 5,             // Default dot size (px)
+    curveDotHoverSize: 6,        // Hover dot size (px)
+    curveDotDragSize: 8,         // Dragging dot size (px)
+
+    // ========================================
     // Text & Typography Configuration
     // ========================================
     textLengthThreshold: 80,     // Character limit before truncation
@@ -1555,6 +1737,14 @@ const app = {
     // Performance
     // ========================================
     saveDebounceTimer: null,     // Timer for debounced saves (canvas pan, etc.)
+
+    // FPS Counter
+    showFpsCounter: true,        // Show FPS counter overlay
+    fpsFrameTimes: [],           // Array of recent frame timestamps
+    fpsLastFrameTime: 0,         // Last frame timestamp
+    fpsCurrentFps: 0,            // Current FPS
+    fpsAverageFps: 0,            // Average FPS over last second
+    fpsLagThreshold: 30,         // FPS below this triggers lag warning
 
     // ========================================
     // User Preferences
@@ -2230,6 +2420,278 @@ app.FEATURES = {
 };
 
 console.log('[constants.js] Application constants loaded');
+
+
+
+// ============================================================
+// UTILS/GEOMETRY.JS (Order: 9, Category: Utils)
+// ============================================================
+
+/**
+ * @module utils/geometry
+ * @order 9
+ * @category Utils
+ *
+ * Geometry utilities for arrow snap points and edge calculations
+ */
+
+Object.assign(app, {
+    /**
+     * Constrain a point to the nearest edge of a rectangle
+     * Returns which edge and the normalized position (0-1) along that edge
+     *
+     * @param {number} mouseX - Mouse X position in SVG coordinates
+     * @param {number} mouseY - Mouse Y position in SVG coordinates
+     * @param {number} rectX - Rectangle center X
+     * @param {number} rectY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @returns {{edge: string, normalized: number}} Edge and normalized position
+     */
+    constrainToRectEdge(mouseX, mouseY, rectX, rectY, rectWidth, rectHeight) {
+        // DEFENSIVE: Check for invalid inputs
+        if (!isFinite(mouseX) || !isFinite(mouseY) || !isFinite(rectX) || !isFinite(rectY) ||
+            !isFinite(rectWidth) || !isFinite(rectHeight)) {
+            console.warn('[constrainToRectEdge] Invalid inputs:', { mouseX, mouseY, rectX, rectY, rectWidth, rectHeight });
+            return { edge: 'top', normalized: 0.5 };
+        }
+
+        // Rectangle bounds
+        const left = rectX - rectWidth / 2;
+        const right = rectX + rectWidth / 2;
+        const top = rectY - rectHeight / 2;
+        const bottom = rectY + rectHeight / 2;
+
+        // Calculate distances to each edge
+        const distToTop = Math.abs(mouseY - top);
+        const distToBottom = Math.abs(mouseY - bottom);
+        const distToLeft = Math.abs(mouseX - left);
+        const distToRight = Math.abs(mouseX - right);
+
+        // Find closest edge
+        const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
+
+        let edge, normalized;
+
+        if (minDist === distToTop) {
+            edge = 'top';
+            // Normalized position along top edge (0 = left, 1 = right)
+            normalized = (mouseX - left) / rectWidth;
+        } else if (minDist === distToBottom) {
+            edge = 'bottom';
+            // Normalized position along bottom edge (0 = left, 1 = right)
+            normalized = (mouseX - left) / rectWidth;
+        } else if (minDist === distToLeft) {
+            edge = 'left';
+            // Normalized position along left edge (0 = top, 1 = bottom)
+            normalized = (mouseY - top) / rectHeight;
+        } else {
+            edge = 'right';
+            // Normalized position along right edge (0 = top, 1 = bottom)
+            normalized = (mouseY - top) / rectHeight;
+        }
+
+        // Clamp normalized to [0, 1]
+        normalized = Math.max(0, Math.min(1, normalized));
+
+        return { edge, normalized };
+    },
+
+    /**
+     * Convert edge + normalized position back to absolute SVG coordinates
+     *
+     * @param {string} edge - 'top', 'right', 'bottom', or 'left'
+     * @param {number} normalized - Position along edge (0-1)
+     * @param {number} rectX - Rectangle center X
+     * @param {number} rectY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @returns {{x: number, y: number}} Absolute position
+     */
+    denormalizeEdgePosition(edge, normalized, rectX, rectY, rectWidth, rectHeight) {
+        // DEFENSIVE: Check for invalid inputs
+        if (!isFinite(normalized) || !isFinite(rectX) || !isFinite(rectY) ||
+            !isFinite(rectWidth) || !isFinite(rectHeight)) {
+            console.warn('[denormalizeEdgePosition] Invalid inputs:', { edge, normalized, rectX, rectY, rectWidth, rectHeight });
+            return { x: rectX, y: rectY };
+        }
+
+        // Clamp normalized to [0, 1]
+        normalized = Math.max(0, Math.min(1, normalized));
+
+        const left = rectX - rectWidth / 2;
+        const right = rectX + rectWidth / 2;
+        const top = rectY - rectHeight / 2;
+        const bottom = rectY + rectHeight / 2;
+
+        let x, y;
+
+        switch (edge) {
+            case 'top':
+                x = left + normalized * rectWidth;
+                y = top;
+                break;
+            case 'bottom':
+                x = left + normalized * rectWidth;
+                y = bottom;
+                break;
+            case 'left':
+                x = left;
+                y = top + normalized * rectHeight;
+                break;
+            case 'right':
+                x = right;
+                y = top + normalized * rectHeight;
+                break;
+            default:
+                console.warn('[denormalizeEdgePosition] Unknown edge:', edge);
+                x = rectX;
+                y = rectY;
+        }
+
+        return { x, y };
+    },
+
+    /**
+     * Get all 8 snap positions for a rectangle (4 corners + 4 midpoints)
+     *
+     * @param {number} rectX - Rectangle center X
+     * @param {number} rectY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @returns {Array<{edge: string, normalized: number}>} Array of snap positions
+     */
+    getSnapPositions(rectX, rectY, rectWidth, rectHeight) {
+        // DEFENSIVE: Guard against invalid inputs
+        if (!isFinite(rectX) || !isFinite(rectY) || !isFinite(rectWidth) || !isFinite(rectHeight)) {
+            console.warn('[getSnapPositions] Invalid inputs:', { rectX, rectY, rectWidth, rectHeight });
+            return [];
+        }
+
+        return [
+            // Top edge
+            { edge: 'top', normalized: 0.0 },   // Top-left corner
+            { edge: 'top', normalized: 0.5 },   // Top midpoint
+            { edge: 'top', normalized: 1.0 },   // Top-right corner
+
+            // Right edge
+            { edge: 'right', normalized: 0.5 }, // Right midpoint
+
+            // Bottom edge
+            { edge: 'bottom', normalized: 1.0 }, // Bottom-right corner
+            { edge: 'bottom', normalized: 0.5 }, // Bottom midpoint
+            { edge: 'bottom', normalized: 0.0 }, // Bottom-left corner
+
+            // Left edge
+            { edge: 'left', normalized: 0.5 }   // Left midpoint
+        ];
+    },
+
+    /**
+     * Find nearest snap position within threshold
+     *
+     * @param {{edge: string, normalized: number}} currentPos - Current position
+     * @param {Array<{edge: string, normalized: number}>} snapPositions - Available snap positions
+     * @param {number} rectX - Rectangle center X
+     * @param {number} rectY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @param {number} threshold - Snap threshold in pixels (default 3)
+     * @returns {{edge: string, normalized: number}|null} Snap position or null
+     */
+    findNearestSnap(currentPos, snapPositions, rectX, rectY, rectWidth, rectHeight, threshold = 3) {
+        // DEFENSIVE: Validate inputs
+        if (!currentPos || !snapPositions || !Array.isArray(snapPositions)) {
+            console.warn('[findNearestSnap] Invalid inputs:', { currentPos, snapPositions });
+            return null;
+        }
+
+        // Convert current position to absolute coordinates
+        const currentAbsolute = this.denormalizeEdgePosition(
+            currentPos.edge, currentPos.normalized,
+            rectX, rectY, rectWidth, rectHeight
+        );
+
+        let nearestSnap = null;
+        let minDistance = Infinity;
+
+        // Find snaps on the same edge only
+        const sameEdgeSnaps = snapPositions.filter(snap => snap.edge === currentPos.edge);
+
+        sameEdgeSnaps.forEach(snap => {
+            const snapAbsolute = this.denormalizeEdgePosition(
+                snap.edge, snap.normalized,
+                rectX, rectY, rectWidth, rectHeight
+            );
+
+            const distance = Math.sqrt(
+                Math.pow(snapAbsolute.x - currentAbsolute.x, 2) +
+                Math.pow(snapAbsolute.y - currentAbsolute.y, 2)
+            );
+
+            if (distance <= threshold && distance < minDistance) {
+                minDistance = distance;
+                nearestSnap = snap;
+            }
+        });
+
+        return nearestSnap;
+    },
+
+    /**
+     * Check if a point is within radius of another point
+     * PERF: Uses squared distance to avoid Math.sqrt()
+     *
+     * @param {number} x1 - First point X
+     * @param {number} y1 - First point Y
+     * @param {number} x2 - Second point X
+     * @param {number} y2 - Second point Y
+     * @param {number} radius - Detection radius in pixels
+     * @returns {boolean} True if within radius
+     */
+    isPointNearPosition(x1, y1, x2, y2, radius) {
+        // DEFENSIVE: Check for NaN
+        if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2) || !isFinite(radius)) {
+            return false;
+        }
+
+        // PERF: Compare squared distances to avoid Math.sqrt()
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const distanceSquared = dx * dx + dy * dy;
+        const radiusSquared = radius * radius;
+
+        return distanceSquared <= radiusSquared;
+    },
+
+    /**
+     * Calculate pixel distance between two edge positions
+     * Used for snap threshold detection
+     *
+     * @param {{edge: string, normalized: number}} pos1 - First position
+     * @param {{edge: string, normalized: number}} pos2 - Second position
+     * @param {number} rectX - Rectangle center X
+     * @param {number} rectY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @returns {number} Distance in pixels
+     */
+    calculateEdgeDistance(pos1, pos2, rectX, rectY, rectWidth, rectHeight) {
+        // DEFENSIVE: Validate inputs
+        if (!pos1 || !pos2) {
+            console.warn('[calculateEdgeDistance] Invalid positions:', { pos1, pos2 });
+            return Infinity;
+        }
+
+        const abs1 = this.denormalizeEdgePosition(pos1.edge, pos1.normalized, rectX, rectY, rectWidth, rectHeight);
+        const abs2 = this.denormalizeEdgePosition(pos2.edge, pos2.normalized, rectX, rectY, rectWidth, rectHeight);
+
+        const dx = abs2.x - abs1.x;
+        const dy = abs2.y - abs1.y;
+
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+});
 
 
 
@@ -3495,7 +3957,9 @@ Object.assign(app, {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
-            priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+            priority: 'normal',  // Priority: 'high', 'medium', 'normal'
+            customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
+            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
         };
 
         parent.children.push(task.id);
@@ -3540,7 +4004,9 @@ Object.assign(app, {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
-            priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+            priority: 'normal',  // Priority: 'high', 'medium', 'normal'
+            customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
+            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
         };
 
         parent.children.push(task.id);
@@ -3583,7 +4049,9 @@ Object.assign(app, {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
-            priority: 'normal'  // Priority: 'high', 'medium', 'normal'
+            priority: 'normal',  // Priority: 'high', 'medium', 'normal'
+            customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
+            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
         };
 
         this.tasks.push(newTask);
@@ -4836,6 +5304,111 @@ Object.assign(app, {
  */
 
 Object.assign(app, {
+    /**
+     * Create curved line with control point (quadratic bezier)
+     *
+     * @param {number} x1 - Start X
+     * @param {number} y1 - Start Y
+     * @param {number} cx - Control point X
+     * @param {number} cy - Control point Y
+     * @param {number} x2 - End X
+     * @param {number} y2 - End Y
+     * @param {string} className - CSS class
+     * @returns {SVGPathElement} Curved path element
+     */
+    createCurvedLine(x1, y1, cx, cy, x2, y2, className) {
+        // Defensive: Check for invalid coordinates
+        if (!isFinite(x1) || !isFinite(y1) || !isFinite(cx) || !isFinite(cy) || !isFinite(x2) || !isFinite(y2)) {
+            console.warn(`createCurvedLine called with invalid coordinates`);
+            // Return dummy path
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 0 0');
+            path.setAttribute('class', className);
+            path.setAttribute('fill', 'none');
+            path.style.display = 'none';
+            return path;
+        }
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+        // Quadratic bezier: M start Q control end
+        const d = `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
+
+        path.setAttribute('d', d);
+        path.setAttribute('class', className);
+        path.setAttribute('fill', 'none');
+
+        // Store coordinates for later reference
+        path.setAttribute('data-x1', x1);
+        path.setAttribute('data-y1', y1);
+        path.setAttribute('data-cx', cx);
+        path.setAttribute('data-cy', cy);
+        path.setAttribute('data-x2', x2);
+        path.setAttribute('data-y2', y2);
+
+        return path;
+    },
+
+    /**
+     * Create curved line through control points using Catmull-Rom spline
+     * Simple, clean curve passing through all specified points
+     *
+     * @param {number} x1 - Start X
+     * @param {number} y1 - Start Y
+     * @param {number} x2 - End X
+     * @param {number} y2 - End Y
+     * @param {Array<{x: number, y: number}>} controlPoints - Points ON the curve
+     * @param {string} className - CSS class
+     * @returns {SVGPathElement} Curved path element
+     */
+    createMultiSegmentCurvedLine(x1, y1, x2, y2, controlPoints, className) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('class', className);
+        path.setAttribute('fill', 'none');
+
+        // Defensive: Check for invalid coordinates
+        if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) {
+            console.warn(`createMultiSegmentCurvedLine: invalid coordinates`);
+            path.setAttribute('d', 'M 0 0');
+            path.style.display = 'none';
+            return path;
+        }
+
+        // No control points - straight line
+        if (!controlPoints || !Array.isArray(controlPoints) || controlPoints.length === 0) {
+            path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+            return path;
+        }
+
+        // Build complete curve path: start -> control points -> end
+        const points = [
+            { x: x1, y: y1 },
+            ...controlPoints,
+            { x: x2, y: y2 }
+        ];
+
+        // Generate Catmull-Rom spline through all points
+        let pathData = `M ${points[0].x} ${points[0].y}`;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = points[Math.max(0, i - 1)];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = points[Math.min(points.length - 1, i + 2)];
+
+            // Catmull-Rom to cubic bezier conversion
+            const c1x = p1.x + (p2.x - p0.x) / 6;
+            const c1y = p1.y + (p2.y - p0.y) / 6;
+            const c2x = p2.x - (p3.x - p1.x) / 6;
+            const c2y = p2.y - (p3.y - p1.y) / 6;
+
+            pathData += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+        }
+
+        path.setAttribute('d', pathData);
+        return path;
+    },
+
     createLine(x1, y1, x2, y2, className) {
         // Defensive: Check for NaN or invalid coordinates
         if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2)) {
@@ -5064,6 +5637,111 @@ Object.assign(app, {
             // Create new Origin Home
             this.createHome("Origin Home");
         }
+    },
+
+    /**
+     * Render arrow dot (for dragging arrow endpoints)
+     *
+     * @param {number} x - Dot center X
+     * @param {number} y - Dot center Y
+     * @param {string} dotType - 'source' or 'target'
+     * @param {number} taskId - Task ID
+     * @param {number} relatedTaskId - Parent or child ID
+     * @param {boolean} isHovered - Is mouse hovering over this dot?
+     * @param {boolean} isDragging - Is this dot being dragged?
+     * @param {boolean} hasCustomPosition - True if arrow has custom position (blue), false if default (green)
+     * @returns {SVGCircleElement} The dot element
+     */
+    renderArrowDot(x, y, dotType, taskId, relatedTaskId, isHovered, isDragging, hasCustomPosition) {
+        // DEFENSIVE: Validate coordinates
+        if (!isFinite(x) || !isFinite(y)) {
+            console.warn('[renderArrowDot] Invalid coordinates:', { x, y });
+            return null;
+        }
+
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+
+        // Determine size based on state
+        let size = this.arrowDotSize || 10;
+        if (isDragging) {
+            size = this.arrowDotDragSize || 14;
+        } else if (isHovered) {
+            size = this.arrowDotHoverSize || 12;
+        }
+
+        // Color: Green if at default position, Blue if customized
+        const fillColor = hasCustomPosition ? '#2196f3' : '#4caf50';  // Blue = custom, Green = default
+
+        // Position and styling
+        dot.setAttribute('cx', x);
+        dot.setAttribute('cy', y);
+        dot.setAttribute('r', size);
+        dot.setAttribute('fill', fillColor);
+        dot.setAttribute('stroke', 'white');
+        dot.setAttribute('stroke-width', '2');
+        dot.setAttribute('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))');
+        dot.classList.add('arrow-dot');
+        dot.setAttribute('data-dot-type', dotType);
+        dot.setAttribute('data-task-id', taskId);
+        dot.setAttribute('data-related-id', relatedTaskId);
+
+        // Higher z-index
+        dot.style.pointerEvents = 'all';
+        dot.style.cursor = isDragging ? 'grabbing' : 'grab';
+
+        return dot;
+    },
+
+    /**
+     * Render snap indicators (8 positions: 4 corners + 4 midpoints)
+     *
+     * @param {number} rectX - Rectangle center X
+     * @param {number} rectY - Rectangle center Y
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     * @param {string} currentEdge - Current edge ('top', 'right', 'bottom', 'left')
+     * @param {number} currentNormalized - Current normalized position (0-1)
+     * @returns {Array<SVGCircleElement>} Array of snap indicator elements
+     */
+    renderSnapIndicators(rectX, rectY, rectWidth, rectHeight, currentEdge, currentNormalized) {
+        // DEFENSIVE: Validate inputs
+        if (!isFinite(rectX) || !isFinite(rectY) || !isFinite(rectWidth) || !isFinite(rectHeight)) {
+            console.warn('[renderSnapIndicators] Invalid inputs:', { rectX, rectY, rectWidth, rectHeight });
+            return [];
+        }
+
+        const indicators = [];
+        const snapPositions = this.getSnapPositions(rectX, rectY, rectWidth, rectHeight);
+        const threshold = this.arrowSnapThreshold || 3;
+
+        snapPositions.forEach(snap => {
+            const pos = this.denormalizeEdgePosition(snap.edge, snap.normalized, rectX, rectY, rectWidth, rectHeight);
+
+            const indicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            indicator.setAttribute('cx', pos.x);
+            indicator.setAttribute('cy', pos.y);
+            indicator.setAttribute('r', 6);
+
+            // Check if this is the snap position we're near
+            const isNearSnap = snap.edge === currentEdge &&
+                Math.abs(snap.normalized - currentNormalized) * (snap.edge === 'top' || snap.edge === 'bottom' ? rectWidth : rectHeight) < threshold;
+
+            if (isNearSnap) {
+                indicator.setAttribute('fill', '#4caf50');  // Green
+                indicator.setAttribute('stroke', '#2e7d32');
+            } else {
+                indicator.setAttribute('fill', '#9e9e9e');  // Gray
+                indicator.setAttribute('stroke', '#757575');
+            }
+
+            indicator.setAttribute('stroke-width', '1');
+            indicator.classList.add('snap-indicator');
+            indicator.style.pointerEvents = 'none';
+
+            indicators.push(indicator);
+        });
+
+        return indicators;
     }
 });
 
@@ -5086,6 +5764,48 @@ Object.assign(app, {
  */
 
 Object.assign(app, {
+    /**
+     * PERF: Invalidate cached dimensions when task changes
+     * Call this when task title is edited
+     */
+    invalidateDimensionCache(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+            delete task._cachedDims;
+        }
+    },
+
+    /**
+     * PERF: Invalidate all dimension caches
+     * Call this after bulk operations
+     */
+    invalidateAllDimensionCaches() {
+        this.tasks.forEach(task => {
+            delete task._cachedDims;
+        });
+    },
+
+    /**
+     * PERF: Viewport culling - check if task is visible in current viewport
+     * Adds margin for smooth scrolling
+     */
+    isTaskVisible(task, viewportBounds) {
+        if (!task || task.hidden) return false;
+
+        // Get task dimensions (cached if possible)
+        const dims = task._cachedDims || this.calculateTaskDimensions(task);
+        if (!task._cachedDims) task._cachedDims = dims;
+
+        const halfWidth = dims.width / 2;
+        const halfHeight = dims.height / 2;
+
+        // Check if task rectangle intersects viewport (with margin)
+        return !(task.x + halfWidth < viewportBounds.left ||
+                 task.x - halfWidth > viewportBounds.right ||
+                 task.y + halfHeight < viewportBounds.top ||
+                 task.y - halfHeight > viewportBounds.bottom);
+    },
+
     render() {
         const svg = document.getElementById('canvas');
         const linksGroup = document.getElementById('links');
@@ -5097,11 +5817,28 @@ Object.assign(app, {
         // Apply zoom via viewBox
         const viewBoxWidth = this.viewBox.width / this.zoomLevel;
         const viewBoxHeight = this.viewBox.height / this.zoomLevel;
+        const viewBoxX = this.viewBox.x - (viewBoxWidth - this.viewBox.width) / 2;
+        const viewBoxY = this.viewBox.y - (viewBoxHeight - this.viewBox.height) / 2;
+
         svg.setAttribute('viewBox',
-            `${this.viewBox.x - (viewBoxWidth - this.viewBox.width) / 2} ` +
-            `${this.viewBox.y - (viewBoxHeight - this.viewBox.height) / 2} ` +
-            `${viewBoxWidth} ${viewBoxHeight}`
+            `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`
         );
+
+        // PERF: Calculate visible viewport bounds for culling
+        // Add margin so tasks smoothly appear when scrolling
+        const VIEWPORT_MARGIN = 300;
+        const viewportBounds = {
+            left: viewBoxX - VIEWPORT_MARGIN,
+            right: viewBoxX + viewBoxWidth + VIEWPORT_MARGIN,
+            top: viewBoxY - VIEWPORT_MARGIN,
+            bottom: viewBoxY + viewBoxHeight + VIEWPORT_MARGIN
+        };
+
+        // PERF: Filter to only visible tasks (massive performance gain!)
+        const visibleTasks = this.tasks.filter(task =>
+            !task.hidden && this.isTaskVisible(task, viewportBounds)
+        );
+        const visibleTaskIds = new Set(visibleTasks.map(t => t.id));
 
         // Find ALL working tasks (one per root graph) using the log for O(1) lookup
         const workingTasks = [];
@@ -5169,10 +5906,8 @@ Object.assign(app, {
             directChildren: allDirectChildren
         };
 
-        // Render links
-        this.tasks.forEach(task => {
-            if (task.hidden) return;
-
+        // PERF: Render links - only for visible tasks
+        visibleTasks.forEach(task => {
             // DEFENSIVE: Skip tasks with invalid coordinates
             if (!isFinite(task.x) || !isFinite(task.y)) {
                 console.warn(`Task ${task.id} has invalid coordinates: (${task.x}, ${task.y}) - skipping render`);
@@ -5191,9 +5926,44 @@ Object.assign(app, {
                         console.error(`[RENDER] Child task ${task.id} ("${task.title}") has NaN coords: (${task.x}, ${task.y})`);
                     }
 
-                    // Create wider invisible line for easier clicking
-                    // Arrow goes from parent to child (follows drag direction A→B)
-                    const hitLine = this.createLine(parent.x, parent.y, task.x, task.y, 'link parent-hit');
+                    // Get curve control points (simple array of {x, y})
+                    const controlPoints = task.curveControlPoints?.[task.mainParent];
+                    const hasControlPoints = controlPoints && Array.isArray(controlPoints) && controlPoints.length > 0;
+
+                    // Get arrow endpoint FIRST (needed for both hit line and visible line)
+                    const isDraggingThisArrow = this.arrowDotDrag.active &&
+                                                 this.arrowDotDrag.taskId === task.id &&
+                                                 this.arrowDotDrag.relatedTaskId === task.mainParent;
+
+                    let arrowEnd;
+                    if (isDraggingThisArrow) {
+                        const dims = this.calculateTaskDimensions(task);
+                        arrowEnd = this.denormalizeEdgePosition(
+                            this.arrowDotDrag.edge,
+                            this.arrowDotDrag.normalized,
+                            task.x,
+                            task.y,
+                            dims.width,
+                            dims.height
+                        );
+                    } else {
+                        arrowEnd = this.getArrowEndpoint(parent, task, 'target');
+                    }
+
+                    // Determine control points to use (live drag or saved)
+                    const isDraggingThisCurve = this.curveDotDrag.active &&
+                                                this.curveDotDrag.taskId === task.id &&
+                                                this.curveDotDrag.parentId === task.mainParent;
+                    const effectiveControlPoints = isDraggingThisCurve ?
+                        this.curveDotDrag.controlPoints : controlPoints;
+
+                    // Create hit line and visible line
+                    const hitLine = this.createMultiSegmentCurvedLine(
+                        parent.x, parent.y,
+                        arrowEnd.x, arrowEnd.y,
+                        effectiveControlPoints,
+                        'link parent-hit'
+                    );
                     hitLine.dataset.type = 'parent';
                     hitLine.dataset.taskId = task.id;
                     hitLine.dataset.parentId = task.mainParent;
@@ -5205,13 +5975,13 @@ Object.assign(app, {
                     }
                     linksGroup.appendChild(hitLine);
 
-                    // Create visible line (non-interactive) with arrow at edge
-                    // Calculate arrow endpoint at rectangle edge for pixel-perfect positioning
-                    // Use child dimensions for arrow endpoint (arrow points to child)
-                    const { width: rectWidth, height: rectHeight } = this.calculateTaskDimensions(task);
-                    const arrowEnd = this.getLineEndAtRectEdge(parent.x, parent.y, task.x, task.y, rectWidth, rectHeight);
-
-                    const line = this.createLine(parent.x, parent.y, arrowEnd.x, arrowEnd.y, 'link parent-visible');
+                    // Create visible line
+                    const line = this.createMultiSegmentCurvedLine(
+                        parent.x, parent.y,
+                        arrowEnd.x, arrowEnd.y,
+                        effectiveControlPoints,
+                        'link parent-visible'
+                    );
                     line.style.pointerEvents = 'none';
                     // ⭐ NEW: Add data attributes so we can update during animation
                     line.dataset.type = 'parent';
@@ -5264,9 +6034,43 @@ Object.assign(app, {
             task.otherParents.forEach(parentId => {
                 const parent = this.tasks.find(t => t.id === parentId);
                 if (parent && !parent.hidden) {
-                    // Create wider invisible line for easier clicking
-                    // Arrow goes from parent to child (follows drag direction A→B)
-                    const hitLine = this.createLine(parent.x, parent.y, task.x, task.y, 'link other-parent-hit');
+                    // Get curve control points
+                    const controlPoints = task.curveControlPoints?.[parentId];
+
+                    // Get arrow endpoint
+                    const isDraggingThisArrow = this.arrowDotDrag.active &&
+                                                 this.arrowDotDrag.taskId === task.id &&
+                                                 this.arrowDotDrag.relatedTaskId === parentId;
+
+                    let arrowEnd;
+                    if (isDraggingThisArrow) {
+                        const dims = this.calculateTaskDimensions(task);
+                        arrowEnd = this.denormalizeEdgePosition(
+                            this.arrowDotDrag.edge,
+                            this.arrowDotDrag.normalized,
+                            task.x,
+                            task.y,
+                            dims.width,
+                            dims.height
+                        );
+                    } else {
+                        arrowEnd = this.getArrowEndpoint(parent, task, 'target');
+                    }
+
+                    // Determine control points to use (live drag or saved)
+                    const isDraggingThisCurve = this.curveDotDrag.active &&
+                                                this.curveDotDrag.taskId === task.id &&
+                                                this.curveDotDrag.parentId === parentId;
+                    const effectiveControlPoints = isDraggingThisCurve ?
+                        this.curveDotDrag.controlPoints : controlPoints;
+
+                    // Create hit line
+                    const hitLine = this.createMultiSegmentCurvedLine(
+                        parent.x, parent.y,
+                        arrowEnd.x, arrowEnd.y,
+                        effectiveControlPoints,
+                        'link other-parent-hit'
+                    );
                     hitLine.dataset.type = 'parent';
                     hitLine.dataset.taskId = task.id;
                     hitLine.dataset.parentId = parentId;
@@ -5278,13 +6082,13 @@ Object.assign(app, {
                     }
                     linksGroup.appendChild(hitLine);
 
-                    // Create visible line (non-interactive) with arrow at edge
-                    // Calculate arrow endpoint at rectangle edge for pixel-perfect positioning
-                    // Use child dimensions for arrow endpoint (arrow points to child)
-                    const { width: rectWidth, height: rectHeight } = this.calculateTaskDimensions(task);
-                    const arrowEnd = this.getLineEndAtRectEdge(parent.x, parent.y, task.x, task.y, rectWidth, rectHeight);
-
-                    const line = this.createLine(parent.x, parent.y, arrowEnd.x, arrowEnd.y, 'link other-parent');
+                    // Create visible line
+                    const line = this.createMultiSegmentCurvedLine(
+                        parent.x, parent.y,
+                        arrowEnd.x, arrowEnd.y,
+                        effectiveControlPoints,
+                        'link other-parent'
+                    );
                     line.setAttribute('marker-end', 'url(#arrowhead)'); // Arrow pointing to child
                     line.style.pointerEvents = 'none';
                     // ⭐ NEW: Add data attributes so we can update during animation
@@ -5340,8 +6144,8 @@ Object.assign(app, {
             });
         });
 
-        // Render nodes
-        this.tasks.forEach(task => {
+        // PERF: Render nodes - only for visible tasks
+        visibleTasks.forEach(task => {
             // DEFENSIVE: Skip tasks with invalid coordinates
             if (!isFinite(task.x) || !isFinite(task.y)) {
                 console.warn(`Task ${task.id} ("${task.title}") has invalid coordinates - skipping node render`);
@@ -5736,8 +6540,238 @@ Object.assign(app, {
             nodesGroup.appendChild(g);
         });
 
+        // ========================================
+        // Arrow Snap Points - Render dots and snap indicators
+        // ========================================
+        if (this.hoveredArrowDot || this.arrowDotDrag.active) {
+            // Determine which dot to render
+            let dotToRender = this.arrowDotDrag.active ? {
+                type: this.arrowDotDrag.dotType,
+                taskId: this.arrowDotDrag.taskId,
+                parentId: this.arrowDotDrag.relatedTaskId
+            } : this.hoveredArrowDot;
+
+            if (dotToRender) {
+                const task = this.tasks.find(t => t.id === dotToRender.taskId);
+                const parent = this.tasks.find(t => t.id === dotToRender.parentId);
+
+                if (task && parent) {
+                    // Get dot position
+                    let dotPos;
+                    if (this.arrowDotDrag.active) {
+                        // During drag: use LIVE drag position for real-time cursor following
+                        const dims = this.calculateTaskDimensions(task);
+                        dotPos = this.denormalizeEdgePosition(
+                            this.arrowDotDrag.edge,
+                            this.arrowDotDrag.normalized,
+                            task.x,
+                            task.y,
+                            dims.width,
+                            dims.height
+                        );
+                    } else {
+                        // When hovering: use saved or default position
+                        dotPos = this.getArrowEndpoint(parent, task, 'target');
+                    }
+
+                    // Check if this arrow has a custom attach point (for coloring)
+                    const hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[dotToRender.parentId]);
+
+                    // Render the arrow dot
+                    const dot = this.renderArrowDot(
+                        dotPos.x, dotPos.y,
+                        dotToRender.type,
+                        dotToRender.taskId,
+                        dotToRender.parentId,
+                        this.hoveredArrowDot !== null,
+                        this.arrowDotDrag.active,
+                        hasCustomPosition
+                    );
+
+                    if (dot) {
+                        // Append to nodesGroup so it renders OVER nodes
+                        nodesGroup.appendChild(dot);
+                    }
+
+                    // Render snap indicators if dragging
+                    if (this.arrowDotDrag.active) {
+                        const dims = this.calculateTaskDimensions(task);
+                        const indicators = this.renderSnapIndicators(
+                            task.x, task.y,
+                            dims.width, dims.height,
+                            this.arrowDotDrag.edge,
+                            this.arrowDotDrag.normalized
+                        );
+
+                        indicators.forEach(indicator => {
+                            // Append to nodesGroup so it renders OVER nodes
+                            nodesGroup.appendChild(indicator);
+                        });
+                    }
+                }
+            }
+        }
+
+        // ========================================
+        // Curve Control Points - Miro-style dots
+        // ========================================
+        if (this.hoveredCurveDot || this.curveDotDrag.active) {
+            let dotsToRender = [];
+
+            if (this.curveDotDrag.active) {
+                // During drag: show all control points being edited
+                const controlPoints = this.curveDotDrag.controlPoints || [];
+                dotsToRender = controlPoints.map((cp, idx) => ({
+                    x: cp.x,
+                    y: cp.y,
+                    index: idx,
+                    isBeingDragged: idx === this.curveDotDrag.editingIndex,
+                    isExisting: true
+                }));
+            } else if (this.hoveredCurveDot) {
+                // Hovering: show all existing control points + potential new point
+                const { controlPoints, nearestPointIndex, addNewPoint, mouseX, mouseY } = this.hoveredCurveDot;
+
+                // Add existing control points
+                if (controlPoints && Array.isArray(controlPoints)) {
+                    dotsToRender = controlPoints.map((cp, idx) => ({
+                        x: cp.x,
+                        y: cp.y,
+                        index: idx,
+                        isHovered: idx === nearestPointIndex,
+                        isExisting: true
+                    }));
+                }
+
+                // Add potential new point (gray preview)
+                if (addNewPoint) {
+                    dotsToRender.push({
+                        x: mouseX,
+                        y: mouseY,
+                        index: -1,
+                        isHovered: true,
+                        isExisting: false
+                    });
+                }
+            }
+
+            // Render all dots
+            for (const dotInfo of dotsToRender) {
+                // Size
+                let size = 5;
+                if (dotInfo.isBeingDragged) {
+                    size = 8;
+                } else if (dotInfo.isHovered) {
+                    size = 6;
+                }
+
+                // Color
+                let fillColor = '#9e9e9e';  // Gray default
+                if (dotInfo.isBeingDragged) {
+                    fillColor = '#2196f3';  // Blue when dragging
+                } else if (dotInfo.isExisting) {
+                    fillColor = '#9c27b0';  // Purple for existing points
+                }
+
+                // Render dot
+                const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                dot.setAttribute('cx', dotInfo.x);
+                dot.setAttribute('cy', dotInfo.y);
+                dot.setAttribute('r', size);
+                dot.setAttribute('fill', fillColor);
+                dot.setAttribute('stroke', 'white');
+                dot.setAttribute('stroke-width', '2');
+                dot.setAttribute('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))');
+                dot.classList.add('curve-dot');
+                dot.style.pointerEvents = 'all';
+                dot.style.cursor = this.curveDotDrag.active ? 'grabbing' : 'grab';
+
+                nodesGroup.appendChild(dot);
+            }
+        }
+
         // Render off-screen indicators for working tasks
         this.renderOffscreenIndicators();
+
+        // Update FPS counter
+        this.updateFpsCounter();
+    },
+
+    /**
+     * Update FPS counter and lag detection
+     * Called at the end of every render()
+     */
+    updateFpsCounter() {
+        if (!this.showFpsCounter) {
+            // Remove FPS counter if disabled
+            const fpsElement = document.getElementById('fps-counter');
+            if (fpsElement) {
+                fpsElement.remove();
+            }
+            return;
+        }
+
+        const now = performance.now();
+
+        // Calculate current FPS
+        if (this.fpsLastFrameTime > 0) {
+            const frameDuration = now - this.fpsLastFrameTime;
+            this.fpsCurrentFps = frameDuration > 0 ? Math.round(1000 / frameDuration) : 0;
+        }
+        this.fpsLastFrameTime = now;
+
+        // Track frame times for average FPS (last 1 second)
+        this.fpsFrameTimes.push(now);
+
+        // Remove frame times older than 1 second
+        this.fpsFrameTimes = this.fpsFrameTimes.filter(time => now - time < 1000);
+
+        // Calculate average FPS over last second
+        if (this.fpsFrameTimes.length > 1) {
+            const timeSpan = this.fpsFrameTimes[this.fpsFrameTimes.length - 1] - this.fpsFrameTimes[0];
+            this.fpsAverageFps = timeSpan > 0 ? Math.round((this.fpsFrameTimes.length - 1) * 1000 / timeSpan) : 0;
+        }
+
+        // Create or update FPS counter overlay
+        let fpsElement = document.getElementById('fps-counter');
+        if (!fpsElement) {
+            fpsElement = document.createElement('div');
+            fpsElement.id = 'fps-counter';
+            fpsElement.style.position = 'fixed';
+            fpsElement.style.top = '10px';
+            fpsElement.style.right = '10px';
+            fpsElement.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            fpsElement.style.color = '#fff';
+            fpsElement.style.padding = '8px 12px';
+            fpsElement.style.borderRadius = '4px';
+            fpsElement.style.fontFamily = 'monospace';
+            fpsElement.style.fontSize = '12px';
+            fpsElement.style.zIndex = '10000';
+            fpsElement.style.pointerEvents = 'none';
+            fpsElement.style.userSelect = 'none';
+            document.body.appendChild(fpsElement);
+        }
+
+        // Determine if lagging
+        const isLagging = this.fpsAverageFps < this.fpsLagThreshold && this.fpsAverageFps > 0;
+
+        // Update content
+        const lagIndicator = isLagging ? ' ⚠️ LAG' : '';
+        const fpsColor = isLagging ? '#ff5252' : '#4caf50';
+
+        fpsElement.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>FPS:</span>
+                    <span style="color: ${fpsColor}; font-weight: bold;">${this.fpsCurrentFps}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Avg:</span>
+                    <span style="color: ${fpsColor}; font-weight: bold;">${this.fpsAverageFps}</span>
+                </div>
+                ${isLagging ? '<div style="color: #ff5252; font-weight: bold; text-align: center; margin-top: 4px;">⚠️ LAG DETECTED</div>' : ''}
+            </div>
+        `;
     },
 });
 
@@ -5759,6 +6793,57 @@ Object.assign(app, {
     onCanvasMouseDown(e) {
         // Don't start drag if we're editing
         if (this.editingTaskId !== null) return;
+
+        // Check if clicking on arrow dot (highest priority)
+        if (e.target.classList && e.target.classList.contains('arrow-dot')) {
+            const dotType = e.target.getAttribute('data-dot-type');
+            const taskId = parseInt(e.target.getAttribute('data-task-id'));
+            const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+
+            const now = performance.now();
+            const dotId = `${taskId}-${relatedId}`;
+            const timeSinceLastClick = now - this.arrowDotDrag.lastClickTime;
+
+            // Check for double-click (< 300ms, same dot)
+            if (timeSinceLastClick < 300 && this.arrowDotDrag.lastClickedDotId === dotId) {
+                // This is a double-click - don't start drag, let dblclick handler process it
+                this.arrowDotDrag.lastClickTime = 0;
+                this.arrowDotDrag.lastClickedDotId = null;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Single click - track for future double-click detection
+            this.arrowDotDrag.lastClickTime = now;
+            this.arrowDotDrag.lastClickedDotId = dotId;
+
+            // Start drag after short delay to allow double-click detection
+            setTimeout(() => {
+                // Only start drag if not double-clicked in the meantime
+                if (this.arrowDotDrag.lastClickedDotId === dotId) {
+                    this.startArrowDotDrag({
+                        type: dotType,
+                        taskId: taskId,
+                        parentId: relatedId
+                    });
+                }
+            }, 250);
+
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        // Check if clicking on curve control dot (second priority)
+        // Use hoveredCurveDot state (Miro-style proximity detection)
+        if (e.target.classList && e.target.classList.contains('curve-dot') && this.hoveredCurveDot) {
+            // Use the hover info to start drag
+            this.startCurveDotDrag(this.hoveredCurveDot);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
 
         // Don't interfere with line clicks - let the click handler deal with them
         if (e.target.tagName === 'line' && e.target.classList.contains('link')) {
@@ -5846,6 +6931,30 @@ Object.assign(app, {
         // Always track mouse position for Ctrl+V paste at cursor
         const pt = this.getSVGPoint(e);
         this.lastMousePosition = { x: pt.x, y: pt.y };
+
+        // Update arrow dot hover detection (even when not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
+            this.updateArrowDotHover(pt.x, pt.y);
+        }
+
+        // Update curve dot hover detection (even when not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
+            this.updateCurveDotHover(pt.x, pt.y);
+        }
+
+        // Handle arrow dot drag
+        if (this.arrowDotDrag.active) {
+            this.updateArrowDotDrag(pt.x, pt.y);
+            e.preventDefault();
+            return;
+        }
+
+        // Handle curve dot drag
+        if (this.curveDotDrag.active) {
+            this.updateCurveDotDrag(pt.x, pt.y);
+            e.preventDefault();
+            return;
+        }
 
         if (!this.dragMode) return;
 
@@ -6088,6 +7197,20 @@ Object.assign(app, {
     },
 
     onCanvasMouseUp(e) {
+        // Handle arrow dot drag finish
+        if (this.arrowDotDrag.active) {
+            this.finishArrowDotDrag();
+            e.preventDefault();
+            return;
+        }
+
+        // Handle curve dot drag finish
+        if (this.curveDotDrag.active) {
+            this.finishCurveDotDrag();
+            e.preventDefault();
+            return;
+        }
+
         if (this.dragMode === 'dependency') {
             // Use elementFromPoint to find what's actually under cursor (not e.target)
             const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
@@ -6414,6 +7537,549 @@ Object.assign(app, {
 
 
 // ============================================================
+// INTERACTIONS/ARROW-SNAP.JS (Order: 28, Category: interactions)
+// ============================================================
+
+/**
+ * @module interactions/arrow-snap
+ * @order 28
+ * @category interactions
+ *
+ * Arrow snap point interactions - drag dots to customize arrow attachment points
+ * Currently implements TARGET END only (arrowhead). Source end logic reusable for future.
+ */
+
+Object.assign(app, {
+    /**
+     * Setup mouse listeners for arrow dot interactions
+     * Called during app initialization
+     */
+    setupArrowSnapListeners() {
+        const canvas = document.getElementById('canvas');
+        if (!canvas) {
+            console.warn('[arrow-snap] Canvas not found, skipping setup');
+            return;
+        }
+
+        // Mousemove for hover detection (delegated to render loop)
+        // Mousedown/up for drag handled by existing onCanvasMouseDown/Up
+
+        console.log('✓ Arrow snap listeners setup');
+    },
+
+    /**
+     * Check if mouse is near any arrow endpoint and update hover state
+     * Called from render() every frame
+     *
+     * @param {number} mouseX - Mouse X in SVG coordinates
+     * @param {number} mouseY - Mouse Y in SVG coordinates
+     */
+    updateArrowDotHover(mouseX, mouseY) {
+        // DEFENSIVE: Skip if editing or dragging
+        if (this.editingTaskId !== null || this.dragMode !== null) {
+            this.hoveredArrowDot = null;
+            return;
+        }
+
+        // DEFENSIVE: Validate inputs
+        if (!isFinite(mouseX) || !isFinite(mouseY)) {
+            return;
+        }
+
+        // PERF: If already hovering a dot, check if cursor moved too far away
+        // Use squared distance to avoid Math.sqrt()
+        if (this.hoveredArrowDot) {
+            const dx = mouseX - this.hoveredArrowDot.x;
+            const dy = mouseY - this.hoveredArrowDot.y;
+            const distanceSquared = dx * dx + dy * dy;
+            const hideRadiusSquared = this.arrowDotHideRadius * this.arrowDotHideRadius;
+
+            if (distanceSquared > hideRadiusSquared) {
+                // Cursor moved too far - hide the dot
+                this.hoveredArrowDot = null;
+
+                // Update cursor
+                const canvasContainer = document.getElementById('canvas-container');
+                canvasContainer.style.cursor = 'default';
+
+                // Trigger re-render to hide dot
+                this.render();
+                return;
+            }
+            // Still within hide radius - keep showing the dot
+            return;
+        }
+
+        // Not currently hovering - check all visible arrows for proximity
+        const hoveredDot = this.findArrowDotNearMouse(mouseX, mouseY);
+
+        this.hoveredArrowDot = hoveredDot;
+
+        // Update cursor style
+        const canvasContainer = document.getElementById('canvas-container');
+        if (hoveredDot && !this.arrowDotDrag.active) {
+            canvasContainer.style.cursor = 'pointer';
+        } else if (!this.arrowDotDrag.active && this.dragMode === null) {
+            canvasContainer.style.cursor = 'default';
+        }
+
+        // IMPORTANT: Trigger re-render when hover state changes
+        if (hoveredDot) {
+            this.render();
+        }
+    },
+
+    /**
+     * Find arrow dot near mouse position
+     * Returns dot info or null
+     *
+     * @param {number} mouseX - Mouse X in SVG coordinates
+     * @param {number} mouseY - Mouse Y in SVG coordinates
+     * @returns {{type: string, taskId: number, parentId: number, x: number, y: number}|null}
+     */
+    findArrowDotNearMouse(mouseX, mouseY) {
+        // DEFENSIVE: Validate radius
+        const radius = this.arrowDotRadius || 5;
+        const radiusSquared = radius * radius;
+
+        // PERF: Only check tasks near mouse cursor (rough viewport culling)
+        // This avoids checking 100+ tasks when mouse is far away
+        const QUICK_CHECK_MARGIN = 500;
+
+        // Check all arrows (main parent + other parents)
+        for (const task of this.tasks) {
+            if (task.hidden) continue;
+
+            // PERF: Quick distance check before expensive endpoint calculation
+            const dx = task.x - mouseX;
+            const dy = task.y - mouseY;
+            if (Math.abs(dx) > QUICK_CHECK_MARGIN || Math.abs(dy) > QUICK_CHECK_MARGIN) {
+                continue; // Too far away, skip
+            }
+
+            // Check main parent arrow (TARGET end - arrowhead on child)
+            if (task.mainParent !== null) {
+                const parent = this.tasks.find(t => t.id === task.mainParent);
+                if (parent && !parent.hidden) {
+                    const endPos = this.getArrowEndpoint(parent, task, 'target');
+
+                    if (this.isPointNearPosition(mouseX, mouseY, endPos.x, endPos.y, radius)) {
+                        return {
+                            type: 'target',
+                            taskId: task.id,
+                            parentId: task.mainParent,
+                            x: endPos.x,
+                            y: endPos.y
+                        };
+                    }
+                }
+            }
+
+            // Check other parents (TARGET end - arrowhead on child)
+            for (const parentId of task.otherParents || []) {
+                const parent = this.tasks.find(t => t.id === parentId);
+                if (parent && !parent.hidden) {
+                    const endPos = this.getArrowEndpoint(parent, task, 'target');
+                    if (this.isPointNearPosition(mouseX, mouseY, endPos.x, endPos.y, radius)) {
+                        return {
+                            type: 'target',
+                            taskId: task.id,
+                            parentId: parentId,
+                            x: endPos.x,
+                            y: endPos.y
+                        };
+                    }
+                }
+            }
+        }
+
+        return null;
+    },
+
+    /**
+     * Get arrow endpoint position (uses custom attach point if exists)
+     * This is the key function that checks for customization
+     *
+     * @param {object} sourceTask - Source task (parent)
+     * @param {object} targetTask - Target task (child)
+     * @param {string} type - 'source' or 'target'
+     * @returns {{x: number, y: number}} Endpoint position
+     */
+    getArrowEndpoint(sourceTask, targetTask, type) {
+        // DEFENSIVE: Validate inputs
+        if (!sourceTask || !targetTask) {
+            console.warn('[getArrowEndpoint] Missing task:', { sourceTask, targetTask });
+            return { x: 0, y: 0 };
+        }
+
+        const targetDims = this.calculateTaskDimensions(targetTask);
+
+        if (type === 'target') {
+            // Check for custom attach point on target task
+            const customPoint = targetTask.customAttachPoints?.[sourceTask.id];
+
+            if (customPoint) {
+                // Use custom position
+                return this.denormalizeEdgePosition(
+                    customPoint.edge,
+                    customPoint.normalized,
+                    targetTask.x,
+                    targetTask.y,
+                    targetDims.width,
+                    targetDims.height
+                );
+            } else {
+                // Use default calculation
+                return this.getLineEndAtRectEdge(
+                    sourceTask.x, sourceTask.y,
+                    targetTask.x, targetTask.y,
+                    targetDims.width, targetDims.height
+                );
+            }
+        } else {
+            // Source end (not implemented yet, but structure is here)
+            // Would check sourceTask.customSourcePoints[targetTask.id]
+            return { x: sourceTask.x, y: sourceTask.y };
+        }
+    },
+
+    /**
+     * Start dragging arrow dot
+     * Called from onCanvasMouseDown when clicking on hoveredArrowDot
+     *
+     * @param {object} dotInfo - Dot information {type, taskId, parentId}
+     */
+    startArrowDotDrag(dotInfo) {
+        if (!dotInfo) return;
+
+        // Save snapshot for undo
+        this.saveSnapshot(`Adjust arrow position`);
+
+        // Get current task
+        const task = this.tasks.find(t => t.id === dotInfo.taskId);
+        if (!task) return;
+
+        // PERF: Cache task dimensions for entire drag session
+        const cachedDims = this.calculateTaskDimensions(task);
+
+        // PERF: Pre-calculate snap positions (only once at drag start)
+        const cachedSnapPositions = this.getSnapPositions(task.x, task.y, cachedDims.width, cachedDims.height);
+
+        // Get current position (custom or default)
+        let currentEdge, currentNormalized;
+
+        if (dotInfo.type === 'target') {
+            const customPoint = task.customAttachPoints?.[dotInfo.parentId];
+            if (customPoint) {
+                currentEdge = customPoint.edge;
+                currentNormalized = customPoint.normalized;
+            } else {
+                // Calculate current default position
+                const parent = this.tasks.find(t => t.id === dotInfo.parentId);
+                if (!parent) return;
+
+                const endPos = this.getLineEndAtRectEdge(
+                    parent.x, parent.y,
+                    task.x, task.y,
+                    cachedDims.width, cachedDims.height
+                );
+
+                // Convert to edge + normalized
+                const constrained = this.constrainToRectEdge(
+                    endPos.x, endPos.y,
+                    task.x, task.y,
+                    cachedDims.width, cachedDims.height
+                );
+                currentEdge = constrained.edge;
+                currentNormalized = constrained.normalized;
+            }
+        }
+
+        // Set drag state with cached values
+        this.arrowDotDrag = {
+            active: true,
+            dotType: dotInfo.type,
+            taskId: dotInfo.taskId,
+            relatedTaskId: dotInfo.parentId,
+            edge: currentEdge,
+            normalized: currentNormalized,
+            lastRenderTime: 0,
+            // PERF: Cache expensive calculations
+            cachedDims: cachedDims,
+            cachedSnapPositions: cachedSnapPositions,
+            rafPending: false  // For RAF throttling
+        };
+
+        // GPU ACCEL: Add class to arrow link for GPU acceleration
+        const arrowSelector = `.parent-link[data-child-id="${dotInfo.taskId}"][data-parent-id="${dotInfo.parentId}"]`;
+        const arrowLine = document.querySelector(arrowSelector);
+        if (arrowLine) {
+            arrowLine.classList.add('dragging-arrow');
+        }
+
+        // Update cursor
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.cursor = 'grabbing';
+    },
+
+    /**
+     * Update arrow dot drag position
+     * Called from onCanvasMouseMove during drag
+     *
+     * @param {number} mouseX - Mouse X in SVG coordinates
+     * @param {number} mouseY - Mouse Y in SVG coordinates
+     */
+    updateArrowDotDrag(mouseX, mouseY) {
+        if (!this.arrowDotDrag.active) return;
+
+        // DEFENSIVE: Validate inputs
+        if (!isFinite(mouseX) || !isFinite(mouseY)) return;
+
+        const task = this.tasks.find(t => t.id === this.arrowDotDrag.taskId);
+        if (!task) return;
+
+        // PERF: Use cached dimensions instead of recalculating
+        const dims = this.arrowDotDrag.cachedDims;
+
+        // Constrain mouse to rectangle edge
+        const constrained = this.constrainToRectEdge(
+            mouseX, mouseY,
+            task.x, task.y,
+            dims.width, dims.height
+        );
+
+        // PERF: Use cached snap positions
+        const snap = this.findNearestSnap(
+            constrained,
+            this.arrowDotDrag.cachedSnapPositions,
+            task.x, task.y,
+            dims.width, dims.height,
+            this.arrowSnapThreshold
+        );
+
+        // Update drag state
+        if (snap) {
+            this.arrowDotDrag.edge = snap.edge;
+            this.arrowDotDrag.normalized = snap.normalized;
+        } else {
+            this.arrowDotDrag.edge = constrained.edge;
+            this.arrowDotDrag.normalized = constrained.normalized;
+        }
+
+        // PERF: Use RAF to batch updates (max 60fps instead of 100+)
+        if (!this.arrowDotDrag.rafPending) {
+            this.arrowDotDrag.rafPending = true;
+            requestAnimationFrame(() => {
+                this.arrowDotDrag.rafPending = false;
+                // PERF: Partial render - only update dot and arrow, not entire canvas
+                this.renderArrowDotDragVisuals();
+            });
+        }
+    },
+
+    /**
+     * PERF: Partial render for arrow dot drag - only update dot and arrow line
+     * This avoids re-rendering the entire canvas on every mousemove
+     */
+    renderArrowDotDragVisuals() {
+        if (!this.arrowDotDrag.active) return;
+
+        const task = this.tasks.find(t => t.id === this.arrowDotDrag.taskId);
+        if (!task) return;
+
+        const parent = this.tasks.find(t => t.id === this.arrowDotDrag.relatedTaskId);
+        if (!parent) return;
+
+        const dims = this.arrowDotDrag.cachedDims;
+
+        // Calculate current dot position from live drag state
+        const dotPos = this.denormalizeEdgePosition(
+            this.arrowDotDrag.edge,
+            this.arrowDotDrag.normalized,
+            task.x, task.y,
+            dims.width, dims.height
+        );
+
+        // Find and update existing arrow dot element (or create if missing)
+        let dotElement = document.querySelector('.arrow-dot');
+        if (!dotElement) {
+            // Fallback: full render if dot doesn't exist
+            this.render();
+            return;
+        }
+
+        // Update dot position (faster than recreating)
+        dotElement.setAttribute('cx', dotPos.x);
+        dotElement.setAttribute('cy', dotPos.y);
+        dotElement.setAttribute('r', this.arrowDotDragSize || 7);
+
+        // Determine color based on whether position is custom
+        const hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[this.arrowDotDrag.relatedTaskId]);
+        dotElement.setAttribute('fill', hasCustomPosition ? '#2196f3' : '#4caf50');
+
+        // Find and update arrow line endpoint
+        // Look for the specific arrow being dragged
+        const arrowSelector = `.parent-link[data-child-id="${task.id}"][data-parent-id="${parent.id}"]`;
+        const arrowLine = document.querySelector(arrowSelector);
+
+        if (arrowLine) {
+            // Update arrow endpoint to match dot
+            if (arrowLine.tagName === 'line') {
+                arrowLine.setAttribute('x2', dotPos.x);
+                arrowLine.setAttribute('y2', dotPos.y);
+            } else if (arrowLine.tagName === 'path') {
+                // For curved arrows, need to update path data
+                const x1 = parseFloat(arrowLine.getAttribute('data-x1') || parent.x);
+                const y1 = parseFloat(arrowLine.getAttribute('data-y1') || parent.y);
+
+                const dx = dotPos.x - x1;
+                const dy = dotPos.y - y1;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const curveAmount = distance * this.arrowCurvature;
+                const angle = Math.atan2(dy, dx);
+                const perpAngle = angle + Math.PI / 2;
+                const offsetX = Math.cos(perpAngle) * curveAmount;
+                const offsetY = Math.sin(perpAngle) * curveAmount;
+                const midX = (x1 + dotPos.x) / 2;
+                const midY = (y1 + dotPos.y) / 2;
+
+                const d = `M ${x1} ${y1} Q ${midX + offsetX} ${midY + offsetY}, ${dotPos.x} ${dotPos.y}`;
+                arrowLine.setAttribute('d', d);
+            }
+        }
+
+        // Update snap indicators
+        const snapGroup = document.getElementById('snap-indicators-group');
+        if (snapGroup) {
+            // Clear old indicators
+            snapGroup.innerHTML = '';
+
+            // Render new snap indicators
+            const indicators = this.renderSnapIndicators(
+                task.x, task.y,
+                dims.width, dims.height,
+                this.arrowDotDrag.edge,
+                this.arrowDotDrag.normalized
+            );
+
+            indicators.forEach(indicator => snapGroup.appendChild(indicator));
+        }
+    },
+
+    /**
+     * Finish arrow dot drag and commit changes
+     * Called from onCanvasMouseUp
+     */
+    finishArrowDotDrag() {
+        if (!this.arrowDotDrag.active) return;
+
+        const task = this.tasks.find(t => t.id === this.arrowDotDrag.taskId);
+        if (!task) {
+            this.cancelArrowDotDrag();
+            return;
+        }
+
+        // Initialize customAttachPoints if needed
+        if (!task.customAttachPoints) {
+            task.customAttachPoints = {};
+        }
+
+        // Save custom position
+        if (this.arrowDotDrag.dotType === 'target') {
+            task.customAttachPoints[this.arrowDotDrag.relatedTaskId] = {
+                edge: this.arrowDotDrag.edge,
+                normalized: this.arrowDotDrag.normalized
+            };
+        }
+
+        // GPU ACCEL: Remove dragging-arrow class
+        const arrowSelector = `.parent-link[data-child-id="${this.arrowDotDrag.taskId}"][data-parent-id="${this.arrowDotDrag.relatedTaskId}"]`;
+        const arrowLine = document.querySelector(arrowSelector);
+        if (arrowLine) {
+            arrowLine.classList.remove('dragging-arrow');
+        }
+
+        // Clear drag state
+        this.arrowDotDrag = {
+            active: false,
+            dotType: null,
+            taskId: null,
+            relatedTaskId: null,
+            edge: null,
+            normalized: 0.5,
+            lastRenderTime: 0
+        };
+
+        // Update cursor
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.cursor = 'default';
+
+        // Save and render
+        this.saveToStorage();
+        this.render();
+
+        this.showToast('Arrow position updated', 'success', 2000);
+    },
+
+    /**
+     * Cancel arrow dot drag without saving
+     */
+    cancelArrowDotDrag() {
+        // GPU ACCEL: Remove dragging-arrow class if exists
+        if (this.arrowDotDrag.taskId && this.arrowDotDrag.relatedTaskId) {
+            const arrowSelector = `.parent-link[data-child-id="${this.arrowDotDrag.taskId}"][data-parent-id="${this.arrowDotDrag.relatedTaskId}"]`;
+            const arrowLine = document.querySelector(arrowSelector);
+            if (arrowLine) {
+                arrowLine.classList.remove('dragging-arrow');
+            }
+        }
+
+        this.arrowDotDrag = {
+            active: false,
+            dotType: null,
+            taskId: null,
+            relatedTaskId: null,
+            edge: null,
+            normalized: 0.5,
+            lastRenderTime: 0
+        };
+
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.cursor = 'default';
+
+        this.render();
+    },
+
+    /**
+     * Reset arrow to default position (double-click or context menu)
+     *
+     * @param {object} dotInfo - Dot information {type, taskId, parentId}
+     */
+    resetArrowPosition(dotInfo) {
+        if (!dotInfo) return;
+
+        this.saveSnapshot(`Reset arrow position`);
+
+        const task = this.tasks.find(t => t.id === dotInfo.taskId);
+        if (!task) return;
+
+        if (dotInfo.type === 'target') {
+            // Remove custom attach point
+            if (task.customAttachPoints && task.customAttachPoints[dotInfo.parentId]) {
+                delete task.customAttachPoints[dotInfo.parentId];
+
+                this.saveToStorage();
+                this.render();
+
+                this.showToast('Arrow position reset', 'success', 2000);
+            }
+        }
+    }
+});
+
+
+
+// ============================================================
 // INTERACTIONS/EDIT.JS (Order: 28, Category: interactions)
 // ============================================================
 
@@ -6479,6 +8145,9 @@ Object.assign(app, {
                     const truncatedTitle = newTitle.length > 30 ? newTitle.substring(0, 27) + '...' : newTitle;
                     this.saveSnapshot(`Edited task '${truncatedTitle}'`, this.editingTaskId);
                     task.title = newTitle;
+
+                    // PERF: Invalidate dimension cache since title changed
+                    this.invalidateDimensionCache(this.editingTaskId);
                 }
             }
         }
@@ -6529,6 +8198,404 @@ Object.assign(app, {
         textarea.rows = Math.max(2, lines.length);
     }
 });
+
+
+
+// ============================================================
+// INTERACTIONS/CURVE-CONTROL.JS (Order: 29, Category: interactions)
+// ============================================================
+
+/**
+ * @module interactions/curve-control-v2
+ * @order 29
+ * @category interactions
+ *
+ * Miro-style bezier curve control for links
+ * Simple, professional multi-point curve editing
+ */
+
+Object.assign(app, {
+    /**
+     * Setup curve control listeners
+     */
+    setupCurveControlListeners() {
+        console.log('✓ Curve control v2 listeners setup');
+    },
+
+    /**
+     * Check if mouse is near any curve and update hover state
+     * Shows control point dots when hovering over curved lines
+     */
+    updateCurveDotHover(mouseX, mouseY) {
+        // Skip if editing or dragging
+        if (this.editingTaskId !== null || this.dragMode !== null || this.arrowDotDrag.active) {
+            this.hoveredCurveDot = null;
+            return;
+        }
+
+        if (!isFinite(mouseX) || !isFinite(mouseY)) {
+            return;
+        }
+
+        // Find nearby curve
+        const result = this.findCurveNearMouse(mouseX, mouseY);
+
+        if (result !== this.hoveredCurveDot) {
+            this.hoveredCurveDot = result;
+            // Always render when hover state changes (to show OR hide dots)
+            this.render();
+        }
+    },
+
+    /**
+     * Find curve near mouse and determine interaction type
+     * Returns: { taskId, parentId, controlPoints: [...], nearestPointIndex, addNewPoint, mouseX, mouseY }
+     */
+    findCurveNearMouse(mouseX, mouseY) {
+        const hoverRadius = 30;
+        const controlPointSnapRadius = 15;
+
+        // Check all parent links
+        for (const task of this.tasks) {
+            if (task.hidden) continue;
+
+            // Check main parent
+            if (task.mainParent !== null) {
+                const parent = this.tasks.find(t => t.id === task.mainParent);
+                if (!parent || parent.hidden) continue;
+
+                const result = this.checkCurveProximity(
+                    mouseX, mouseY,
+                    parent, task, task.mainParent,
+                    hoverRadius, controlPointSnapRadius
+                );
+                if (result) return result;
+            }
+
+            // Check other parents
+            for (const parentId of task.otherParents || []) {
+                const parent = this.tasks.find(t => t.id === parentId);
+                if (!parent || parent.hidden) continue;
+
+                const result = this.checkCurveProximity(
+                    mouseX, mouseY,
+                    parent, task, parentId,
+                    hoverRadius, controlPointSnapRadius
+                );
+                if (result) return result;
+            }
+        }
+
+        return null;
+    },
+
+    /**
+     * Check if mouse is near a specific link's curve
+     */
+    checkCurveProximity(mouseX, mouseY, parent, task, parentId, hoverRadius, snapRadius) {
+        const arrowEnd = this.getArrowEndpoint(parent, task, 'target');
+
+        // Get control points for this link
+        const controlPoints = this.getCurvePoints(task.id, parentId);
+
+        // Build complete curve path (start -> control points -> end)
+        const curvePath = [
+            { x: parent.x, y: parent.y },
+            ...controlPoints,
+            { x: arrowEnd.x, y: arrowEnd.y }
+        ];
+
+        // Check if near existing control point first (priority)
+        for (let i = 0; i < controlPoints.length; i++) {
+            const cp = controlPoints[i];
+            const dist = Math.sqrt((mouseX - cp.x) ** 2 + (mouseY - cp.y) ** 2);
+            if (dist < snapRadius) {
+                return {
+                    taskId: task.id,
+                    parentId: parentId,
+                    controlPoints: controlPoints,
+                    nearestPointIndex: i,
+                    addNewPoint: false,
+                    mouseX: mouseX,
+                    mouseY: mouseY
+                };
+            }
+        }
+
+        // Check if near the curve itself
+        if (this.isNearCurvePath(mouseX, mouseY, curvePath, hoverRadius)) {
+            // Find closest point on curve to add new control point
+            const closest = this.findClosestPointOnCurvePath(mouseX, mouseY, curvePath);
+
+            // Don't show curve control point if near arrow endpoints
+            // (those areas are for arrow snap dots, not curve control)
+            const distToStart = Math.sqrt((mouseX - parent.x) ** 2 + (mouseY - parent.y) ** 2);
+            const distToEnd = Math.sqrt((mouseX - arrowEnd.x) ** 2 + (mouseY - arrowEnd.y) ** 2);
+            const endpointExclusionRadius = 30; // Same as hoverRadius
+
+            if (distToStart < endpointExclusionRadius || distToEnd < endpointExclusionRadius) {
+                // Too close to endpoints - don't show curve control dot
+                return null;
+            }
+
+            // Calculate insertion index:
+            // curvePath = [parent, ...controlPoints, child]
+            // segmentIndex 0 = parent->first control point (insert at index 0)
+            // segmentIndex 1 = first->second control point (insert at index 1)
+            // etc.
+            const insertIndex = closest.segmentIndex;
+
+            return {
+                taskId: task.id,
+                parentId: parentId,
+                controlPoints: controlPoints,
+                nearestPointIndex: null,
+                addNewPoint: true,
+                insertIndex: insertIndex,  // NEW: where to insert in controlPoints array
+                mouseX: closest.x,
+                mouseY: closest.y
+            };
+        }
+
+        return null;
+    },
+
+    /**
+     * Get control points for a link
+     * Returns array of {x, y} points ON the curve
+     */
+    getCurvePoints(taskId, parentId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task || !task.curveControlPoints) return [];
+
+        const points = task.curveControlPoints[parentId];
+        if (!points || !Array.isArray(points)) return [];
+
+        // Return just x, y coordinates
+        return points.map(p => ({ x: p.x, y: p.y }));
+    },
+
+    /**
+     * Check if mouse is near curve path
+     * Samples along Catmull-Rom spline
+     */
+    isNearCurvePath(mouseX, mouseY, points, radius) {
+        if (points.length < 2) return false;
+
+        const radiusSquared = radius * radius;
+        const samples = 50;
+
+        // Sample along curve
+        for (let i = 0; i < points.length - 1; i++) {
+            for (let s = 0; s <= samples; s++) {
+                const t = s / samples;
+                const p = this.sampleCatmullRom(points, i, t);
+
+                const dx = mouseX - p.x;
+                const dy = mouseY - p.y;
+                if (dx * dx + dy * dy < radiusSquared) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    },
+
+    /**
+     * Find closest point on curve path to mouse
+     * Returns { x, y, segmentIndex } where segmentIndex indicates which segment (0 to points.length-2)
+     */
+    findClosestPointOnCurvePath(mouseX, mouseY, points) {
+        if (points.length < 2) return { x: mouseX, y: mouseY, segmentIndex: 0 };
+
+        let closest = null;
+        let minDist = Infinity;
+        let closestSegment = 0;
+        const samples = 50;
+
+        for (let i = 0; i < points.length - 1; i++) {
+            for (let s = 0; s <= samples; s++) {
+                const t = s / samples;
+                const p = this.sampleCatmullRom(points, i, t);
+
+                const dx = mouseX - p.x;
+                const dy = mouseY - p.y;
+                const dist = dx * dx + dy * dy;
+
+                if (dist < minDist) {
+                    minDist = dist;
+                    closest = p;
+                    closestSegment = i;
+                }
+            }
+        }
+
+        return { ...closest, segmentIndex: closestSegment };
+    },
+
+    /**
+     * Sample point on Catmull-Rom curve at segment i, parameter t
+     */
+    sampleCatmullRom(points, segmentIndex, t) {
+        const p0 = points[Math.max(0, segmentIndex - 1)];
+        const p1 = points[segmentIndex];
+        const p2 = points[segmentIndex + 1];
+        const p3 = points[Math.min(points.length - 1, segmentIndex + 2)];
+
+        // Catmull-Rom to Bezier conversion
+        const c1x = p1.x + (p2.x - p0.x) / 6;
+        const c1y = p1.y + (p2.y - p0.y) / 6;
+        const c2x = p2.x - (p3.x - p1.x) / 6;
+        const c2y = p2.y - (p3.y - p1.y) / 6;
+
+        // Cubic bezier evaluation
+        const t2 = t * t;
+        const t3 = t2 * t;
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const mt3 = mt2 * mt;
+
+        return {
+            x: mt3 * p1.x + 3 * mt2 * t * c1x + 3 * mt * t2 * c2x + t3 * p2.x,
+            y: mt3 * p1.y + 3 * mt2 * t * c1y + 3 * mt * t2 * c2y + t3 * p2.y
+        };
+    },
+
+    /**
+     * Start dragging a curve control point
+     */
+    startCurveDotDrag(hoverInfo) {
+        if (!hoverInfo) return;
+
+        this.saveSnapshot('Adjust curve');
+
+        this.curveDotDrag = {
+            active: true,
+            taskId: hoverInfo.taskId,
+            parentId: hoverInfo.parentId,
+            controlPoints: [...hoverInfo.controlPoints], // Copy array
+            editingIndex: hoverInfo.nearestPointIndex,
+            isNewPoint: hoverInfo.addNewPoint,
+            initialX: hoverInfo.mouseX,
+            initialY: hoverInfo.mouseY
+        };
+
+        // If adding new point, insert it at the correct position
+        if (hoverInfo.addNewPoint) {
+            const newPoint = {
+                x: hoverInfo.mouseX,
+                y: hoverInfo.mouseY
+            };
+
+            // Insert at the correct position along the curve
+            const insertIdx = hoverInfo.insertIndex || 0;
+            this.curveDotDrag.controlPoints.splice(insertIdx, 0, newPoint);
+            this.curveDotDrag.editingIndex = insertIdx;
+        }
+
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.cursor = 'grabbing';
+    },
+
+    /**
+     * Update curve control point during drag
+     */
+    updateCurveDotDrag(mouseX, mouseY) {
+        if (!this.curveDotDrag.active) return;
+        if (!isFinite(mouseX) || !isFinite(mouseY)) return;
+
+        const idx = this.curveDotDrag.editingIndex;
+        if (idx !== null && idx >= 0 && idx < this.curveDotDrag.controlPoints.length) {
+            this.curveDotDrag.controlPoints[idx] = { x: mouseX, y: mouseY };
+        }
+
+        this.render();
+    },
+
+    /**
+     * Finish curve drag and save
+     */
+    finishCurveDotDrag() {
+        if (!this.curveDotDrag.active) return;
+
+        const task = this.tasks.find(t => t.id === this.curveDotDrag.taskId);
+        if (!task) {
+            this.cancelCurveDotDrag();
+            return;
+        }
+
+        // Initialize if needed
+        if (!task.curveControlPoints) {
+            task.curveControlPoints = {};
+        }
+
+        // Check if moved significantly (otherwise remove point)
+        const idx = this.curveDotDrag.editingIndex;
+        const pt = this.curveDotDrag.controlPoints[idx];
+        const dist = Math.sqrt(
+            (pt.x - this.curveDotDrag.initialX) ** 2 +
+            (pt.y - this.curveDotDrag.initialY) ** 2
+        );
+
+        if (this.curveDotDrag.isNewPoint && dist < 5) {
+            // New point not moved - cancel
+            this.cancelCurveDotDrag();
+            return;
+        }
+
+        // Save control points
+        if (this.curveDotDrag.controlPoints.length === 0) {
+            // Remove all control points
+            delete task.curveControlPoints[this.curveDotDrag.parentId];
+        } else {
+            task.curveControlPoints[this.curveDotDrag.parentId] = this.curveDotDrag.controlPoints;
+        }
+
+        // Clear state
+        this.curveDotDrag = {
+            active: false,
+            taskId: null,
+            parentId: null,
+            controlPoints: [],
+            editingIndex: null,
+            isNewPoint: false,
+            initialX: 0,
+            initialY: 0
+        };
+
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.cursor = 'default';
+
+        this.saveToStorage();
+        this.render();
+
+        this.showToast('Curve adjusted', 'success', 2000);
+    },
+
+    /**
+     * Cancel curve drag
+     */
+    cancelCurveDotDrag() {
+        this.curveDotDrag = {
+            active: false,
+            taskId: null,
+            parentId: null,
+            controlPoints: [],
+            editingIndex: null,
+            isNewPoint: false,
+            initialX: 0,
+            initialY: 0
+        };
+
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.style.cursor = 'default';
+
+        this.render();
+    }
+});
+
+console.log('[curve-control-v2.js] Miro-style curve control loaded');
 
 
 
@@ -9690,6 +11757,40 @@ Object.assign(app, {
         // ========================================
         svg.addEventListener('dblclick', (e) => {
             if (this.editingTaskId !== null) return; // Already editing
+
+            // Check if double-clicking on arrow dot (reset to default position)
+            if (e.target.classList && e.target.classList.contains('arrow-dot')) {
+                const dotType = e.target.getAttribute('data-dot-type');
+                const taskId = parseInt(e.target.getAttribute('data-task-id'));
+                const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+
+                this.resetArrowPosition({
+                    type: dotType,
+                    taskId: taskId,
+                    parentId: relatedId
+                });
+
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Check if double-clicking on curve control dot (reset to straight line)
+            if (e.target.classList && e.target.classList.contains('curve-dot')) {
+                const linkType = e.target.getAttribute('data-link-type');
+                const taskId = parseInt(e.target.getAttribute('data-task-id'));
+                const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+
+                this.resetLineCurve({
+                    linkType: linkType,
+                    taskId: taskId,
+                    relatedTaskId: relatedId
+                });
+
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
 
             // Try to find task-node by traversing up DOM
             let element = e.target;

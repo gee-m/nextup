@@ -11,6 +11,57 @@ export const MouseMixin = {
         // Don't start drag if we're editing
         if (this.editingTaskId !== null) return;
 
+        // Check if clicking on arrow dot (highest priority)
+        if (e.target.classList && e.target.classList.contains('arrow-dot')) {
+            const dotType = e.target.getAttribute('data-dot-type');
+            const taskId = parseInt(e.target.getAttribute('data-task-id'));
+            const relatedId = parseInt(e.target.getAttribute('data-related-id'));
+
+            const now = performance.now();
+            const dotId = `${taskId}-${relatedId}`;
+            const timeSinceLastClick = now - this.arrowDotDrag.lastClickTime;
+
+            // Check for double-click (< 300ms, same dot)
+            if (timeSinceLastClick < 300 && this.arrowDotDrag.lastClickedDotId === dotId) {
+                // This is a double-click - don't start drag, let dblclick handler process it
+                this.arrowDotDrag.lastClickTime = 0;
+                this.arrowDotDrag.lastClickedDotId = null;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Single click - track for future double-click detection
+            this.arrowDotDrag.lastClickTime = now;
+            this.arrowDotDrag.lastClickedDotId = dotId;
+
+            // Start drag after short delay to allow double-click detection
+            setTimeout(() => {
+                // Only start drag if not double-clicked in the meantime
+                if (this.arrowDotDrag.lastClickedDotId === dotId) {
+                    this.startArrowDotDrag({
+                        type: dotType,
+                        taskId: taskId,
+                        parentId: relatedId
+                    });
+                }
+            }, 250);
+
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        // Check if clicking on curve control dot (second priority)
+        // Use hoveredCurveDot state (Miro-style proximity detection)
+        if (e.target.classList && e.target.classList.contains('curve-dot') && this.hoveredCurveDot) {
+            // Use the hover info to start drag
+            this.startCurveDotDrag(this.hoveredCurveDot);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
         // Don't interfere with line clicks - let the click handler deal with them
         if (e.target.tagName === 'line' && e.target.classList.contains('link')) {
             return; // Exit early, allow click event to fire
@@ -97,6 +148,30 @@ export const MouseMixin = {
         // Always track mouse position for Ctrl+V paste at cursor
         const pt = this.getSVGPoint(e);
         this.lastMousePosition = { x: pt.x, y: pt.y };
+
+        // Update arrow dot hover detection (even when not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
+            this.updateArrowDotHover(pt.x, pt.y);
+        }
+
+        // Update curve dot hover detection (even when not dragging)
+        if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
+            this.updateCurveDotHover(pt.x, pt.y);
+        }
+
+        // Handle arrow dot drag
+        if (this.arrowDotDrag.active) {
+            this.updateArrowDotDrag(pt.x, pt.y);
+            e.preventDefault();
+            return;
+        }
+
+        // Handle curve dot drag
+        if (this.curveDotDrag.active) {
+            this.updateCurveDotDrag(pt.x, pt.y);
+            e.preventDefault();
+            return;
+        }
 
         if (!this.dragMode) return;
 
@@ -339,6 +414,20 @@ export const MouseMixin = {
     },
 
     onCanvasMouseUp(e) {
+        // Handle arrow dot drag finish
+        if (this.arrowDotDrag.active) {
+            this.finishArrowDotDrag();
+            e.preventDefault();
+            return;
+        }
+
+        // Handle curve dot drag finish
+        if (this.curveDotDrag.active) {
+            this.finishCurveDotDrag();
+            e.preventDefault();
+            return;
+        }
+
         if (this.dragMode === 'dependency') {
             // Use elementFromPoint to find what's actually under cursor (not e.target)
             const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);

@@ -60,6 +60,9 @@ export const EditMixin = {
                     const truncatedTitle = newTitle.length > 30 ? newTitle.substring(0, 27) + '...' : newTitle;
                     this.saveSnapshot(`Edited task '${truncatedTitle}'`, this.editingTaskId);
                     task.title = newTitle;
+
+                    // PERF: Invalidate dimension cache since title changed
+                    this.invalidateDimensionCache(this.editingTaskId);
                 }
             }
         }
