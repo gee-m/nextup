@@ -136,7 +136,7 @@ export const NodesMixin = {
         const verticalPadding = 10;
         // Add extra bottom padding if task has tracked time (for time badge)
         const hasTimeTracking = task.timeTracking && task.timeTracking.totalSeconds > 0;
-        const extraBottomPadding = hasTimeTracking ? 8 : 0;
+        const extraBottomPadding = hasTimeTracking ? 18 : 0;
         const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2 + extraBottomPadding;
         const rectHeight = this.maxNodeHeight > 0
             ? Math.min(this.maxNodeHeight, calculatedHeight)
