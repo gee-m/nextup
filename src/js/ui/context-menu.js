@@ -113,6 +113,14 @@ export const ContextMenuMixin = {
             buttons.push({ label: task.status === 'done' ? '⏸️ Mark Pending' : '✅ Mark Done', action: () => this.toggleDone(taskId) });
             buttons.push({ label: task.currentlyWorking ? '⏹️ Stop Working' : '▶️ Start Working', action: () => this.toggleWorking(taskId) });
 
+            // Mark as In Progress option (if task is working)
+            if (task.currentlyWorking) {
+                buttons.push({
+                    label: '📋 Mark as In Progress',
+                    action: () => this.markAsInProgress(taskId)
+                });
+            }
+
             // Timer control (if timer is running for this task)
             if (this.timerState.isRunning && this.timerState.taskId === taskId) {
                 buttons.push({

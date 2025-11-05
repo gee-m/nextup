@@ -514,11 +514,18 @@ input:focus {
     filter: drop-shadow(0 3px 8px rgba(255, 152, 0, 0.4));
 }
 
+.task-node.in-progress rect {
+    fill: #e3f2fd;  /* Light blue background */
+    stroke: #2196f3;  /* Blue border */
+    stroke-width: 2.5;
+    filter: drop-shadow(0 2px 6px rgba(33, 150, 243, 0.3));
+}
+
 .task-node.suggested-next rect {
-    fill: #f3e5f5;  /* Light purple background */
-    stroke: #9c27b0;  /* Purple border */
-    stroke-width: 3;
-    filter: drop-shadow(0 3px 8px rgba(156, 39, 176, 0.4));
+    fill: #f3e5f5 !important;  /* Light purple background */
+    stroke: #9c27b0 !important;  /* Purple border */
+    stroke-width: 3 !important;
+    filter: drop-shadow(0 3px 8px rgba(156, 39, 176, 0.4)) !important;
 }
 
 .task-node.parent-of-working rect {
@@ -1139,6 +1146,7 @@ input:focus {
     gap: 4px;
 }
 
+.timer-btn-pause,
 .timer-btn-minimize,
 .timer-btn-close {
     background: rgba(255, 255, 255, 0.2);
@@ -1148,7 +1156,7 @@ input:focus {
     height: 24px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 18px;
+    font-size: 14px;
     line-height: 1;
     display: flex;
     align-items: center;
@@ -1156,6 +1164,7 @@ input:focus {
     transition: background 0.2s;
 }
 
+.timer-btn-pause:hover,
 .timer-btn-minimize:hover,
 .timer-btn-close:hover {
     background: rgba(255, 255, 255, 0.3);
@@ -4941,8 +4950,8 @@ Object.assign(app, {
         const task = this.tasks.find(t => t.id === taskId);
         const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
 
-        if (task.status === 'pending' && !task.currentlyWorking) {
-            // Pending → Working
+        if ((task.status === 'pending' || task.status === 'in_progress') && !task.currentlyWorking) {
+            // Pending/In Progress → Working
             this.saveSnapshot(`Started working on '${truncatedTitle}'`);
 
             // Multi-project: Only clear working in SAME root tree
@@ -5068,6 +5077,43 @@ Object.assign(app, {
 
         // Check if parent subtree is all done
         this.autoCollapseCompleted(taskId);
+        this.saveToStorage();
+        this.updateStatusBar();
+        this.render();
+    },
+
+    /**
+     * Mark task as "in progress" (started but not currently active)
+     * Stops timer and sets status to in_progress
+     */
+    markAsInProgress(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+        this.saveSnapshot(`Marked '${truncatedTitle}' as in progress`);
+
+        // Stop working state
+        task.currentlyWorking = false;
+        if (!task.textLocked) {
+            task.textExpanded = false;
+        }
+
+        // Set status to in_progress
+        task.status = 'in_progress';
+
+        // Stop timer
+        if (this.autoStartTimer && this.timerState.taskId === taskId) {
+            this.stopTimer();
+        }
+
+        // Clear from working log
+        const root = this.getRootTask(taskId);
+        const rootId = root ? root.id : null;
+        if (rootId) {
+            delete this.workingTasksByRoot[rootId];
+        }
+
         this.saveToStorage();
         this.updateStatusBar();
         this.render();
@@ -7229,6 +7275,7 @@ Object.assign(app, {
             g.setAttribute('transform', `translate(${task.x}, ${task.y})`);
 
             if (task.status === 'done') g.classList.add('done');
+            if (task.status === 'in_progress') g.classList.add('in-progress');
             if (task.currentlyWorking) g.classList.add('working');
             if (this.suggestedNextTaskId === task.id) g.classList.add('suggested-next');
             if (workingAncestors.includes(task.id)) g.classList.add('parent-of-working');
@@ -10547,6 +10594,14 @@ Object.assign(app, {
             buttons.push({ label: task.status === 'done' ? '⏸️ Mark Pending' : '✅ Mark Done', action: () => this.toggleDone(taskId) });
             buttons.push({ label: task.currentlyWorking ? '⏹️ Stop Working' : '▶️ Start Working', action: () => this.toggleWorking(taskId) });
 
+            // Mark as In Progress option (if task is working)
+            if (task.currentlyWorking) {
+                buttons.push({
+                    label: '📋 Mark as In Progress',
+                    action: () => this.markAsInProgress(taskId)
+                });
+            }
+
             // Timer control (if timer is running for this task)
             if (this.timerState.isRunning && this.timerState.taskId === taskId) {
                 buttons.push({
@@ -12360,6 +12415,7 @@ Object.assign(app, {
                 <div class="timer-window-header">
                     <span class="timer-title">⏱️ Time Tracker</span>
                     <div class="timer-controls">
+                        <button onclick="app.stopTimer(); app.showToast('⏸️ Timer paused', 'info', 2000);" class="timer-btn-pause" title="Pause Timer">⏸️</button>
                         <button onclick="app.toggleTimerWindow()" class="timer-btn-minimize" title="Minimize">−</button>
                         <button onclick="app.stopTimer()" class="timer-btn-close" title="Stop Timer">×</button>
                     </div>

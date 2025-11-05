@@ -24,8 +24,8 @@ export const StatusMixin = {
         const task = this.tasks.find(t => t.id === taskId);
         const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
 
-        if (task.status === 'pending' && !task.currentlyWorking) {
-            // Pending → Working
+        if ((task.status === 'pending' || task.status === 'in_progress') && !task.currentlyWorking) {
+            // Pending/In Progress → Working
             this.saveSnapshot(`Started working on '${truncatedTitle}'`);
 
             // Multi-project: Only clear working in SAME root tree
@@ -151,6 +151,43 @@ export const StatusMixin = {
 
         // Check if parent subtree is all done
         this.autoCollapseCompleted(taskId);
+        this.saveToStorage();
+        this.updateStatusBar();
+        this.render();
+    },
+
+    /**
+     * Mark task as "in progress" (started but not currently active)
+     * Stops timer and sets status to in_progress
+     */
+    markAsInProgress(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const truncatedTitle = task.title.length > 30 ? task.title.substring(0, 27) + '...' : task.title;
+        this.saveSnapshot(`Marked '${truncatedTitle}' as in progress`);
+
+        // Stop working state
+        task.currentlyWorking = false;
+        if (!task.textLocked) {
+            task.textExpanded = false;
+        }
+
+        // Set status to in_progress
+        task.status = 'in_progress';
+
+        // Stop timer
+        if (this.autoStartTimer && this.timerState.taskId === taskId) {
+            this.stopTimer();
+        }
+
+        // Clear from working log
+        const root = this.getRootTask(taskId);
+        const rootId = root ? root.id : null;
+        if (rootId) {
+            delete this.workingTasksByRoot[rootId];
+        }
+
         this.saveToStorage();
         this.updateStatusBar();
         this.render();

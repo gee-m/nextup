@@ -501,6 +501,7 @@ export const RenderMixin = {
             g.setAttribute('transform', `translate(${task.x}, ${task.y})`);
 
             if (task.status === 'done') g.classList.add('done');
+            if (task.status === 'in_progress') g.classList.add('in-progress');
             if (task.currentlyWorking) g.classList.add('working');
             if (this.suggestedNextTaskId === task.id) g.classList.add('suggested-next');
             if (workingAncestors.includes(task.id)) g.classList.add('parent-of-working');

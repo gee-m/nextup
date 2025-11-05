@@ -29,11 +29,18 @@
     filter: drop-shadow(0 3px 8px rgba(255, 152, 0, 0.4));
 }
 
+.task-node.in-progress rect {
+    fill: #e3f2fd;  /* Light blue background */
+    stroke: #2196f3;  /* Blue border */
+    stroke-width: 2.5;
+    filter: drop-shadow(0 2px 6px rgba(33, 150, 243, 0.3));
+}
+
 .task-node.suggested-next rect {
-    fill: #f3e5f5;  /* Light purple background */
-    stroke: #9c27b0;  /* Purple border */
-    stroke-width: 3;
-    filter: drop-shadow(0 3px 8px rgba(156, 39, 176, 0.4));
+    fill: #f3e5f5 !important;  /* Light purple background */
+    stroke: #9c27b0 !important;  /* Purple border */
+    stroke-width: 3 !important;
+    filter: drop-shadow(0 3px 8px rgba(156, 39, 176, 0.4)) !important;
 }
 
 .task-node.parent-of-working rect {

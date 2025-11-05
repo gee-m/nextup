@@ -54,6 +54,7 @@ export const TimerWindowMixin = {
                 <div class="timer-window-header">
                     <span class="timer-title">⏱️ Time Tracker</span>
                     <div class="timer-controls">
+                        <button onclick="app.stopTimer(); app.showToast('⏸️ Timer paused', 'info', 2000);" class="timer-btn-pause" title="Pause Timer">⏸️</button>
                         <button onclick="app.toggleTimerWindow()" class="timer-btn-minimize" title="Minimize">−</button>
                         <button onclick="app.stopTimer()" class="timer-btn-close" title="Stop Timer">×</button>
                     </div>
