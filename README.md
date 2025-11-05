@@ -245,6 +245,11 @@ Then `node build.js` → auto-discovered!
   - **Text Selection**: Text auto-selected on open for immediate replacement
   - **Save**: Press **Enter** or click outside to save
   - **New Lines**: Press **Shift+Enter** to create new lines - **newlines are preserved** after saving!
+  - **Whitespace Preservation**: All whitespace is preserved exactly as typed
+    - **Tabs** remain as tabs (useful for code snippets, indentation)
+    - **Multiple spaces** stay as multiple spaces
+    - **Leading/trailing spaces** are preserved
+    - Perfect for formatted text, code, or precise alignment
   - **Cancel**: Press **Escape** to discard changes
   - **Keyboard Shortcuts**: Intuitive modern UX - Enter saves, Shift+Enter for newlines
   - **Blank Lines**: Double Shift+Enter creates visual spacing between paragraphs

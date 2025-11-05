@@ -54,9 +54,9 @@ app.removeURLsFromText = function(text) {
     const urlPattern = /(https?:\/\/[^\s]+)|(file:\/\/\/[^\s]+)|(mailto:[^\s]+)/gi;
     let cleanText = text.replace(urlPattern, '');
 
-    // Clean up extra whitespace and trailing newlines
+    // Clean up excessive blank lines (collapse multiple newlines)
+    // Preserve leading/trailing whitespace - don't trim
     cleanText = cleanText.replace(/\n\s*\n+/g, '\n'); // Multiple blank lines → single
-    cleanText = cleanText.trim();
 
     return cleanText;
 };

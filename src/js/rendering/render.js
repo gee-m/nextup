@@ -688,6 +688,7 @@ export const RenderMixin = {
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.setAttribute('x', 0);
                 text.setAttribute('text-anchor', 'start'); // Left-aligned for multiline
+                text.setAttribute('xml:space', 'preserve'); // Preserve all whitespace (tabs, spaces)
                 text.style.cursor = 'pointer';
                 text.style.fontFamily = this.fontFamily;
                 text.style.fontWeight = this.fontWeight;
@@ -709,6 +710,7 @@ export const RenderMixin = {
                     }
 
                     const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                    tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this line
                     tspan.textContent = lineText; // No emoji prepended - now positioned separately
                     tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
                     // Vertical position: start from top + verticalPadding, add lineHeight per line

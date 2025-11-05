@@ -2244,9 +2244,9 @@ app.removeURLsFromText = function(text) {
     const urlPattern = /(https?:\/\/[^\s]+)|(file:\/\/\/[^\s]+)|(mailto:[^\s]+)/gi;
     let cleanText = text.replace(urlPattern, '');
 
-    // Clean up extra whitespace and trailing newlines
+    // Clean up excessive blank lines (collapse multiple newlines)
+    // Preserve leading/trailing whitespace - don't trim
     cleanText = cleanText.replace(/\n\s*\n+/g, '\n'); // Multiple blank lines → single
-    cleanText = cleanText.trim();
 
     return cleanText;
 };
@@ -6725,6 +6725,7 @@ Object.assign(app, {
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.setAttribute('x', 0);
                 text.setAttribute('text-anchor', 'start'); // Left-aligned for multiline
+                text.setAttribute('xml:space', 'preserve'); // Preserve all whitespace (tabs, spaces)
                 text.style.cursor = 'pointer';
                 text.style.fontFamily = this.fontFamily;
                 text.style.fontWeight = this.fontWeight;
@@ -6746,6 +6747,7 @@ Object.assign(app, {
                     }
 
                     const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                    tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this line
                     tspan.textContent = lineText; // No emoji prepended - now positioned separately
                     tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
                     // Vertical position: start from top + verticalPadding, add lineHeight per line
@@ -8939,7 +8941,8 @@ Object.assign(app, {
             if (input) {
                 const task = this.tasks.find(t => t.id === this.editingTaskId);
                 if (task) {
-                    let newTitle = input.value.trim() || 'Untitled';
+                    // Preserve all whitespace (tabs, spaces, newlines) - don't trim
+                    let newTitle = input.value || 'Untitled';
 
                     // Extract URLs from text and add to links array
                     const foundURLs = this.extractURLsFromText(newTitle);

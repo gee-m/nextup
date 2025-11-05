@@ -29,7 +29,8 @@ export const EditMixin = {
             if (input) {
                 const task = this.tasks.find(t => t.id === this.editingTaskId);
                 if (task) {
-                    let newTitle = input.value.trim() || 'Untitled';
+                    // Preserve all whitespace (tabs, spaces, newlines) - don't trim
+                    let newTitle = input.value || 'Untitled';
 
                     // Extract URLs from text and add to links array
                     const foundURLs = this.extractURLsFromText(newTitle);
