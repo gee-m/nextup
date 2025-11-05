@@ -1089,6 +1089,43 @@ Click **"🧪 Test Checklist"** button to load comprehensive test scenarios. Thi
 - [ ] Dark mode persists
 - [ ] Settings persist across sessions
 
+### Automated Test Suite
+
+**Run all tests**:
+```bash
+npm test                    # Run unit tests (Vitest)
+npm run test:browser       # Run E2E tests (Playwright)
+```
+
+**Test Coverage**:
+
+**Unit Tests** (`tests/unit/`):
+- ✅ Cycle detection in dependency graphs (8 test cases)
+- ✅ Build system smoke tests (file existence, valid HTML/CSS/JS)
+- ✅ Source file structure validation
+
+**Browser/E2E Tests** (`tests/browser/`):
+- ✅ Application loading and initialization
+- ✅ Task creation (Ctrl+double-click, programmatic)
+- ✅ Task selection and hover states
+- ✅ Ctrl+drag reparenting semantics
+- ✅ Arrow coordinate accuracy after reparenting
+- ✅ Temp arrow preview during drag operations
+- ✅ Link bug prevention (NaN coordinate validation)
+- ✅ Canvas panning functionality
+- ✅ **Whitespace preservation** (8 comprehensive tests):
+  - Tab character preservation
+  - Multiple consecutive spaces
+  - Leading/trailing whitespace
+  - Mixed whitespace (tabs + spaces + newlines)
+  - SVG `xml:space="preserve"` attribute verification
+  - Full edit-and-save workflow
+  - Empty string vs whitespace-only string handling
+
+**Total**: 24 passing tests (16 unit/smoke + 8 E2E Playwright)
+
+**Pre-commit Hook**: Automatically runs build + browser tests before every commit to catch regressions early.
+
 ---
 
 ## Architecture & Code Structure
