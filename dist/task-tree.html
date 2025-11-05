@@ -5413,33 +5413,46 @@ Object.assign(app, {
             }
 
             if (wordWrap) {
-                // Split on word boundaries within this paragraph
-                const words = paragraph.split(' ');
+                // Split into tokens: words AND spaces (preserves all whitespace)
+                // Match sequences of non-whitespace OR sequences of spaces
+                const tokens = paragraph.match(/\S+| +/g) || [];
                 let currentLine = '';
 
-                for (const word of words) {
-                    const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                for (const token of tokens) {
+                    const testLine = currentLine + token;
                     const testWidth = testLine.length * charWidth;
 
                     if (testWidth <= maxWidth) {
                         currentLine = testLine;
                     } else {
                         // Line would be too long
-                        if (currentLine) {
-                            allLines.push(currentLine);
-                        }
+                        const isSpaceToken = token.startsWith(' ');
 
-                        // Handle single word longer than max width
-                        if (word.length * charWidth > maxWidth) {
-                            // Force character break for long words
-                            let remainingWord = word;
-                            while (remainingWord.length > 0) {
-                                allLines.push(remainingWord.substring(0, maxChars));
-                                remainingWord = remainingWord.substring(maxChars);
+                        if (isSpaceToken) {
+                            // Don't wrap in the middle of spaces - add them to current line
+                            // (This handles edge case of many spaces)
+                            if (currentLine) {
+                                allLines.push(currentLine);
                             }
-                            currentLine = '';
+                            currentLine = token;
                         } else {
-                            currentLine = word;
+                            // Word token - wrap before it
+                            if (currentLine) {
+                                allLines.push(currentLine);
+                            }
+
+                            // Handle single word longer than max width
+                            if (token.length * charWidth > maxWidth) {
+                                // Force character break for long words
+                                let remaining = token;
+                                while (remaining.length > 0) {
+                                    allLines.push(remaining.substring(0, maxChars));
+                                    remaining = remaining.substring(maxChars);
+                                }
+                                currentLine = '';
+                            } else {
+                                currentLine = token;
+                            }
                         }
                     }
                 }
