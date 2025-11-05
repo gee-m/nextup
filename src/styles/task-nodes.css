@@ -52,8 +52,12 @@
     font-weight: 500; /* Will be overridden by inline style from app.fontWeight */
     fill: #37474f;
     font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+    white-space: pre; /* Preserve whitespace (spaces, tabs) in SVG display */
 }
 
+.task-node text tspan {
+    white-space: pre; /* Preserve whitespace in each line */
+}
 
 .hidden-indicator {
     cursor: pointer;
