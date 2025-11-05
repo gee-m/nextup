@@ -132,29 +132,19 @@ export const StatusMixin = {
                 delete this.workingTasksByRoot[rootId];
             }
 
-            // Flow state: Auto-start working on parent task to maintain momentum
-            if (wasWorking && task.mainParent !== null) {
-                const parent = this.tasks.find(t => t.id === task.mainParent);
-                if (parent && parent.status !== 'done') {
-                    // Clear any previous working task in same root tree
-                    const previousWorkingId = this.workingTasksByRoot[rootId];
-                    if (previousWorkingId && previousWorkingId !== parent.id) {
-                        const prevTask = this.tasks.find(t => t.id === previousWorkingId);
-                        if (prevTask) {
-                            prevTask.currentlyWorking = false;
-                            if (!prevTask.textLocked) {
-                                prevTask.textExpanded = false;
-                            }
-                        }
-                    }
+            // Stop timer when task is marked as done
+            if (this.autoStartTimer && this.timerState.taskId === taskId) {
+                this.stopTimer();
+            }
 
-                    parent.currentlyWorking = true;
-                    // Update working log for parent
-                    if (rootId) {
-                        this.workingTasksByRoot[rootId] = parent.id;
-                    }
+            // Flow state: Suggest parent task as next to work on (shown in purple)
+            if (task.mainParent !== null) {
+                const parent = this.tasks.find(t => t.id === task.mainParent);
+                if (parent && parent.status !== 'done' && !parent.currentlyWorking) {
+                    // Set parent as suggested next task
+                    this.suggestedNextTaskId = parent.id;
                     const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
-                    this.showToast(`⬆️ Now working on parent: ${parentTitle}`, 'info', 3000);
+                    this.showToast(`💡 Suggested next: ${parentTitle} (shown in purple)`, 'info', 3000);
                 }
             }
         }
@@ -184,6 +174,16 @@ export const StatusMixin = {
             // Stop timer when stopping work
             if (this.autoStartTimer && this.timerState.taskId === taskId) {
                 this.stopTimer();
+            }
+
+            // If task is done and has a parent, suggest parent as next task (purple)
+            if (task.status === 'done' && task.mainParent !== null) {
+                const parent = this.tasks.find(t => t.id === task.mainParent);
+                if (parent && parent.status !== 'done' && !parent.currentlyWorking) {
+                    this.suggestedNextTaskId = parent.id;
+                    const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
+                    this.showToast(`💡 Suggested next: ${parentTitle} (shown in purple)`, 'info', 3000);
+                }
             }
         } else {
             // Start working - unwork previous in same root only
