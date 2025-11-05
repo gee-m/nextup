@@ -134,7 +134,10 @@ export const NodesMixin = {
 
         // Calculate height (use fixed vertical padding, not nodePadding)
         const verticalPadding = 10;
-        const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
+        // Add extra bottom padding if task has tracked time (for time badge)
+        const hasTimeTracking = task.timeTracking && task.timeTracking.totalSeconds > 0;
+        const extraBottomPadding = hasTimeTracking ? 8 : 0;
+        const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2 + extraBottomPadding;
         const rectHeight = this.maxNodeHeight > 0
             ? Math.min(this.maxNodeHeight, calculatedHeight)
             : calculatedHeight;
