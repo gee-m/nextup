@@ -1278,6 +1278,86 @@ body.dark-mode .timer-sessions {
 
 
 /* ============================================================
+   TIME-DASHBOARD.CSS (Category: styles)
+   ============================================================ */
+
+/* @order: 66 */
+/* @category: styles */
+
+/* Time Tracking Dashboard Table */
+.time-dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.time-dashboard-table thead {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-bottom: 2px solid #dee2e6;
+}
+
+.time-dashboard-table th {
+    padding: 12px 16px;
+    font-weight: 600;
+    color: #495057;
+    text-align: center;
+    user-select: none;
+}
+
+.time-dashboard-table th:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.time-dashboard-table tbody tr {
+    border-bottom: 1px solid #f1f3f5;
+    transition: background 0.15s ease;
+}
+
+.time-dashboard-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.time-dashboard-table td {
+    padding: 12px 16px;
+    color: #212529;
+}
+
+.time-dashboard-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+/* Dark mode support */
+body.dark-mode .time-dashboard-table {
+    background: #2d2d2d;
+}
+
+body.dark-mode .time-dashboard-table thead {
+    background: linear-gradient(135deg, #3a3a3a, #2d2d2d);
+    border-bottom-color: #444;
+}
+
+body.dark-mode .time-dashboard-table th {
+    color: #e0e0e0;
+}
+
+body.dark-mode .time-dashboard-table tbody tr {
+    border-bottom-color: #444;
+}
+
+body.dark-mode .time-dashboard-table tbody tr:hover {
+    background: #3a3a3a;
+}
+
+body.dark-mode .time-dashboard-table td {
+    color: #e0e0e0;
+}
+
+
+
+/* ============================================================
    DARK-MODE.CSS (Category: styles)
    ============================================================ */
 
@@ -1559,6 +1639,7 @@ body.dark-mode .links-dropdown > div:hover {
         <button class="secondary" onclick="app.toggleDebugCtrlMode()" id="debugCtrlToggle" title="Debug mode: All clicks/drags act as if Ctrl is pressed">🔧 Debug: Ctrl OFF</button>
         <button class="secondary" onclick="app.showSettingsModal()" title="Customize appearance and behavior">⚙️ Settings</button>
         <button class="secondary" onclick="app.showShortcutsModal()" title="View all keyboard shortcuts">❓ Shortcuts</button>
+        <button class="secondary" onclick="app.showTimeTrackingDashboard()" title="View time tracking overview and export data">⏱️ Time Tracking</button>
         <div class="dropdown">
             <button class="secondary" onclick="app.toggleHomesDropdown(event)" title="Quick navigation to saved homes">🏠 Homes</button>
             <div id="homesDropdown" class="dropdown-content">
@@ -1748,6 +1829,30 @@ body.dark-mode .links-dropdown > div:hover {
 
             <div class="modal-buttons" style="margin-top: 24px;">
                 <button onclick="app.hideShortcutsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="time-history-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+            <h2>⏱️ Time Tracking History</h2>
+            <div id="time-history-content">
+                <!-- Populated dynamically by showTimeHistoryModal() -->
+            </div>
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button onclick="app.hideTimeHistoryModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="time-dashboard-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 85vh; overflow-y: auto;">
+            <h2>⏱️ Time Tracking Dashboard</h2>
+            <div id="time-dashboard-content">
+                <!-- Populated dynamically by showTimeTrackingDashboard() -->
+            </div>
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button onclick="app.hideTimeTrackingDashboard()">Close</button>
             </div>
         </div>
     </div>
@@ -3702,6 +3807,24 @@ Object.assign(app, {
 
         const pad = (n) => n.toString().padStart(2, '0');
         return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    },
+
+    /**
+     * Format duration in compact form for badges (e.g., "2h 15m" or "15m")
+     * @param {number} seconds - Duration in seconds
+     * @returns {string} Compact formatted duration
+     */
+    formatDurationCompact(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+
+        if (hours > 0) {
+            return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+        } else if (mins > 0) {
+            return `${mins}m`;
+        } else {
+            return '<1m';
+        }
     },
 
     /**
@@ -7452,6 +7575,53 @@ Object.assign(app, {
                 g.appendChild(priorityDot);
             }
 
+            // Add time tracking badge (bottom-right corner)
+            if (task.timeTracking && task.timeTracking.totalSeconds > 0) {
+                const timeText = this.formatDurationCompact(task.timeTracking.totalSeconds);
+                const badgeText = `⏱️ ${timeText}`;
+
+                // Calculate badge dimensions
+                const badgePadding = 4;
+                const badgeCharWidth = 6.5;
+                const badgeWidth = badgeText.length * badgeCharWidth + badgePadding * 2;
+                const badgeHeight = 16;
+
+                // Position in bottom-right corner
+                const badgeX = rectWidth / 2 - badgeWidth - 3;
+                const badgeY = rectHeight / 2 - badgeHeight - 3;
+
+                // Create badge group
+                const timeBadgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                timeBadgeGroup.classList.add('time-badge');
+
+                // Badge background
+                const badgeBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                badgeBg.setAttribute('x', badgeX);
+                badgeBg.setAttribute('y', badgeY);
+                badgeBg.setAttribute('width', badgeWidth);
+                badgeBg.setAttribute('height', badgeHeight);
+                badgeBg.setAttribute('rx', 3);
+                badgeBg.setAttribute('ry', 3);
+                badgeBg.setAttribute('fill', this.darkMode ? 'rgba(100, 100, 100, 0.8)' : 'rgba(0, 0, 0, 0.1)');
+                badgeBg.setAttribute('stroke', this.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)');
+                badgeBg.setAttribute('stroke-width', '0.5');
+                timeBadgeGroup.appendChild(badgeBg);
+
+                // Badge text
+                const badgeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                badgeLabel.setAttribute('x', badgeX + badgeWidth / 2);
+                badgeLabel.setAttribute('y', badgeY + badgeHeight / 2);
+                badgeLabel.setAttribute('text-anchor', 'middle');
+                badgeLabel.setAttribute('dominant-baseline', 'middle');
+                badgeLabel.setAttribute('font-size', '10');
+                badgeLabel.setAttribute('font-weight', '500');
+                badgeLabel.setAttribute('fill', this.darkMode ? '#ccc' : '#666');
+                badgeLabel.textContent = badgeText;
+                timeBadgeGroup.appendChild(badgeLabel);
+
+                g.appendChild(timeBadgeGroup);
+            }
+
             // Add hidden children indicator badge
             const hiddenCount = this.getHiddenChildrenCount(task.id);
             if (hiddenCount > 0) {
@@ -10185,6 +10355,93 @@ Object.assign(app, {
     hidePrompt() {
         const modal = document.getElementById('prompt-modal');
         modal.classList.remove('show');
+    },
+
+    /**
+     * Show time tracking history for a specific task
+     * @param {number} taskId - ID of the task
+     */
+    showTimeHistoryModal(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const modal = document.getElementById('time-history-modal');
+        const content = document.getElementById('time-history-content');
+
+        const timeTracking = task.timeTracking || { totalSeconds: 0, sessions: [] };
+        const totalTime = this.formatDuration(timeTracking.totalSeconds);
+        const sessionCount = timeTracking.sessions.length;
+
+        // Build content HTML
+        let html = `
+            <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px 0; color: #333;">${this.getTaskDisplayTitle(task, 50)}</h3>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                    <div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Total Time</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #4CAF50;">${totalTime}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Sessions</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #2196F3;">${sessionCount}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if (sessionCount === 0) {
+            html += `<p style="text-align: center; color: #999; padding: 40px 0;">No time tracked yet for this task.</p>`;
+        } else {
+            html += `<h4 style="margin: 16px 0 12px 0; color: #333;">Session History</h4>`;
+            html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
+
+            // Show sessions in reverse order (most recent first)
+            const sortedSessions = [...timeTracking.sessions].reverse();
+            sortedSessions.forEach((session, index) => {
+                const duration = this.formatDuration(session.duration);
+                const startTime = new Date(session.startTime).toLocaleString();
+                const endTime = new Date(session.endTime).toLocaleString();
+                const relativeTime = this.formatRelativeTime(session.startTime);
+
+                html += `
+                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600; color: #333;">Session ${sessionCount - index}</span>
+                            <span style="font-size: 18px; font-weight: bold; color: #4CAF50;">${duration}</span>
+                        </div>
+                        <div style="font-size: 12px; color: #666;">
+                            <div>Started: ${startTime}</div>
+                            <div>Ended: ${endTime}</div>
+                            <div style="margin-top: 4px; color: #999;">${relativeTime}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+        }
+
+        content.innerHTML = html;
+        modal.classList.add('show');
+
+        // Close on ESC or click outside
+        const closeHandler = (e) => {
+            if (e.key === 'Escape' || e.target === modal) {
+                this.hideTimeHistoryModal();
+                document.removeEventListener('keydown', closeHandler);
+                modal.removeEventListener('click', closeHandler);
+            }
+        };
+        document.addEventListener('keydown', closeHandler);
+        modal.addEventListener('click', closeHandler);
+    },
+
+    /**
+     * Hide time history modal
+     */
+    hideTimeHistoryModal() {
+        const modal = document.getElementById('time-history-modal');
+        modal.classList.remove('show');
     }
 });
 
@@ -10308,6 +10565,11 @@ Object.assign(app, {
             buttons.push({ label: '➕ Add Child', action: () => this.addChildTask(taskId) });
             buttons.push({ label: task.status === 'done' ? '⏸️ Mark Pending' : '✅ Mark Done', action: () => this.toggleDone(taskId) });
             buttons.push({ label: task.currentlyWorking ? '⏹️ Stop Working' : '▶️ Start Working', action: () => this.toggleWorking(taskId) });
+
+            // Time tracking history (if task has tracked time)
+            if (task.timeTracking && task.timeTracking.totalSeconds > 0) {
+                buttons.push({ label: '⏱️ View Time History', action: () => this.showTimeHistoryModal(taskId) });
+            }
 
             // Priority submenu
             const currentPriorityEmoji = task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟠' : '⚪';
@@ -12147,6 +12409,225 @@ Object.assign(app, {
 });
 
 console.log('[timer-window.js] Timer window UI loaded');
+
+
+
+// ============================================================
+// UI/TIME-TRACKING-DASHBOARD.JS (Order: 38, Category: UI)
+// ============================================================
+
+/**
+ * @module ui/time-tracking-dashboard
+ * @order 38
+ * @category UI
+ *
+ * Global time tracking dashboard - shows all tasks with tracked time
+ */
+
+Object.assign(app, {
+    /**
+     * Show global time tracking dashboard
+     * Displays sortable table of all tasks with tracked time
+     */
+    showTimeTrackingDashboard() {
+        const modal = document.getElementById('time-dashboard-modal');
+        const content = document.getElementById('time-dashboard-content');
+
+        // Get all tasks with tracked time
+        const tasksWithTime = this.tasks
+            .filter(t => t.timeTracking && t.timeTracking.totalSeconds > 0)
+            .map(t => ({
+                id: t.id,
+                title: this.getTaskDisplayTitle(t, 40),
+                totalSeconds: t.timeTracking.totalSeconds,
+                sessionCount: t.timeTracking.sessions.length,
+                lastWorked: t.timeTracking.sessions.length > 0
+                    ? Math.max(...t.timeTracking.sessions.map(s => s.endTime))
+                    : 0
+            }))
+            .sort((a, b) => b.lastWorked - a.lastWorked); // Default sort: most recent first
+
+        if (tasksWithTime.length === 0) {
+            content.innerHTML = `
+                <p style="text-align: center; color: #999; padding: 60px 20px;">
+                    No time tracked yet. Start working on a task (middle-click) to begin tracking time.
+                </p>
+            `;
+        } else {
+            // Build table HTML
+            let html = `
+                <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${tasksWithTime.length}</strong> task${tasksWithTime.length !== 1 ? 's' : ''} with tracked time
+                    </div>
+                    <button onclick="app.exportTimeTracking()" style="padding: 6px 12px; font-size: 12px;">
+                        📥 Export CSV
+                    </button>
+                </div>
+                <table class="time-dashboard-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; cursor: pointer;" onclick="app.sortTimeDashboard('title')">
+                                Task <span style="font-size: 11px;">▼</span>
+                            </th>
+                            <th style="cursor: pointer;" onclick="app.sortTimeDashboard('totalTime')">
+                                Total Time <span style="font-size: 11px;">▼</span>
+                            </th>
+                            <th style="cursor: pointer;" onclick="app.sortTimeDashboard('sessions')">
+                                Sessions <span style="font-size: 11px;">▼</span>
+                            </th>
+                            <th style="cursor: pointer;" onclick="app.sortTimeDashboard('lastWorked')">
+                                Last Worked <span style="font-size: 11px;">▼</span>
+                            </th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            tasksWithTime.forEach(task => {
+                const totalTime = this.formatDurationCompact(task.totalSeconds);
+                const lastWorked = this.formatRelativeTime(task.lastWorked);
+
+                html += `
+                    <tr>
+                        <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${task.title}
+                        </td>
+                        <td style="text-align: center; font-weight: 600; color: #4CAF50;">
+                            ${totalTime}
+                        </td>
+                        <td style="text-align: center;">
+                            ${task.sessionCount}
+                        </td>
+                        <td style="text-align: center; color: #666;">
+                            ${lastWorked}
+                        </td>
+                        <td style="text-align: right;">
+                            <button onclick="app.jumpToTaskFromDashboard(${task.id})" style="padding: 4px 8px; font-size: 11px;">
+                                🎯 Jump
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            content.innerHTML = html;
+        }
+
+        modal.classList.add('show');
+
+        // Close on ESC or click outside
+        const closeHandler = (e) => {
+            if (e.key === 'Escape' || e.target === modal) {
+                this.hideTimeTrackingDashboard();
+                document.removeEventListener('keydown', closeHandler);
+                modal.removeEventListener('click', closeHandler);
+            }
+        };
+        document.addEventListener('keydown', closeHandler);
+        modal.addEventListener('click', closeHandler);
+
+        // Store current sort state
+        this.timeDashboardSort = { field: 'lastWorked', ascending: false };
+    },
+
+    /**
+     * Hide time tracking dashboard
+     */
+    hideTimeTrackingDashboard() {
+        const modal = document.getElementById('time-dashboard-modal');
+        modal.classList.remove('show');
+    },
+
+    /**
+     * Sort time dashboard table
+     * @param {string} field - Field to sort by ('title', 'totalTime', 'sessions', 'lastWorked')
+     */
+    sortTimeDashboard(field) {
+        // Toggle sort direction if clicking same field
+        if (this.timeDashboardSort && this.timeDashboardSort.field === field) {
+            this.timeDashboardSort.ascending = !this.timeDashboardSort.ascending;
+        } else {
+            this.timeDashboardSort = { field, ascending: false };
+        }
+
+        // Re-render with new sort
+        this.showTimeTrackingDashboard();
+    },
+
+    /**
+     * Jump to task from dashboard (with animation)
+     * @param {number} taskId - Task ID to jump to
+     */
+    jumpToTaskFromDashboard(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        this.hideTimeTrackingDashboard();
+
+        // Select the task
+        this.selectedTaskIds.clear();
+        this.selectedTaskIds.add(taskId);
+
+        // Animate to task
+        this.animateViewportTo(task.x, task.y, 1, {
+            overviewZoom: 0.3,
+            onComplete: () => {
+                this.updateZoomDisplay();
+                this.saveToStorage();
+                this.showToast(`Jumped to "${this.getTaskDisplayTitle(task, 30)}"`, 'success', 2000);
+            }
+        });
+    },
+
+    /**
+     * Export time tracking data as CSV
+     */
+    exportTimeTracking() {
+        const tasksWithTime = this.tasks.filter(t => t.timeTracking && t.timeTracking.totalSeconds > 0);
+
+        if (tasksWithTime.length === 0) {
+            this.showToast('⚠️ No time tracking data to export', 'warning');
+            return;
+        }
+
+        // Build CSV content
+        let csv = 'Task,Total Time (seconds),Total Time (formatted),Sessions,Last Worked\n';
+
+        tasksWithTime.forEach(task => {
+            const title = task.title.replace(/"/g, '""'); // Escape quotes
+            const totalSeconds = task.timeTracking.totalSeconds;
+            const totalFormatted = this.formatDuration(totalSeconds);
+            const sessionCount = task.timeTracking.sessions.length;
+            const lastWorked = sessionCount > 0
+                ? new Date(Math.max(...task.timeTracking.sessions.map(s => s.endTime))).toLocaleString()
+                : 'Never';
+
+            csv += `"${title}",${totalSeconds},"${totalFormatted}",${sessionCount},"${lastWorked}"\n`;
+        });
+
+        // Download CSV
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `time-tracking-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.showToast(`📥 Exported ${tasksWithTime.length} tasks to CSV`, 'success');
+    }
+});
+
+console.log('✓ Time tracking dashboard mixin loaded');
 
 
 

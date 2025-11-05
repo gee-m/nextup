@@ -850,6 +850,53 @@ export const RenderMixin = {
                 g.appendChild(priorityDot);
             }
 
+            // Add time tracking badge (bottom-right corner)
+            if (task.timeTracking && task.timeTracking.totalSeconds > 0) {
+                const timeText = this.formatDurationCompact(task.timeTracking.totalSeconds);
+                const badgeText = `⏱️ ${timeText}`;
+
+                // Calculate badge dimensions
+                const badgePadding = 4;
+                const badgeCharWidth = 6.5;
+                const badgeWidth = badgeText.length * badgeCharWidth + badgePadding * 2;
+                const badgeHeight = 16;
+
+                // Position in bottom-right corner
+                const badgeX = rectWidth / 2 - badgeWidth - 3;
+                const badgeY = rectHeight / 2 - badgeHeight - 3;
+
+                // Create badge group
+                const timeBadgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                timeBadgeGroup.classList.add('time-badge');
+
+                // Badge background
+                const badgeBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                badgeBg.setAttribute('x', badgeX);
+                badgeBg.setAttribute('y', badgeY);
+                badgeBg.setAttribute('width', badgeWidth);
+                badgeBg.setAttribute('height', badgeHeight);
+                badgeBg.setAttribute('rx', 3);
+                badgeBg.setAttribute('ry', 3);
+                badgeBg.setAttribute('fill', this.darkMode ? 'rgba(100, 100, 100, 0.8)' : 'rgba(0, 0, 0, 0.1)');
+                badgeBg.setAttribute('stroke', this.darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)');
+                badgeBg.setAttribute('stroke-width', '0.5');
+                timeBadgeGroup.appendChild(badgeBg);
+
+                // Badge text
+                const badgeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                badgeLabel.setAttribute('x', badgeX + badgeWidth / 2);
+                badgeLabel.setAttribute('y', badgeY + badgeHeight / 2);
+                badgeLabel.setAttribute('text-anchor', 'middle');
+                badgeLabel.setAttribute('dominant-baseline', 'middle');
+                badgeLabel.setAttribute('font-size', '10');
+                badgeLabel.setAttribute('font-weight', '500');
+                badgeLabel.setAttribute('fill', this.darkMode ? '#ccc' : '#666');
+                badgeLabel.textContent = badgeText;
+                timeBadgeGroup.appendChild(badgeLabel);
+
+                g.appendChild(timeBadgeGroup);
+            }
+
             // Add hidden children indicator badge
             const hiddenCount = this.getHiddenChildrenCount(task.id);
             if (hiddenCount > 0) {

@@ -133,6 +133,24 @@ export const TimerMixin = {
     },
 
     /**
+     * Format duration in compact form for badges (e.g., "2h 15m" or "15m")
+     * @param {number} seconds - Duration in seconds
+     * @returns {string} Compact formatted duration
+     */
+    formatDurationCompact(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+
+        if (hours > 0) {
+            return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+        } else if (mins > 0) {
+            return `${mins}m`;
+        } else {
+            return '<1m';
+        }
+    },
+
+    /**
      * Format timestamp as relative time (e.g., "2 hours ago")
      * @param {number} timestamp - Unix timestamp
      * @returns {string} Relative time string

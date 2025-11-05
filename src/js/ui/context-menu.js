@@ -113,6 +113,11 @@ export const ContextMenuMixin = {
             buttons.push({ label: task.status === 'done' ? '⏸️ Mark Pending' : '✅ Mark Done', action: () => this.toggleDone(taskId) });
             buttons.push({ label: task.currentlyWorking ? '⏹️ Stop Working' : '▶️ Start Working', action: () => this.toggleWorking(taskId) });
 
+            // Time tracking history (if task has tracked time)
+            if (task.timeTracking && task.timeTracking.totalSeconds > 0) {
+                buttons.push({ label: '⏱️ View Time History', action: () => this.showTimeHistoryModal(taskId) });
+            }
+
             // Priority submenu
             const currentPriorityEmoji = task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟠' : '⚪';
             buttons.push({ label: `${currentPriorityEmoji} Set Priority`, isPrioritySubmenu: true, currentPriority: task.priority });

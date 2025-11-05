@@ -393,6 +393,41 @@ Then `node build.js` → auto-discovered!
   - Switching working task between projects stops old timer, starts new timer
   - Each project's working task has its own independent timer
 
+##### Viewing Time Tracking Data
+
+Three ways to view your time tracking:
+
+1. **Time Badge on Nodes** (Always visible)
+   - Small badge in **bottom-right corner** of task nodes
+   - Shows cumulative time in compact format (e.g., "⏱️ 2h 15m" or "⏱️ 45m")
+   - Only appears on tasks with tracked time
+   - Provides at-a-glance time visibility across the canvas
+
+2. **Per-Task Time History** (Right-click menu)
+   - Right-click any task with tracked time → **"⏱️ View Time History"**
+   - Opens detailed modal showing:
+     - Total time (HH:MM:SS format)
+     - Number of sessions
+     - Full session list with start/end times and durations
+     - Relative timestamps (e.g., "2 hours ago")
+   - Perfect for reviewing individual task work history
+
+3. **Global Time Tracking Dashboard** (Toolbar button)
+   - Click **"⏱️ Time Tracking"** button in toolbar
+   - Shows sortable table of **all tasks with tracked time**:
+     - Task name (truncated)
+     - Total time (compact format)
+     - Session count
+     - Last worked (relative time)
+     - **Jump button** - Click to animate to task location
+   - **Sortable columns**: Click headers to sort by any field
+   - **Export to CSV**: Click "📥 Export CSV" to download time report
+   - Use cases:
+     - Productivity review across all tasks
+     - Time reporting for projects
+     - Finding tasks you haven't worked on recently
+     - Quick navigation to any tracked task
+
 #### Priority Management
 - **3 Priority Levels**: High (🔴), Medium (🟠), Normal (no badge)
 - **Visual Indicators**:

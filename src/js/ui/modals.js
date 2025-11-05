@@ -99,5 +99,92 @@ export const ModalsMixin = {
     hidePrompt() {
         const modal = document.getElementById('prompt-modal');
         modal.classList.remove('show');
+    },
+
+    /**
+     * Show time tracking history for a specific task
+     * @param {number} taskId - ID of the task
+     */
+    showTimeHistoryModal(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const modal = document.getElementById('time-history-modal');
+        const content = document.getElementById('time-history-content');
+
+        const timeTracking = task.timeTracking || { totalSeconds: 0, sessions: [] };
+        const totalTime = this.formatDuration(timeTracking.totalSeconds);
+        const sessionCount = timeTracking.sessions.length;
+
+        // Build content HTML
+        let html = `
+            <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px 0; color: #333;">${this.getTaskDisplayTitle(task, 50)}</h3>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                    <div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Total Time</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #4CAF50;">${totalTime}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Sessions</div>
+                        <div style="font-size: 24px; font-weight: bold; color: #2196F3;">${sessionCount}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if (sessionCount === 0) {
+            html += `<p style="text-align: center; color: #999; padding: 40px 0;">No time tracked yet for this task.</p>`;
+        } else {
+            html += `<h4 style="margin: 16px 0 12px 0; color: #333;">Session History</h4>`;
+            html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
+
+            // Show sessions in reverse order (most recent first)
+            const sortedSessions = [...timeTracking.sessions].reverse();
+            sortedSessions.forEach((session, index) => {
+                const duration = this.formatDuration(session.duration);
+                const startTime = new Date(session.startTime).toLocaleString();
+                const endTime = new Date(session.endTime).toLocaleString();
+                const relativeTime = this.formatRelativeTime(session.startTime);
+
+                html += `
+                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600; color: #333;">Session ${sessionCount - index}</span>
+                            <span style="font-size: 18px; font-weight: bold; color: #4CAF50;">${duration}</span>
+                        </div>
+                        <div style="font-size: 12px; color: #666;">
+                            <div>Started: ${startTime}</div>
+                            <div>Ended: ${endTime}</div>
+                            <div style="margin-top: 4px; color: #999;">${relativeTime}</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div>`;
+        }
+
+        content.innerHTML = html;
+        modal.classList.add('show');
+
+        // Close on ESC or click outside
+        const closeHandler = (e) => {
+            if (e.key === 'Escape' || e.target === modal) {
+                this.hideTimeHistoryModal();
+                document.removeEventListener('keydown', closeHandler);
+                modal.removeEventListener('click', closeHandler);
+            }
+        };
+        document.addEventListener('keydown', closeHandler);
+        modal.addEventListener('click', closeHandler);
+    },
+
+    /**
+     * Hide time history modal
+     */
+    hideTimeHistoryModal() {
+        const modal = document.getElementById('time-history-modal');
+        modal.classList.remove('show');
     }
 };

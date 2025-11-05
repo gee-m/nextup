@@ -14,6 +14,7 @@
         <button class="secondary" onclick="app.toggleDebugCtrlMode()" id="debugCtrlToggle" title="Debug mode: All clicks/drags act as if Ctrl is pressed">🔧 Debug: Ctrl OFF</button>
         <button class="secondary" onclick="app.showSettingsModal()" title="Customize appearance and behavior">⚙️ Settings</button>
         <button class="secondary" onclick="app.showShortcutsModal()" title="View all keyboard shortcuts">❓ Shortcuts</button>
+        <button class="secondary" onclick="app.showTimeTrackingDashboard()" title="View time tracking overview and export data">⏱️ Time Tracking</button>
         <div class="dropdown">
             <button class="secondary" onclick="app.toggleHomesDropdown(event)" title="Quick navigation to saved homes">🏠 Homes</button>
             <div id="homesDropdown" class="dropdown-content">
@@ -203,6 +204,30 @@
 
             <div class="modal-buttons" style="margin-top: 24px;">
                 <button onclick="app.hideShortcutsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="time-history-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+            <h2>⏱️ Time Tracking History</h2>
+            <div id="time-history-content">
+                <!-- Populated dynamically by showTimeHistoryModal() -->
+            </div>
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button onclick="app.hideTimeHistoryModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="time-dashboard-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px; max-height: 85vh; overflow-y: auto;">
+            <h2>⏱️ Time Tracking Dashboard</h2>
+            <div id="time-dashboard-content">
+                <!-- Populated dynamically by showTimeTrackingDashboard() -->
+            </div>
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button onclick="app.hideTimeTrackingDashboard()">Close</button>
             </div>
         </div>
     </div>
