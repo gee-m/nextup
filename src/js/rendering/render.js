@@ -711,7 +711,9 @@ export const RenderMixin = {
 
                     const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
                     tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this line
-                    tspan.textContent = lineText; // No emoji prepended - now positioned separately
+                    // Use createTextNode instead of textContent to preserve exact whitespace
+                    const textNode = document.createTextNode(lineText);
+                    tspan.appendChild(textNode);
                     tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
                     // Vertical position: start from top + verticalPadding, add lineHeight per line
                     const yOffset = -rectHeight / 2 + verticalPadding + this.lineHeight * (index + 0.75);
