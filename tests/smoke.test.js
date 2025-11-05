@@ -52,9 +52,9 @@ describe('Build System Smoke Tests', () => {
         const stats = fs.statSync(distFile);
         const sizeKB = stats.size / 1024;
 
-        // Should be between 100 KB and 500 KB
+        // Should be between 100 KB and 550 KB (increased for timer feature)
         expect(sizeKB).toBeGreaterThan(100);
-        expect(sizeKB).toBeLessThan(500);
+        expect(sizeKB).toBeLessThan(550);
     });
 });
 

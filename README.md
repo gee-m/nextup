@@ -254,6 +254,16 @@ Then `node build.js` → auto-discovered!
     - **Multiple spaces** stay as multiple spaces
     - **Leading/trailing spaces** are preserved
     - Perfect for formatted text, code, or precise alignment
+  - **Markdown Support**: Basic markdown formatting in task titles
+    - **Bold**: `**text**` → **text**
+    - **Italic**: `*text*` → *text*
+    - **Code**: `` `code` `` → pink monospace text
+    - **Links**: `[text](url)` → clickable blue underlined link (opens in new tab)
+    - **Bullet Points**: Lines starting with `- ` or `* ` → `• ` bullet character
+    - **Toggle**: Enable/disable in ⚙️ Settings → "Enable Markdown Formatting"
+    - **Whitespace Compatible**: Markdown preserves all whitespace (tabs, spaces)
+    - **Mixed Formatting**: Multiple formats can be combined in one line
+    - Example: `**Bold** and *italic* with `code` and [link](url)` renders with all styles
   - **Cancel**: Press **Escape** to discard changes
   - **Keyboard Shortcuts**: Intuitive modern UX - Enter saves, Shift+Enter for newlines
   - **Blank Lines**: Double Shift+Enter creates visual spacing between paragraphs
@@ -352,11 +362,36 @@ Then `node build.js` → auto-discovered!
   - Example: Project A's Task 1 working + Project B's Task 2 working simultaneously ✓
 - **Done**: Green background, green border with ✅ emoji
 - **Cycle Status**: Middle-click task → Pending → Working → Done → Pending...
-- **Flow State**: When marking a working task as done, automatically starts working on parent task
-  - Maintains momentum - finish subtask, immediately continue on parent goal
-  - Only applies if parent exists and isn't already done
-  - Shows toast notification: "⬆️ Now working on parent: [Parent Name]"
+- **Flow State**: When marking a working task as done, suggests parent task as next focus
+  - **Purple Suggestion**: Parent task highlighted in purple (light purple background with purple border)
+  - **Non-Disruptive**: Doesn't auto-start timer or mark parent as working (suggestion only)
+  - **Smart Suggestion**: Only suggests if parent exists, isn't done, and isn't already working
+  - **Toast Notification**: "💡 Suggested next: [Parent Name] (shown in purple)"
+  - **Auto-Clear**: Suggestion clears when you start working on any task
+  - **Maintains Focus**: Lets you decide whether to continue on parent or switch tasks
   - Works within each root graph (doesn't affect other projects)
+
+#### Time Tracking ⏱️
+- **Automatic Timer**: Tracks time spent on tasks
+  - **Auto-Start**: Timer automatically starts when you mark a task as "working" (middle-click)
+  - **Auto-Stop**: Timer stops when task marked as done or when switching to different task
+  - **Additive Sessions**: Time accumulates across multiple work sessions
+  - **Session History**: View all past work sessions with timestamps
+- **Floating Timer Window**: Bottom-right corner display
+  - **Current Session**: Live counter showing current work session time (HH:MM:SS)
+  - **Total Time**: Cumulative time across all sessions for the task
+  - **Session Count**: Number of work sessions completed
+  - **Recent Sessions**: List of last 3 sessions with relative timestamps
+  - **Minimize/Expand**: Click "−" to minimize to badge, or press **T** to toggle
+  - **Badge Design**: Green gradient pill button with timer (⏱️ HH:MM:SS) - click to expand
+  - **Stop Timer**: Click "×" to stop timer and save current session
+- **Data Structure**: Each task stores time tracking data
+  - `timeTracking.totalSeconds` - Cumulative seconds across all sessions
+  - `timeTracking.sessions[]` - Array of session objects with start/end times and duration
+  - Persisted to localStorage automatically
+- **Multi-Project Compatible**: Timer respects per-project working states
+  - Switching working task between projects stops old timer, starts new timer
+  - Each project's working task has its own independent timer
 
 #### Priority Management
 - **3 Priority Levels**: High (🔴), Medium (🟠), Normal (no badge)
@@ -402,6 +437,7 @@ Then `node build.js` → auto-discovered!
 #### Status Indicators
 - **✅ Emoji**: Shows on completed tasks
 - **🔄 Emoji**: Shows on currently working task
+- **Purple Border + Background**: Suggested next task (appears after completing working task)
 - **Orange Border + Glow**: Parent tasks of working task (shows goal path)
 - **Red Border**: Incomplete children of working task (highlights blockers)
 - **Golden Path Arrows**: Visual hierarchy showing working task context
@@ -919,6 +955,7 @@ Stored in localStorage as:
 | Zoom in | ⌘++ | Ctrl++ | Zoom in |
 | Zoom out | ⌘+− | Ctrl+− | Zoom out |
 | Jump to working | J | J | Cinematic animation to working task |
+| Toggle timer window | T | T | Minimize/expand timer (if running) |
 | Collapse/expand | ⇧+Double-click | Shift+Double-click | Toggle subtree visibility |
 | **Links** |
 | Attach link | ⌘+K | Ctrl+K | Add URL to selected task |

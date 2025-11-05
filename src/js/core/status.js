@@ -40,6 +40,10 @@ export const StatusMixin = {
                     if (!prevTask.textLocked) {
                         prevTask.textExpanded = false;
                     }
+                    // Stop timer for previous working task
+                    if (this.autoStartTimer && this.timerState.taskId === previousWorkingId) {
+                        this.stopTimer();
+                    }
                 }
             }
 
@@ -49,6 +53,14 @@ export const StatusMixin = {
             }
             // Track this as the last working task for Jump button
             this.lastWorkingTaskId = taskId;
+
+            // Clear suggestion when user starts working on a task
+            this.suggestedNextTaskId = null;
+
+            // Auto-start timer when marking task as working
+            if (this.autoStartTimer) {
+                this.startTimer(taskId);
+            }
         } else if (task.currentlyWorking) {
             // Working → Done
             this.saveSnapshot(`Marked '${truncatedTitle}' as done`);
@@ -58,6 +70,11 @@ export const StatusMixin = {
 
             task.currentlyWorking = false;
             task.status = 'done';
+
+            // Stop timer when task is marked as done
+            if (this.autoStartTimer && this.timerState.taskId === taskId) {
+                this.stopTimer();
+            }
 
             // Update working log
             if (rootId) {
@@ -69,31 +86,14 @@ export const StatusMixin = {
                 task.textExpanded = false;
             }
 
-            // Flow state: Auto-start working on parent task to maintain momentum
+            // Flow state: Suggest parent task as next to work on (shown in purple)
             if (task.mainParent !== null) {
                 const parent = this.tasks.find(t => t.id === task.mainParent);
-                if (parent && parent.status !== 'done') {
-                    // Clear any previous working task in same root tree
-                    const previousWorkingId = this.workingTasksByRoot[rootId];
-                    if (previousWorkingId && previousWorkingId !== parent.id) {
-                        const prevTask = this.tasks.find(t => t.id === previousWorkingId);
-                        if (prevTask) {
-                            prevTask.currentlyWorking = false;
-                            if (!prevTask.textLocked) {
-                                prevTask.textExpanded = false;
-                            }
-                        }
-                    }
-
-                    parent.currentlyWorking = true;
-                    // Update working log for parent
-                    if (rootId) {
-                        this.workingTasksByRoot[rootId] = parent.id;
-                    }
-                    // Track parent as the last working task for Jump button
-                    this.lastWorkingTaskId = parent.id;
+                if (parent && parent.status !== 'done' && !parent.currentlyWorking) {
+                    // Set parent as suggested next task
+                    this.suggestedNextTaskId = parent.id;
                     const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
-                    this.showToast(`⬆️ Now working on parent: ${parentTitle}`, 'info', 3000);
+                    this.showToast(`💡 Suggested next: ${parentTitle} (shown in purple)`, 'info', 3000);
                 }
             }
         } else if (task.status === 'done') {
@@ -181,6 +181,10 @@ export const StatusMixin = {
             if (!task.textLocked) {
                 task.textExpanded = false;
             }
+            // Stop timer when stopping work
+            if (this.autoStartTimer && this.timerState.taskId === taskId) {
+                this.stopTimer();
+            }
         } else {
             // Start working - unwork previous in same root only
             const previousWorkingId = this.workingTasksByRoot[rootId];
@@ -191,6 +195,10 @@ export const StatusMixin = {
                     if (!prevTask.textLocked) {
                         prevTask.textExpanded = false;
                     }
+                    // Stop timer for previous working task
+                    if (this.autoStartTimer && this.timerState.taskId === previousWorkingId) {
+                        this.stopTimer();
+                    }
                 }
             }
 
@@ -200,6 +208,14 @@ export const StatusMixin = {
             }
             // Track this as the last working task for Jump button
             this.lastWorkingTaskId = taskId;
+
+            // Clear suggestion when user starts working on a task
+            this.suggestedNextTaskId = null;
+
+            // Auto-start timer when starting work
+            if (this.autoStartTimer) {
+                this.startTimer(taskId);
+            }
         }
         this.saveToStorage();
         this.updateStatusBar();

@@ -172,6 +172,12 @@ export const SettingsMixin = {
                 default: true,
                 description: 'Wrap text on word boundaries (more readable) vs character boundaries'
             },
+            enableMarkdown: {
+                label: 'Enable Markdown Formatting',
+                type: 'checkbox',
+                default: true,
+                description: 'Parse markdown in task titles: **bold**, *italic*, `code`, - bullets, [links](url)'
+            },
             arrowStyle: {
                 label: 'Arrow Style',
                 type: 'select',

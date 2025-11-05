@@ -514,6 +514,13 @@ input:focus {
     filter: drop-shadow(0 3px 8px rgba(255, 152, 0, 0.4));
 }
 
+.task-node.suggested-next rect {
+    fill: #f3e5f5;  /* Light purple background */
+    stroke: #9c27b0;  /* Purple border */
+    stroke-width: 3;
+    filter: drop-shadow(0 3px 8px rgba(156, 39, 176, 0.4));
+}
+
 .task-node.parent-of-working rect {
     stroke: #ff9800;
     stroke-width: 3;
@@ -1085,6 +1092,192 @@ input:focus {
 
 
 /* ============================================================
+   TIMER-WINDOW.CSS (Category: styles)
+   ============================================================ */
+
+/**
+ * @order 65
+ * @category styles
+ * @description Timer window floating UI styles
+ */
+
+/* Timer window container - fixed bottom-right */
+#timer-window {
+    position: fixed;
+    bottom: 80px; /* Above status bar */
+    right: 20px;
+    background: white;
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    min-width: 280px;
+    max-width: 350px;
+    display: none; /* Hidden by default */
+}
+
+/* Timer window header */
+.timer-window-header {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px 6px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.timer-title {
+    user-select: none;
+}
+
+.timer-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.timer-btn-minimize,
+.timer-btn-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.timer-btn-minimize:hover,
+.timer-btn-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Timer content area */
+.timer-content {
+    padding: 12px;
+}
+
+.timer-task-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Timer display stats */
+.timer-display {
+    background: #f5f5f5;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.timer-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.timer-stat:last-child {
+    margin-bottom: 0;
+}
+
+.timer-label {
+    color: #666;
+    font-weight: 500;
+}
+
+.timer-value {
+    color: #4CAF50;
+    font-weight: bold;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+}
+
+/* Sessions list */
+.timer-sessions {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.timer-sessions-label {
+    font-size: 11px;
+    color: #666;
+    font-weight: 600;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.session-item {
+    font-size: 11px;
+    color: #555;
+    padding: 3px 0;
+    line-height: 1.4;
+}
+
+/* Minimized badge view */
+.timer-badge {
+    padding: 10px 16px;
+    font-size: 15px;
+    font-weight: bold;
+    color: white;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    border-radius: 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.timer-badge:hover {
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.5);
+}
+
+/* Dark mode support */
+body.dark-mode #timer-window {
+    background: #2d2d2d;
+    border-color: #4CAF50;
+}
+
+body.dark-mode .timer-task-name {
+    color: #e0e0e0;
+}
+
+body.dark-mode .timer-display {
+    background: #3a3a3a;
+}
+
+body.dark-mode .timer-label {
+    color: #aaa;
+}
+
+body.dark-mode .session-item {
+    color: #bbb;
+}
+
+body.dark-mode .timer-sessions {
+    border-top-color: #444;
+}
+
+
+
+/* ============================================================
    DARK-MODE.CSS (Category: styles)
    ============================================================ */
 
@@ -1573,6 +1766,9 @@ body.dark-mode .links-dropdown > div:hover {
         </div>
     </div>
 
+    <!-- Timer Window (floating) -->
+    <div id="timer-window"></div>
+
     <script>
 
 // ============================================================
@@ -1620,6 +1816,7 @@ const app = {
     lastClickedTaskId: null,     // For Shift+Click range selection
     hoveredTaskId: null,         // For hover-based priority changes
     lastWorkingTaskId: null,     // Track last selected/cycled working task for Jump button
+    suggestedNextTaskId: null,   // Suggested next task to work on (shown in purple)
     selectedLine: null,          // Selected relationship line {type: 'parent'|'dependency', taskId, parentId/depId}
 
     // ========================================
@@ -1713,6 +1910,12 @@ const app = {
     wordWrap: true,              // Wrap on word boundaries (vs character boundaries)
 
     // ========================================
+    // Markdown Formatting
+    // ========================================
+    enableMarkdown: true,        // Parse markdown syntax in task titles
+    // Supported: **bold**, *italic*, `code`, - bullets, [links](url)
+
+    // ========================================
     // Visual Styling
     // ========================================
     arrowStyle: 'straight',      // Arrow path style: 'straight' or 'curved'
@@ -1788,6 +1991,18 @@ const app = {
     // ========================================
     copiedSubtree: null,         // Clipboard for copying/pasting subtrees (not persisted)
     lastMousePosition: { x: 0, y: 0 }, // Track last mouse position for Ctrl+V paste location
+
+    // ========================================
+    // Time Tracking
+    // ========================================
+    timerState: {
+        isRunning: false,        // Is a timer currently running?
+        taskId: null,            // ID of task being timed
+        sessionStartTime: null,  // Unix timestamp when current session started
+        intervalId: null         // setInterval ID for updating display
+    },
+    timerWindowMinimized: false, // Is timer window minimized to badge?
+    autoStartTimer: true,        // Auto-start timer when marking task as "working"
 
     // ========================================
     // Methods will be added by module mixins
@@ -2722,6 +2937,121 @@ Object.assign(app, {
 
 
 // ============================================================
+// UTILS/MARKDOWN.JS (Order: 9, Category: Utils)
+// ============================================================
+
+/**
+ * @module utils/markdown
+ * @order 9
+ * @category Utils
+ * @description Lightweight markdown parser for task titles
+ *
+ * Supported syntax:
+ * - **bold** → bold text
+ * - *italic* → italic text
+ * - `code` → monospace code
+ * - [text](url) → clickable link
+ * - "- " at line start → "• " bullet
+ *
+ * Returns tokens array: [{text, format, url?}, ...]
+ * Formats: 'normal', 'bold', 'italic', 'code', 'link'
+ */
+
+Object.assign(app, {
+    /**
+     * Parse markdown syntax in a line of text
+     * @param {string} line - Line of text with markdown
+     * @returns {Array} Array of tokens: [{text, format, url?}, ...]
+     */
+    parseMarkdown(line) {
+        if (!this.enableMarkdown || !line) {
+            return [{ text: line || '', format: 'normal' }];
+        }
+
+        // Handle bullet points (including indented sub-bullets)
+        // Match: optional whitespace + (- or *) + space
+        // Preserves leading whitespace for indentation
+        line = line.replace(/^(\s*)([-*])\s/, '$1• ');
+
+        const tokens = [];
+        let remaining = line;
+        let pos = 0;
+
+        // Regex patterns for markdown syntax
+        const patterns = [
+            // Bold: **text**
+            { regex: /\*\*(.+?)\*\*/,  format: 'bold' },
+            // Code: `text`
+            { regex: /`(.+?)`/,        format: 'code' },
+            // Link: [text](url)
+            { regex: /\[([^\]]+)\]\(([^)]+)\)/, format: 'link' },
+            // Italic: *text* (must come after bold to avoid matching ** as two italics)
+            { regex: /\*(.+?)\*/,      format: 'italic' }
+        ];
+
+        while (remaining.length > 0) {
+            let earliestMatch = null;
+            let earliestIndex = Infinity;
+            let earliestPattern = null;
+
+            // Find the earliest match
+            for (const pattern of patterns) {
+                const match = remaining.match(pattern.regex);
+                if (match && match.index < earliestIndex) {
+                    earliestMatch = match;
+                    earliestIndex = match.index;
+                    earliestPattern = pattern;
+                }
+            }
+
+            if (!earliestMatch) {
+                // No more markdown - add remaining text as normal
+                if (remaining.length > 0) {
+                    tokens.push({ text: remaining, format: 'normal' });
+                }
+                break;
+            }
+
+            // Add text before the match as normal
+            if (earliestIndex > 0) {
+                tokens.push({
+                    text: remaining.substring(0, earliestIndex),
+                    format: 'normal'
+                });
+            }
+
+            // Add the formatted token
+            if (earliestPattern.format === 'link') {
+                tokens.push({
+                    text: earliestMatch[1],  // Link text
+                    format: 'link',
+                    url: earliestMatch[2]    // URL
+                });
+            } else {
+                tokens.push({
+                    text: earliestMatch[1],  // Content inside markdown
+                    format: earliestPattern.format
+                });
+            }
+
+            // Continue with remaining text
+            remaining = remaining.substring(earliestIndex + earliestMatch[0].length);
+        }
+
+        // If no tokens were created, return the original text as normal
+        if (tokens.length === 0) {
+            return [{ text: line, format: 'normal' }];
+        }
+
+        return tokens;
+    }
+});
+
+console.log('[markdown.js] Markdown parsing module loaded');
+
+
+
+// ============================================================
 // UTILS/TASK-HELPERS.JS (Order: 9, Category: Utils)
 // ============================================================
 
@@ -3233,6 +3563,180 @@ app.redo = function() {
 };
 
 console.log('[undo-redo.js] Undo/redo system loaded');
+
+
+
+// ============================================================
+// UTILS/TIMER.JS (Order: 10, Category: Utils)
+// ============================================================
+
+/**
+ * @module utils/timer
+ * @order 10
+ * @category Utils
+ * @description Time tracking utilities for task sessions
+ */
+
+Object.assign(app, {
+    /**
+     * Start a timer session for a task
+     * @param {number} taskId - Task to start timing
+     */
+    startTimer(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) {
+            console.error(`[Timer] Task ${taskId} not found`);
+            return;
+        }
+
+        // Stop any existing timer first
+        if (this.timerState.isRunning) {
+            this.stopTimer();
+        }
+
+        // Initialize timeTracking if needed
+        if (!task.timeTracking) {
+            task.timeTracking = {
+                totalSeconds: 0,
+                sessions: []
+            };
+        }
+
+        // Start new session
+        this.timerState.isRunning = true;
+        this.timerState.taskId = taskId;
+        this.timerState.sessionStartTime = Date.now();
+
+        // Start interval to update UI every second
+        this.timerState.intervalId = setInterval(() => {
+            this.updateTimerDisplay();
+        }, 1000);
+
+        this.updateTimerDisplay();
+        console.log(`[Timer] Started for task ${taskId}`);
+    },
+
+    /**
+     * Stop the current timer session and save it
+     */
+    stopTimer() {
+        if (!this.timerState.isRunning) {
+            return; // No timer running
+        }
+
+        const taskId = this.timerState.taskId;
+        const task = this.tasks.find(t => t.id === taskId);
+
+        if (task && task.timeTracking) {
+            const endTime = Date.now();
+            const duration = Math.floor((endTime - this.timerState.sessionStartTime) / 1000); // seconds
+
+            // Save session
+            const session = {
+                startTime: this.timerState.sessionStartTime,
+                endTime: endTime,
+                duration: duration
+            };
+            task.timeTracking.sessions.push(session);
+            task.timeTracking.totalSeconds += duration;
+
+            console.log(`[Timer] Stopped. Session: ${this.formatDuration(duration)}, Total: ${this.formatDuration(task.timeTracking.totalSeconds)}`);
+        }
+
+        // Clear interval
+        if (this.timerState.intervalId) {
+            clearInterval(this.timerState.intervalId);
+            this.timerState.intervalId = null;
+        }
+
+        // Reset state
+        this.timerState.isRunning = false;
+        this.timerState.taskId = null;
+        this.timerState.sessionStartTime = null;
+
+        this.updateTimerDisplay();
+        this.saveToStorage();
+    },
+
+    /**
+     * Get current elapsed time in seconds for active session
+     * @returns {number} Elapsed seconds
+     */
+    getCurrentSessionSeconds() {
+        if (!this.timerState.isRunning) {
+            return 0;
+        }
+        return Math.floor((Date.now() - this.timerState.sessionStartTime) / 1000);
+    },
+
+    /**
+     * Get total time (including current session) for a task
+     * @param {number} taskId - Task ID
+     * @returns {number} Total seconds
+     */
+    getTotalTimeForTask(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task || !task.timeTracking) {
+            return 0;
+        }
+
+        let total = task.timeTracking.totalSeconds;
+
+        // Add current session if task is being timed
+        if (this.timerState.isRunning && this.timerState.taskId === taskId) {
+            total += this.getCurrentSessionSeconds();
+        }
+
+        return total;
+    },
+
+    /**
+     * Format duration as HH:MM:SS
+     * @param {number} seconds - Duration in seconds
+     * @returns {string} Formatted duration
+     */
+    formatDuration(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    },
+
+    /**
+     * Format timestamp as relative time (e.g., "2 hours ago")
+     * @param {number} timestamp - Unix timestamp
+     * @returns {string} Relative time string
+     */
+    formatRelativeTime(timestamp) {
+        const now = Date.now();
+        const diff = now - timestamp;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (seconds < 60) return 'just now';
+        if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+        if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+        if (days < 7) return `${days} day${days !== 1 ? 's' : ''} ago`;
+
+        // Older than a week, show date
+        const date = new Date(timestamp);
+        return date.toLocaleDateString();
+    },
+
+    /**
+     * Update timer window display (to be implemented in timer-window.js)
+     */
+    updateTimerDisplay() {
+        // This will be implemented by timer-window.js
+        // Placeholder for now
+    }
+});
+
+console.log('[timer.js] Time tracking utilities loaded');
 
 
 
@@ -4005,7 +4509,11 @@ Object.assign(app, {
             links: [],  // Array of URLs attached to this task
             priority: 'normal',  // Priority: 'high', 'medium', 'normal'
             customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
-            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
+            customSourcePoints: {},  // Custom arrow source points { [childId]: { edge, normalized } }
+            timeTracking: {      // Time tracking data
+                totalSeconds: 0,
+                sessions: []
+            }
         };
 
         parent.children.push(task.id);
@@ -4055,7 +4563,11 @@ Object.assign(app, {
             links: [],  // Array of URLs attached to this task
             priority: 'normal',  // Priority: 'high', 'medium', 'normal'
             customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
-            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
+            customSourcePoints: {},  // Custom arrow source points { [childId]: { edge, normalized } }
+            timeTracking: {      // Time tracking data
+                totalSeconds: 0,
+                sessions: []
+            }
         };
 
         parent.children.push(task.id);
@@ -4103,7 +4615,11 @@ Object.assign(app, {
             links: [],  // Array of URLs attached to this task
             priority: 'normal',  // Priority: 'high', 'medium', 'normal'
             customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
-            customSourcePoints: {}   // Custom arrow source points { [childId]: { edge, normalized } }
+            customSourcePoints: {},  // Custom arrow source points { [childId]: { edge, normalized } }
+            timeTracking: {      // Time tracking data
+                totalSeconds: 0,
+                sessions: []
+            }
         };
 
         this.tasks.push(newTask);
@@ -4318,6 +4834,10 @@ Object.assign(app, {
                     if (!prevTask.textLocked) {
                         prevTask.textExpanded = false;
                     }
+                    // Stop timer for previous working task
+                    if (this.autoStartTimer && this.timerState.taskId === previousWorkingId) {
+                        this.stopTimer();
+                    }
                 }
             }
 
@@ -4327,6 +4847,14 @@ Object.assign(app, {
             }
             // Track this as the last working task for Jump button
             this.lastWorkingTaskId = taskId;
+
+            // Clear suggestion when user starts working on a task
+            this.suggestedNextTaskId = null;
+
+            // Auto-start timer when marking task as working
+            if (this.autoStartTimer) {
+                this.startTimer(taskId);
+            }
         } else if (task.currentlyWorking) {
             // Working → Done
             this.saveSnapshot(`Marked '${truncatedTitle}' as done`);
@@ -4336,6 +4864,11 @@ Object.assign(app, {
 
             task.currentlyWorking = false;
             task.status = 'done';
+
+            // Stop timer when task is marked as done
+            if (this.autoStartTimer && this.timerState.taskId === taskId) {
+                this.stopTimer();
+            }
 
             // Update working log
             if (rootId) {
@@ -4347,31 +4880,14 @@ Object.assign(app, {
                 task.textExpanded = false;
             }
 
-            // Flow state: Auto-start working on parent task to maintain momentum
+            // Flow state: Suggest parent task as next to work on (shown in purple)
             if (task.mainParent !== null) {
                 const parent = this.tasks.find(t => t.id === task.mainParent);
-                if (parent && parent.status !== 'done') {
-                    // Clear any previous working task in same root tree
-                    const previousWorkingId = this.workingTasksByRoot[rootId];
-                    if (previousWorkingId && previousWorkingId !== parent.id) {
-                        const prevTask = this.tasks.find(t => t.id === previousWorkingId);
-                        if (prevTask) {
-                            prevTask.currentlyWorking = false;
-                            if (!prevTask.textLocked) {
-                                prevTask.textExpanded = false;
-                            }
-                        }
-                    }
-
-                    parent.currentlyWorking = true;
-                    // Update working log for parent
-                    if (rootId) {
-                        this.workingTasksByRoot[rootId] = parent.id;
-                    }
-                    // Track parent as the last working task for Jump button
-                    this.lastWorkingTaskId = parent.id;
+                if (parent && parent.status !== 'done' && !parent.currentlyWorking) {
+                    // Set parent as suggested next task
+                    this.suggestedNextTaskId = parent.id;
                     const parentTitle = parent.title.length > 30 ? parent.title.substring(0, 27) + '...' : parent.title;
-                    this.showToast(`⬆️ Now working on parent: ${parentTitle}`, 'info', 3000);
+                    this.showToast(`💡 Suggested next: ${parentTitle} (shown in purple)`, 'info', 3000);
                 }
             }
         } else if (task.status === 'done') {
@@ -4459,6 +4975,10 @@ Object.assign(app, {
             if (!task.textLocked) {
                 task.textExpanded = false;
             }
+            // Stop timer when stopping work
+            if (this.autoStartTimer && this.timerState.taskId === taskId) {
+                this.stopTimer();
+            }
         } else {
             // Start working - unwork previous in same root only
             const previousWorkingId = this.workingTasksByRoot[rootId];
@@ -4469,6 +4989,10 @@ Object.assign(app, {
                     if (!prevTask.textLocked) {
                         prevTask.textExpanded = false;
                     }
+                    // Stop timer for previous working task
+                    if (this.autoStartTimer && this.timerState.taskId === previousWorkingId) {
+                        this.stopTimer();
+                    }
                 }
             }
 
@@ -4478,6 +5002,14 @@ Object.assign(app, {
             }
             // Track this as the last working task for Jump button
             this.lastWorkingTaskId = taskId;
+
+            // Clear suggestion when user starts working on a task
+            this.suggestedNextTaskId = null;
+
+            // Auto-start timer when starting work
+            if (this.autoStartTimer) {
+                this.startTimer(taskId);
+            }
         }
         this.saveToStorage();
         this.updateStatusBar();
@@ -6572,6 +7104,7 @@ Object.assign(app, {
 
             if (task.status === 'done') g.classList.add('done');
             if (task.currentlyWorking) g.classList.add('working');
+            if (this.suggestedNextTaskId === task.id) g.classList.add('suggested-next');
             if (workingAncestors.includes(task.id)) g.classList.add('parent-of-working');
             if (incompleteChildren.includes(task.id)) g.classList.add('incomplete-child-of-working');
             if (task.hidden) g.classList.add('hidden');
@@ -6779,16 +7312,51 @@ Object.assign(app, {
                         lineText = lineText.length > 3 ? lineText.slice(0, -3) + '...' : lineText + '...';
                     }
 
-                    const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                    tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this line
-                    // Use createTextNode instead of textContent to preserve exact whitespace
-                    const textNode = document.createTextNode(lineText);
-                    tspan.appendChild(textNode);
-                    tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
-                    // Vertical position: start from top + verticalPadding, add lineHeight per line
+                    // Parse markdown tokens from line
+                    const tokens = this.parseMarkdown(lineText);
                     const yOffset = -rectHeight / 2 + verticalPadding + this.lineHeight * (index + 0.75);
-                    tspan.setAttribute('y', yOffset);
-                    text.appendChild(tspan);
+                    const xStart = -rectWidth / 2 + padding; // Left edge + padding (horizontal)
+
+                    // Render each token as a separate tspan with appropriate styling
+                    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+                        const token = tokens[tokenIndex];
+                        const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                        tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this token
+
+                        // Use createTextNode instead of textContent to preserve exact whitespace
+                        const textNode = document.createTextNode(token.text);
+                        tspan.appendChild(textNode);
+
+                        // Position: first token uses x, subsequent tokens use dx=0
+                        if (tokenIndex === 0) {
+                            tspan.setAttribute('x', xStart);
+                            tspan.setAttribute('y', yOffset);
+                        } else {
+                            tspan.setAttribute('dx', '0'); // Continue on same line
+                        }
+
+                        // Apply styling based on token format
+                        if (token.format === 'bold') {
+                            tspan.style.fontWeight = 'bold';
+                        } else if (token.format === 'italic') {
+                            tspan.style.fontStyle = 'italic';
+                        } else if (token.format === 'code') {
+                            tspan.style.fontFamily = "'Courier New', monospace";
+                            tspan.style.fill = '#d63384'; // Pink/magenta for code
+                        } else if (token.format === 'link') {
+                            tspan.style.fill = '#0d6efd'; // Blue for links
+                            tspan.style.textDecoration = 'underline';
+                            tspan.style.cursor = 'pointer';
+                            // Add click handler for link
+                            tspan.addEventListener('click', (e) => {
+                                e.stopPropagation(); // Don't trigger task selection
+                                window.open(token.url, '_blank');
+                            });
+                        }
+                        // 'normal' format gets default styling
+
+                        text.appendChild(tspan);
+                    }
                 }
 
                 // Add status emoji indicator positioned to the left of the node
@@ -10666,6 +11234,12 @@ Object.assign(app, {
                 default: true,
                 description: 'Wrap text on word boundaries (more readable) vs character boundaries'
             },
+            enableMarkdown: {
+                label: 'Enable Markdown Formatting',
+                type: 'checkbox',
+                default: true,
+                description: 'Parse markdown in task titles: **bold**, *italic*, `code`, - bullets, [links](url)'
+            },
             arrowStyle: {
                 label: 'Arrow Style',
                 type: 'select',
@@ -11469,6 +12043,110 @@ Object.assign(app, {
         toast.onclick = () => toast.remove();
     }
 });
+
+
+
+// ============================================================
+// UI/TIMER-WINDOW.JS (Order: 37, Category: UI)
+// ============================================================
+
+/**
+ * @module ui/timer-window
+ * @order 37
+ * @category UI
+ * @description Floating timer window for time tracking
+ */
+
+Object.assign(app, {
+    /**
+     * Render or update the timer window
+     */
+    updateTimerDisplay() {
+        const container = document.getElementById('timer-window');
+        if (!container) return;
+
+        // If no timer is running, hide the window
+        if (!this.timerState.isRunning) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+
+        const task = this.tasks.find(t => t.id === this.timerState.taskId);
+        if (!task) return;
+
+        // Get current session time
+        const sessionSeconds = this.getCurrentSessionSeconds();
+        const totalSeconds = this.getTotalTimeForTask(task.id);
+
+        // Update content based on minimized state
+        if (this.timerWindowMinimized) {
+            container.innerHTML = `
+                <div class="timer-badge" onclick="app.toggleTimerWindow()">
+                    ⏱️ ${this.formatDuration(sessionSeconds)}
+                </div>
+            `;
+        } else {
+            const sessionCount = task.timeTracking ? task.timeTracking.sessions.length : 0;
+            const taskTitle = this.truncateTitle(task.title || 'Untitled', 30);
+
+            // Get recent sessions for display
+            let sessionsHTML = '';
+            if (task.timeTracking && task.timeTracking.sessions.length > 0) {
+                const recentSessions = task.timeTracking.sessions.slice(-3).reverse();
+                sessionsHTML = recentSessions.map(session => `
+                    <div class="session-item">
+                        • ${this.formatDuration(session.duration)} (${this.formatRelativeTime(session.startTime)})
+                    </div>
+                `).join('');
+            }
+
+            container.innerHTML = `
+                <div class="timer-window-header">
+                    <span class="timer-title">⏱️ Time Tracker</span>
+                    <div class="timer-controls">
+                        <button onclick="app.toggleTimerWindow()" class="timer-btn-minimize" title="Minimize">−</button>
+                        <button onclick="app.stopTimer()" class="timer-btn-close" title="Stop Timer">×</button>
+                    </div>
+                </div>
+                <div class="timer-content">
+                    <div class="timer-task-name">📌 ${taskTitle}</div>
+                    <div class="timer-display">
+                        <div class="timer-stat">
+                            <span class="timer-label">Current Session:</span>
+                            <span class="timer-value">${this.formatDuration(sessionSeconds)}</span>
+                        </div>
+                        <div class="timer-stat">
+                            <span class="timer-label">Total Time:</span>
+                            <span class="timer-value">${this.formatDuration(totalSeconds)}</span>
+                        </div>
+                        <div class="timer-stat">
+                            <span class="timer-label">Sessions:</span>
+                            <span class="timer-value">${sessionCount + 1}</span>
+                        </div>
+                    </div>
+                    ${sessionsHTML ? `
+                        <div class="timer-sessions">
+                            <div class="timer-sessions-label">Recent Sessions:</div>
+                            ${sessionsHTML}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+    },
+
+    /**
+     * Toggle timer window between expanded and minimized
+     */
+    toggleTimerWindow() {
+        this.timerWindowMinimized = !this.timerWindowMinimized;
+        this.updateTimerDisplay();
+    }
+});
+
+console.log('[timer-window.js] Timer window UI loaded');
 
 
 
@@ -13292,6 +13970,16 @@ Object.assign(app, {
                 } else {
                     // Open the dropdown menu
                     this.showWorkingTasksDropdown(null, true); // true = keyboard mode
+                }
+            }
+
+            // T = toggle timer window (expand/minimize)
+            if ((e.key === 't' || e.key === 'T') && this.editingTaskId === null && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                if (this.timerState.isRunning) {
+                    this.toggleTimerWindow();
+                } else {
+                    this.showToast('⏱️ No timer running. Middle-click a task to start working.', 'info', 2000);
                 }
             }
 

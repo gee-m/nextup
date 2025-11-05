@@ -39,6 +39,7 @@ const app = {
     lastClickedTaskId: null,     // For Shift+Click range selection
     hoveredTaskId: null,         // For hover-based priority changes
     lastWorkingTaskId: null,     // Track last selected/cycled working task for Jump button
+    suggestedNextTaskId: null,   // Suggested next task to work on (shown in purple)
     selectedLine: null,          // Selected relationship line {type: 'parent'|'dependency', taskId, parentId/depId}
 
     // ========================================
@@ -132,6 +133,12 @@ const app = {
     wordWrap: true,              // Wrap on word boundaries (vs character boundaries)
 
     // ========================================
+    // Markdown Formatting
+    // ========================================
+    enableMarkdown: true,        // Parse markdown syntax in task titles
+    // Supported: **bold**, *italic*, `code`, - bullets, [links](url)
+
+    // ========================================
     // Visual Styling
     // ========================================
     arrowStyle: 'straight',      // Arrow path style: 'straight' or 'curved'
@@ -207,6 +214,18 @@ const app = {
     // ========================================
     copiedSubtree: null,         // Clipboard for copying/pasting subtrees (not persisted)
     lastMousePosition: { x: 0, y: 0 }, // Track last mouse position for Ctrl+V paste location
+
+    // ========================================
+    // Time Tracking
+    // ========================================
+    timerState: {
+        isRunning: false,        // Is a timer currently running?
+        taskId: null,            // ID of task being timed
+        sessionStartTime: null,  // Unix timestamp when current session started
+        intervalId: null         // setInterval ID for updating display
+    },
+    timerWindowMinimized: false, // Is timer window minimized to badge?
+    autoStartTimer: true,        // Auto-start timer when marking task as "working"
 
     // ========================================
     // Methods will be added by module mixins

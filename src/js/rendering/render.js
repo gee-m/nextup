@@ -502,6 +502,7 @@ export const RenderMixin = {
 
             if (task.status === 'done') g.classList.add('done');
             if (task.currentlyWorking) g.classList.add('working');
+            if (this.suggestedNextTaskId === task.id) g.classList.add('suggested-next');
             if (workingAncestors.includes(task.id)) g.classList.add('parent-of-working');
             if (incompleteChildren.includes(task.id)) g.classList.add('incomplete-child-of-working');
             if (task.hidden) g.classList.add('hidden');
@@ -709,16 +710,51 @@ export const RenderMixin = {
                         lineText = lineText.length > 3 ? lineText.slice(0, -3) + '...' : lineText + '...';
                     }
 
-                    const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                    tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this line
-                    // Use createTextNode instead of textContent to preserve exact whitespace
-                    const textNode = document.createTextNode(lineText);
-                    tspan.appendChild(textNode);
-                    tspan.setAttribute('x', -rectWidth / 2 + padding); // Left edge + padding (horizontal)
-                    // Vertical position: start from top + verticalPadding, add lineHeight per line
+                    // Parse markdown tokens from line
+                    const tokens = this.parseMarkdown(lineText);
                     const yOffset = -rectHeight / 2 + verticalPadding + this.lineHeight * (index + 0.75);
-                    tspan.setAttribute('y', yOffset);
-                    text.appendChild(tspan);
+                    const xStart = -rectWidth / 2 + padding; // Left edge + padding (horizontal)
+
+                    // Render each token as a separate tspan with appropriate styling
+                    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+                        const token = tokens[tokenIndex];
+                        const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                        tspan.setAttribute('xml:space', 'preserve'); // Preserve whitespace in this token
+
+                        // Use createTextNode instead of textContent to preserve exact whitespace
+                        const textNode = document.createTextNode(token.text);
+                        tspan.appendChild(textNode);
+
+                        // Position: first token uses x, subsequent tokens use dx=0
+                        if (tokenIndex === 0) {
+                            tspan.setAttribute('x', xStart);
+                            tspan.setAttribute('y', yOffset);
+                        } else {
+                            tspan.setAttribute('dx', '0'); // Continue on same line
+                        }
+
+                        // Apply styling based on token format
+                        if (token.format === 'bold') {
+                            tspan.style.fontWeight = 'bold';
+                        } else if (token.format === 'italic') {
+                            tspan.style.fontStyle = 'italic';
+                        } else if (token.format === 'code') {
+                            tspan.style.fontFamily = "'Courier New', monospace";
+                            tspan.style.fill = '#d63384'; // Pink/magenta for code
+                        } else if (token.format === 'link') {
+                            tspan.style.fill = '#0d6efd'; // Blue for links
+                            tspan.style.textDecoration = 'underline';
+                            tspan.style.cursor = 'pointer';
+                            // Add click handler for link
+                            tspan.addEventListener('click', (e) => {
+                                e.stopPropagation(); // Don't trigger task selection
+                                window.open(token.url, '_blank');
+                            });
+                        }
+                        // 'normal' format gets default styling
+
+                        text.appendChild(tspan);
+                    }
                 }
 
                 // Add status emoji indicator positioned to the left of the node

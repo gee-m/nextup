@@ -29,6 +29,13 @@
     filter: drop-shadow(0 3px 8px rgba(255, 152, 0, 0.4));
 }
 
+.task-node.suggested-next rect {
+    fill: #f3e5f5;  /* Light purple background */
+    stroke: #9c27b0;  /* Purple border */
+    stroke-width: 3;
+    filter: drop-shadow(0 3px 8px rgba(156, 39, 176, 0.4));
+}
+
 .task-node.parent-of-working rect {
     stroke: #ff9800;
     stroke-width: 3;

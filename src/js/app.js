@@ -587,6 +587,16 @@ Object.assign(app, {
                 }
             }
 
+            // T = toggle timer window (expand/minimize)
+            if ((e.key === 't' || e.key === 'T') && this.editingTaskId === null && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                if (this.timerState.isRunning) {
+                    this.toggleTimerWindow();
+                } else {
+                    this.showToast('⏱️ No timer running. Middle-click a task to start working.', 'info', 2000);
+                }
+            }
+
             // Number keys (0-9) = jump to home with that keybind
             if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9]$/.test(e.key)) {
                 // Find home with this keybind
