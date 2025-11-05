@@ -515,10 +515,10 @@ input:focus {
 }
 
 .task-node.in-progress rect {
-    fill: #e3f2fd;  /* Light blue background */
-    stroke: #2196f3;  /* Blue border */
-    stroke-width: 2.5;
-    filter: drop-shadow(0 2px 6px rgba(33, 150, 243, 0.3));
+    fill: #e3f2fd !important;  /* Light blue background */
+    stroke: #2196f3 !important;  /* Blue border */
+    stroke-width: 2.5 !important;
+    filter: drop-shadow(0 2px 6px rgba(33, 150, 243, 0.3)) !important;
 }
 
 .task-node.suggested-next rect {
@@ -1146,6 +1146,7 @@ input:focus {
     gap: 4px;
 }
 
+.timer-btn-play,
 .timer-btn-pause,
 .timer-btn-minimize,
 .timer-btn-close {
@@ -1164,6 +1165,7 @@ input:focus {
     transition: background 0.2s;
 }
 
+.timer-btn-play:hover,
 .timer-btn-pause:hover,
 .timer-btn-minimize:hover,
 .timer-btn-close:hover {
@@ -12374,15 +12376,17 @@ Object.assign(app, {
         const container = document.getElementById('timer-window');
         if (!container) return;
 
-        // If no timer is running, hide the window
-        if (!this.timerState.isRunning) {
+        // Show window if there's a working task (even if timer paused)
+        const workingTask = this.tasks.find(t => t.currentlyWorking);
+        if (!workingTask) {
             container.style.display = 'none';
             return;
         }
 
         container.style.display = 'block';
 
-        const task = this.tasks.find(t => t.id === this.timerState.taskId);
+        // Use working task, not necessarily the one with running timer
+        const task = workingTask;
         if (!task) return;
 
         // Get current session time
@@ -12411,11 +12415,17 @@ Object.assign(app, {
                 `).join('');
             }
 
+            // Check if timer is currently running for this task
+            const isTimerRunning = this.timerState.isRunning && this.timerState.taskId === task.id;
+            const playPauseButton = isTimerRunning
+                ? `<button onclick="app.stopTimer(); app.showToast('⏸️ Timer paused', 'info', 2000);" class="timer-btn-pause" title="Pause Timer">⏸️</button>`
+                : `<button onclick="app.startTimer(${task.id}); app.showToast('▶️ Timer resumed', 'info', 2000);" class="timer-btn-play" title="Start Timer">▶️</button>`;
+
             container.innerHTML = `
                 <div class="timer-window-header">
                     <span class="timer-title">⏱️ Time Tracker</span>
                     <div class="timer-controls">
-                        <button onclick="app.stopTimer(); app.showToast('⏸️ Timer paused', 'info', 2000);" class="timer-btn-pause" title="Pause Timer">⏸️</button>
+                        ${playPauseButton}
                         <button onclick="app.toggleTimerWindow()" class="timer-btn-minimize" title="Minimize">−</button>
                         <button onclick="app.stopTimer()" class="timer-btn-close" title="Stop Timer">×</button>
                     </div>

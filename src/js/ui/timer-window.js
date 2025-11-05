@@ -13,15 +13,17 @@ export const TimerWindowMixin = {
         const container = document.getElementById('timer-window');
         if (!container) return;
 
-        // If no timer is running, hide the window
-        if (!this.timerState.isRunning) {
+        // Show window if there's a working task (even if timer paused)
+        const workingTask = this.tasks.find(t => t.currentlyWorking);
+        if (!workingTask) {
             container.style.display = 'none';
             return;
         }
 
         container.style.display = 'block';
 
-        const task = this.tasks.find(t => t.id === this.timerState.taskId);
+        // Use working task, not necessarily the one with running timer
+        const task = workingTask;
         if (!task) return;
 
         // Get current session time
@@ -50,11 +52,17 @@ export const TimerWindowMixin = {
                 `).join('');
             }
 
+            // Check if timer is currently running for this task
+            const isTimerRunning = this.timerState.isRunning && this.timerState.taskId === task.id;
+            const playPauseButton = isTimerRunning
+                ? `<button onclick="app.stopTimer(); app.showToast('⏸️ Timer paused', 'info', 2000);" class="timer-btn-pause" title="Pause Timer">⏸️</button>`
+                : `<button onclick="app.startTimer(${task.id}); app.showToast('▶️ Timer resumed', 'info', 2000);" class="timer-btn-play" title="Start Timer">▶️</button>`;
+
             container.innerHTML = `
                 <div class="timer-window-header">
                     <span class="timer-title">⏱️ Time Tracker</span>
                     <div class="timer-controls">
-                        <button onclick="app.stopTimer(); app.showToast('⏸️ Timer paused', 'info', 2000);" class="timer-btn-pause" title="Pause Timer">⏸️</button>
+                        ${playPauseButton}
                         <button onclick="app.toggleTimerWindow()" class="timer-btn-minimize" title="Minimize">−</button>
                         <button onclick="app.stopTimer()" class="timer-btn-close" title="Stop Timer">×</button>
                     </div>
