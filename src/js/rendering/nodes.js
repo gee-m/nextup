@@ -7,18 +7,33 @@
  */
 
 export const NodesMixin = {
+    /**
+     * Convert tab characters to spaces for SVG display
+     * SVG text elements don't render tabs visibly, so we convert them to spaces
+     * @param {string} text - Text with tabs
+     * @returns {string} Text with tabs converted to spaces
+     */
+    convertTabsToSpaces(text) {
+        if (!text) return text;
+        const spaces = ' '.repeat(this.tabWidth || 4);
+        return text.replace(/\t/g, spaces);
+    },
+
     wrapText(text, maxWidth, charWidth, wordWrap) {
+        // Convert tabs to spaces for SVG display (SVG doesn't render tabs)
+        const displayText = this.convertTabsToSpaces(text);
+
         // Return single line if multiline is disabled
         if (!this.enableMultiline) {
-            return [text];
+            return [displayText];
         }
 
         // Calculate maximum characters that fit in one line
         const maxChars = Math.floor(maxWidth / charWidth);
-        if (maxChars <= 0) return [text]; // Safety check
+        if (maxChars <= 0) return [displayText]; // Safety check
 
         // NEW: First split by newlines to preserve user line breaks
-        const paragraphs = text.split('\n');
+        const paragraphs = displayText.split('\n');
         const allLines = [];
 
         // Process each paragraph (line break = user intent)

@@ -246,7 +246,11 @@ Then `node build.js` → auto-discovered!
   - **Save**: Press **Enter** or click outside to save
   - **New Lines**: Press **Shift+Enter** to create new lines - **newlines are preserved** after saving!
   - **Whitespace Preservation**: All whitespace is preserved exactly as typed
-    - **Tabs** remain as tabs (useful for code snippets, indentation)
+    - **Tabs** are stored as tab characters and rendered as 4 spaces
+      - Preserved in data (copy/paste maintains tabs)
+      - Visible in editor (press Tab key)
+      - Displayed as 4 spaces in SVG (for consistent rendering)
+      - Configurable width via `tabWidth` setting
     - **Multiple spaces** stay as multiple spaces
     - **Leading/trailing spaces** are preserved
     - Perfect for formatted text, code, or precise alignment

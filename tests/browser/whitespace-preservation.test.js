@@ -28,6 +28,8 @@ test.describe('Whitespace Preservation', () => {
 
     test('preserves tabs in task titles', async () => {
         // Create task with tabs
+        // NOTE: Tabs are stored as \t in the data model,
+        // but converted to spaces for SVG display (SVG doesn't render tabs)
         const taskWithTabs = await page.evaluate(() => {
             app.addRootTaskAtPosition(300, 300);
             const task = app.tasks[0];

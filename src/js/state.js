@@ -120,6 +120,7 @@ const app = {
     minNodeWidth: 100,           // Minimum rectangle width
     fontFamily: "'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace",
     fontWeight: 700,             // Font weight: 400=normal, 500=medium, 600=semibold, 700=bold
+    tabWidth: 4,                 // Number of spaces per tab character for SVG display
 
     // ========================================
     // Multiline Text Configuration
