@@ -44,6 +44,13 @@ export const SnappingMixin = {
         let snapLineX = null;
         let snapLineY = null;
 
+        // PERF: Distance threshold for equi-distance checks (only check nearby nodes)
+        const EQUIDIST_MAX_DISTANCE = 800; // Only check nodes within 800px
+        const ALIGNMENT_THRESHOLD = 50; // How close Y coords must be for horizontal alignment (and vice versa)
+
+        // Collect nearby tasks for equi-distance checking
+        const nearbyTasks = [];
+
         // Check all other tasks (only those visible in viewport)
         for (const task of this.tasks) {
             if (excludeIds.has(task.id) || task.hidden) continue;
@@ -64,8 +71,19 @@ export const SnappingMixin = {
                 top: task.y - dims.height / 2,
                 bottom: task.y + dims.height / 2,
                 centerX: task.x,
-                centerY: task.y
+                centerY: task.y,
+                task: task,
+                dims: dims
             };
+
+            // PERF: Collect for equi-distance checks only if within distance threshold
+            const distance = Math.sqrt(
+                Math.pow(task.x - draggedX, 2) +
+                Math.pow(task.y - draggedY, 2)
+            );
+            if (distance < EQUIDIST_MAX_DISTANCE) {
+                nearbyTasks.push(other);
+            }
 
             // Check vertical alignments (affects X position)
             const verticalChecks = [
@@ -118,6 +136,40 @@ export const SnappingMixin = {
             }
         }
 
+        // ========================================
+        // Equi-distance Spacing Detection
+        // ========================================
+
+        // Try horizontal equi-distance (nodes aligned horizontally)
+        const equidistHorizontal = this.findEquiDistanceSnap(
+            nearbyTasks,
+            dragged,
+            'horizontal',
+            ALIGNMENT_THRESHOLD,
+            threshold
+        );
+
+        // Try vertical equi-distance (nodes aligned vertically)
+        const equidistVertical = this.findEquiDistanceSnap(
+            nearbyTasks,
+            dragged,
+            'vertical',
+            ALIGNMENT_THRESHOLD,
+            threshold
+        );
+
+        // Prioritize: equi-distance > edge/center alignment
+        // (But only if equi-distance snap is closer than current snap)
+        if (equidistHorizontal && equidistHorizontal.distance < minDistX) {
+            snapX = equidistHorizontal.snapX;
+            snapLineX = equidistHorizontal.snapLine;
+        }
+
+        if (equidistVertical && equidistVertical.distance < minDistY) {
+            snapY = equidistVertical.snapY;
+            snapLineY = equidistVertical.snapLine;
+        }
+
         // Build snap lines array
         if (snapLineX) snapLines.push(snapLineX);
         if (snapLineY) snapLines.push(snapLineY);
@@ -127,6 +179,92 @@ export const SnappingMixin = {
             y: snapY !== null ? snapY : draggedY,
             snapLines
         };
+    },
+
+    /**
+     * Find equi-distance snap position
+     * Detects when the dragged node can be placed to create equal spacing between nodes
+     *
+     * @param {Array} nearbyTasks - Tasks to check (already filtered by distance)
+     * @param {Object} dragged - Dragged node bounds
+     * @param {string} orientation - 'horizontal' or 'vertical'
+     * @param {number} alignmentThreshold - How close perpendicular coords must be
+     * @param {number} snapThreshold - How close to snap position before snapping
+     * @returns {Object|null} {snapX|snapY, distance, snapLine} or null
+     */
+    findEquiDistanceSnap(nearbyTasks, dragged, orientation, alignmentThreshold, snapThreshold) {
+        if (nearbyTasks.length < 2) return null; // Need at least 2 other nodes
+
+        const isHorizontal = orientation === 'horizontal';
+
+        // Filter to aligned nodes and sort by position
+        const aligned = nearbyTasks.filter(other => {
+            if (isHorizontal) {
+                // For horizontal: nodes with similar Y coordinate
+                return Math.abs(other.centerY - dragged.centerY) < alignmentThreshold;
+            } else {
+                // For vertical: nodes with similar X coordinate
+                return Math.abs(other.centerX - dragged.centerX) < alignmentThreshold;
+            }
+        }).sort((a, b) => {
+            return isHorizontal ? (a.centerX - b.centerX) : (a.centerY - b.centerY);
+        });
+
+        if (aligned.length < 2) return null;
+
+        // Check all consecutive pairs for equal spacing opportunities
+        let bestSnap = null;
+        let bestDistance = snapThreshold;
+
+        for (let i = 0; i < aligned.length - 1; i++) {
+            const nodeA = aligned[i];
+            const nodeB = aligned[i + 1];
+
+            const posA = isHorizontal ? nodeA.centerX : nodeA.centerY;
+            const posB = isHorizontal ? nodeB.centerX : nodeB.centerY;
+            const spacing = posB - posA;
+
+            // Candidate positions where dragged node would create equal spacing
+            const candidates = [
+                { pos: posA - spacing, type: 'before' },  // C--A--B pattern
+                { pos: posA + spacing / 2, type: 'between' }, // A--C--B pattern (if spacing allows)
+                { pos: posB + spacing, type: 'after' }    // A--B--C pattern
+            ];
+
+            for (const candidate of candidates) {
+                const draggedPos = isHorizontal ? dragged.centerX : dragged.centerY;
+                const distance = Math.abs(candidate.pos - draggedPos);
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+
+                    // Calculate which nodes form the equi-distance group
+                    let nodes;
+                    if (candidate.type === 'before') {
+                        nodes = [{ pos: candidate.pos }, { pos: posA }, { pos: posB }];
+                    } else if (candidate.type === 'between') {
+                        nodes = [{ pos: posA }, { pos: candidate.pos }, { pos: posB }];
+                    } else {
+                        nodes = [{ pos: posA }, { pos: posB }, { pos: candidate.pos }];
+                    }
+
+                    bestSnap = {
+                        snapX: isHorizontal ? candidate.pos : dragged.centerX,
+                        snapY: isHorizontal ? dragged.centerY : candidate.pos,
+                        distance: distance,
+                        snapLine: {
+                            type: 'equidistance',
+                            orientation: orientation,
+                            nodes: nodes,
+                            spacing: Math.abs(spacing),
+                            alignmentPos: isHorizontal ? nodeA.centerY : nodeA.centerX
+                        }
+                    };
+                }
+            }
+        }
+
+        return bestSnap;
     }
 };
 

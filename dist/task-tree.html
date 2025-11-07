@@ -8668,32 +8668,166 @@ Object.assign(app, {
         // ========================================
         if (this.activeSnapLines && this.activeSnapLines.length > 0) {
             this.activeSnapLines.forEach(snapLine => {
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                if (snapLine.type === 'equidistance') {
+                    // Equi-distance spacing indicators
+                    const isHorizontal = snapLine.orientation === 'horizontal';
+                    const nodes = snapLine.nodes;
+                    const alignmentPos = snapLine.alignmentPos;
 
-                if (snapLine.type === 'vertical') {
-                    // Vertical snap line (spans entire viewport height)
-                    line.setAttribute('x1', snapLine.position);
-                    line.setAttribute('y1', this.viewBox.y);
-                    line.setAttribute('x2', snapLine.position);
-                    line.setAttribute('y2', this.viewBox.y + this.viewBox.height);
-                } else if (snapLine.type === 'horizontal') {
-                    // Horizontal snap line (spans entire viewport width)
-                    line.setAttribute('x1', this.viewBox.x);
-                    line.setAttribute('y1', snapLine.position);
-                    line.setAttribute('x2', this.viewBox.x + this.viewBox.width);
-                    line.setAttribute('y2', snapLine.position);
+                    // Draw distance indicator lines between each consecutive pair
+                    for (let i = 0; i < nodes.length - 1; i++) {
+                        const nodeA = nodes[i];
+                        const nodeB = nodes[i + 1];
+
+                        // Create group for this spacing segment
+                        const segmentGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+                        // Draw measurement line (short perpendicular indicators at each end)
+                        const INDICATOR_LENGTH = 20;
+
+                        if (isHorizontal) {
+                            // Horizontal spacing - draw vertical indicators
+                            const y = alignmentPos;
+
+                            // Left indicator
+                            const leftIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            leftIndicator.setAttribute('x1', nodeA.pos);
+                            leftIndicator.setAttribute('y1', y - INDICATOR_LENGTH / 2);
+                            leftIndicator.setAttribute('x2', nodeA.pos);
+                            leftIndicator.setAttribute('y2', y + INDICATOR_LENGTH / 2);
+                            leftIndicator.setAttribute('stroke', '#9b59b6');
+                            leftIndicator.setAttribute('stroke-width', '2');
+                            leftIndicator.setAttribute('opacity', '0.7');
+                            leftIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(leftIndicator);
+
+                            // Right indicator
+                            const rightIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            rightIndicator.setAttribute('x1', nodeB.pos);
+                            rightIndicator.setAttribute('y1', y - INDICATOR_LENGTH / 2);
+                            rightIndicator.setAttribute('x2', nodeB.pos);
+                            rightIndicator.setAttribute('y2', y + INDICATOR_LENGTH / 2);
+                            rightIndicator.setAttribute('stroke', '#9b59b6');
+                            rightIndicator.setAttribute('stroke-width', '2');
+                            rightIndicator.setAttribute('opacity', '0.7');
+                            rightIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(rightIndicator);
+
+                            // Connecting line with arrows
+                            const connectingLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            connectingLine.setAttribute('x1', nodeA.pos);
+                            connectingLine.setAttribute('y1', y);
+                            connectingLine.setAttribute('x2', nodeB.pos);
+                            connectingLine.setAttribute('y2', y);
+                            connectingLine.setAttribute('stroke', '#9b59b6');
+                            connectingLine.setAttribute('stroke-width', '1.5');
+                            connectingLine.setAttribute('stroke-dasharray', '4,4');
+                            connectingLine.setAttribute('opacity', '0.6');
+                            connectingLine.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(connectingLine);
+
+                            // Distance label (centered between nodes)
+                            const midX = (nodeA.pos + nodeB.pos) / 2;
+                            const distanceText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            distanceText.setAttribute('x', midX);
+                            distanceText.setAttribute('y', y - INDICATOR_LENGTH / 2 - 5);
+                            distanceText.setAttribute('text-anchor', 'middle');
+                            distanceText.setAttribute('fill', '#9b59b6');
+                            distanceText.setAttribute('font-size', '11');
+                            distanceText.setAttribute('font-weight', 'bold');
+                            distanceText.setAttribute('opacity', '0.8');
+                            distanceText.setAttribute('pointer-events', 'none');
+                            distanceText.textContent = Math.round(snapLine.spacing) + 'px';
+                            segmentGroup.appendChild(distanceText);
+
+                        } else {
+                            // Vertical spacing - draw horizontal indicators
+                            const x = alignmentPos;
+
+                            // Top indicator
+                            const topIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            topIndicator.setAttribute('x1', x - INDICATOR_LENGTH / 2);
+                            topIndicator.setAttribute('y1', nodeA.pos);
+                            topIndicator.setAttribute('x2', x + INDICATOR_LENGTH / 2);
+                            topIndicator.setAttribute('y2', nodeA.pos);
+                            topIndicator.setAttribute('stroke', '#9b59b6');
+                            topIndicator.setAttribute('stroke-width', '2');
+                            topIndicator.setAttribute('opacity', '0.7');
+                            topIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(topIndicator);
+
+                            // Bottom indicator
+                            const bottomIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            bottomIndicator.setAttribute('x1', x - INDICATOR_LENGTH / 2);
+                            bottomIndicator.setAttribute('y1', nodeB.pos);
+                            bottomIndicator.setAttribute('x2', x + INDICATOR_LENGTH / 2);
+                            bottomIndicator.setAttribute('y2', nodeB.pos);
+                            bottomIndicator.setAttribute('stroke', '#9b59b6');
+                            bottomIndicator.setAttribute('stroke-width', '2');
+                            bottomIndicator.setAttribute('opacity', '0.7');
+                            bottomIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(bottomIndicator);
+
+                            // Connecting line with arrows
+                            const connectingLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            connectingLine.setAttribute('x1', x);
+                            connectingLine.setAttribute('y1', nodeA.pos);
+                            connectingLine.setAttribute('x2', x);
+                            connectingLine.setAttribute('y2', nodeB.pos);
+                            connectingLine.setAttribute('stroke', '#9b59b6');
+                            connectingLine.setAttribute('stroke-width', '1.5');
+                            connectingLine.setAttribute('stroke-dasharray', '4,4');
+                            connectingLine.setAttribute('opacity', '0.6');
+                            connectingLine.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(connectingLine);
+
+                            // Distance label (centered between nodes)
+                            const midY = (nodeA.pos + nodeB.pos) / 2;
+                            const distanceText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            distanceText.setAttribute('x', x + INDICATOR_LENGTH / 2 + 5);
+                            distanceText.setAttribute('y', midY + 4);
+                            distanceText.setAttribute('text-anchor', 'start');
+                            distanceText.setAttribute('fill', '#9b59b6');
+                            distanceText.setAttribute('font-size', '11');
+                            distanceText.setAttribute('font-weight', 'bold');
+                            distanceText.setAttribute('opacity', '0.8');
+                            distanceText.setAttribute('pointer-events', 'none');
+                            distanceText.textContent = Math.round(snapLine.spacing) + 'px';
+                            segmentGroup.appendChild(distanceText);
+                        }
+
+                        nodesGroup.appendChild(segmentGroup);
+                    }
+
+                } else {
+                    // Regular vertical/horizontal snap lines
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+                    if (snapLine.type === 'vertical') {
+                        // Vertical snap line (spans entire viewport height)
+                        line.setAttribute('x1', snapLine.position);
+                        line.setAttribute('y1', this.viewBox.y);
+                        line.setAttribute('x2', snapLine.position);
+                        line.setAttribute('y2', this.viewBox.y + this.viewBox.height);
+                    } else if (snapLine.type === 'horizontal') {
+                        // Horizontal snap line (spans entire viewport width)
+                        line.setAttribute('x1', this.viewBox.x);
+                        line.setAttribute('y1', snapLine.position);
+                        line.setAttribute('x2', this.viewBox.x + this.viewBox.width);
+                        line.setAttribute('y2', snapLine.position);
+                    }
+
+                    // Style: semi-transparent, dashed line
+                    // Use different colors for edge vs center alignment
+                    const isCenter = snapLine.alignType === 'center';
+                    line.setAttribute('stroke', isCenter ? '#ff6b6b' : '#4dabf7');
+                    line.setAttribute('stroke-width', '1.5');
+                    line.setAttribute('stroke-dasharray', '5,5');
+                    line.setAttribute('opacity', '0.6');
+                    line.setAttribute('pointer-events', 'none');
+
+                    nodesGroup.appendChild(line);
                 }
-
-                // Style: semi-transparent, dashed line
-                // Use different colors for edge vs center alignment
-                const isCenter = snapLine.alignType === 'center';
-                line.setAttribute('stroke', isCenter ? '#ff6b6b' : '#4dabf7');
-                line.setAttribute('stroke-width', '1.5');
-                line.setAttribute('stroke-dasharray', '5,5');
-                line.setAttribute('opacity', '0.6');
-                line.setAttribute('pointer-events', 'none');
-
-                nodesGroup.appendChild(line);
             });
         }
 
@@ -10095,6 +10229,13 @@ Object.assign(app, {
         let snapLineX = null;
         let snapLineY = null;
 
+        // PERF: Distance threshold for equi-distance checks (only check nearby nodes)
+        const EQUIDIST_MAX_DISTANCE = 800; // Only check nodes within 800px
+        const ALIGNMENT_THRESHOLD = 50; // How close Y coords must be for horizontal alignment (and vice versa)
+
+        // Collect nearby tasks for equi-distance checking
+        const nearbyTasks = [];
+
         // Check all other tasks (only those visible in viewport)
         for (const task of this.tasks) {
             if (excludeIds.has(task.id) || task.hidden) continue;
@@ -10115,8 +10256,19 @@ Object.assign(app, {
                 top: task.y - dims.height / 2,
                 bottom: task.y + dims.height / 2,
                 centerX: task.x,
-                centerY: task.y
+                centerY: task.y,
+                task: task,
+                dims: dims
             };
+
+            // PERF: Collect for equi-distance checks only if within distance threshold
+            const distance = Math.sqrt(
+                Math.pow(task.x - draggedX, 2) +
+                Math.pow(task.y - draggedY, 2)
+            );
+            if (distance < EQUIDIST_MAX_DISTANCE) {
+                nearbyTasks.push(other);
+            }
 
             // Check vertical alignments (affects X position)
             const verticalChecks = [
@@ -10169,6 +10321,40 @@ Object.assign(app, {
             }
         }
 
+        // ========================================
+        // Equi-distance Spacing Detection
+        // ========================================
+
+        // Try horizontal equi-distance (nodes aligned horizontally)
+        const equidistHorizontal = this.findEquiDistanceSnap(
+            nearbyTasks,
+            dragged,
+            'horizontal',
+            ALIGNMENT_THRESHOLD,
+            threshold
+        );
+
+        // Try vertical equi-distance (nodes aligned vertically)
+        const equidistVertical = this.findEquiDistanceSnap(
+            nearbyTasks,
+            dragged,
+            'vertical',
+            ALIGNMENT_THRESHOLD,
+            threshold
+        );
+
+        // Prioritize: equi-distance > edge/center alignment
+        // (But only if equi-distance snap is closer than current snap)
+        if (equidistHorizontal && equidistHorizontal.distance < minDistX) {
+            snapX = equidistHorizontal.snapX;
+            snapLineX = equidistHorizontal.snapLine;
+        }
+
+        if (equidistVertical && equidistVertical.distance < minDistY) {
+            snapY = equidistVertical.snapY;
+            snapLineY = equidistVertical.snapLine;
+        }
+
         // Build snap lines array
         if (snapLineX) snapLines.push(snapLineX);
         if (snapLineY) snapLines.push(snapLineY);
@@ -10178,6 +10364,92 @@ Object.assign(app, {
             y: snapY !== null ? snapY : draggedY,
             snapLines
         };
+    },
+
+    /**
+     * Find equi-distance snap position
+     * Detects when the dragged node can be placed to create equal spacing between nodes
+     *
+     * @param {Array} nearbyTasks - Tasks to check (already filtered by distance)
+     * @param {Object} dragged - Dragged node bounds
+     * @param {string} orientation - 'horizontal' or 'vertical'
+     * @param {number} alignmentThreshold - How close perpendicular coords must be
+     * @param {number} snapThreshold - How close to snap position before snapping
+     * @returns {Object|null} {snapX|snapY, distance, snapLine} or null
+     */
+    findEquiDistanceSnap(nearbyTasks, dragged, orientation, alignmentThreshold, snapThreshold) {
+        if (nearbyTasks.length < 2) return null; // Need at least 2 other nodes
+
+        const isHorizontal = orientation === 'horizontal';
+
+        // Filter to aligned nodes and sort by position
+        const aligned = nearbyTasks.filter(other => {
+            if (isHorizontal) {
+                // For horizontal: nodes with similar Y coordinate
+                return Math.abs(other.centerY - dragged.centerY) < alignmentThreshold;
+            } else {
+                // For vertical: nodes with similar X coordinate
+                return Math.abs(other.centerX - dragged.centerX) < alignmentThreshold;
+            }
+        }).sort((a, b) => {
+            return isHorizontal ? (a.centerX - b.centerX) : (a.centerY - b.centerY);
+        });
+
+        if (aligned.length < 2) return null;
+
+        // Check all consecutive pairs for equal spacing opportunities
+        let bestSnap = null;
+        let bestDistance = snapThreshold;
+
+        for (let i = 0; i < aligned.length - 1; i++) {
+            const nodeA = aligned[i];
+            const nodeB = aligned[i + 1];
+
+            const posA = isHorizontal ? nodeA.centerX : nodeA.centerY;
+            const posB = isHorizontal ? nodeB.centerX : nodeB.centerY;
+            const spacing = posB - posA;
+
+            // Candidate positions where dragged node would create equal spacing
+            const candidates = [
+                { pos: posA - spacing, type: 'before' },  // C--A--B pattern
+                { pos: posA + spacing / 2, type: 'between' }, // A--C--B pattern (if spacing allows)
+                { pos: posB + spacing, type: 'after' }    // A--B--C pattern
+            ];
+
+            for (const candidate of candidates) {
+                const draggedPos = isHorizontal ? dragged.centerX : dragged.centerY;
+                const distance = Math.abs(candidate.pos - draggedPos);
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+
+                    // Calculate which nodes form the equi-distance group
+                    let nodes;
+                    if (candidate.type === 'before') {
+                        nodes = [{ pos: candidate.pos }, { pos: posA }, { pos: posB }];
+                    } else if (candidate.type === 'between') {
+                        nodes = [{ pos: posA }, { pos: candidate.pos }, { pos: posB }];
+                    } else {
+                        nodes = [{ pos: posA }, { pos: posB }, { pos: candidate.pos }];
+                    }
+
+                    bestSnap = {
+                        snapX: isHorizontal ? candidate.pos : dragged.centerX,
+                        snapY: isHorizontal ? dragged.centerY : candidate.pos,
+                        distance: distance,
+                        snapLine: {
+                            type: 'equidistance',
+                            orientation: orientation,
+                            nodes: nodes,
+                            spacing: Math.abs(spacing),
+                            alignmentPos: isHorizontal ? nodeA.centerY : nodeA.centerX
+                        }
+                    };
+                }
+            }
+        }
+
+        return bestSnap;
     }
 });
 

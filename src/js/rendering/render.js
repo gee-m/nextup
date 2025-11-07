@@ -1174,32 +1174,166 @@ export const RenderMixin = {
         // ========================================
         if (this.activeSnapLines && this.activeSnapLines.length > 0) {
             this.activeSnapLines.forEach(snapLine => {
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                if (snapLine.type === 'equidistance') {
+                    // Equi-distance spacing indicators
+                    const isHorizontal = snapLine.orientation === 'horizontal';
+                    const nodes = snapLine.nodes;
+                    const alignmentPos = snapLine.alignmentPos;
 
-                if (snapLine.type === 'vertical') {
-                    // Vertical snap line (spans entire viewport height)
-                    line.setAttribute('x1', snapLine.position);
-                    line.setAttribute('y1', this.viewBox.y);
-                    line.setAttribute('x2', snapLine.position);
-                    line.setAttribute('y2', this.viewBox.y + this.viewBox.height);
-                } else if (snapLine.type === 'horizontal') {
-                    // Horizontal snap line (spans entire viewport width)
-                    line.setAttribute('x1', this.viewBox.x);
-                    line.setAttribute('y1', snapLine.position);
-                    line.setAttribute('x2', this.viewBox.x + this.viewBox.width);
-                    line.setAttribute('y2', snapLine.position);
+                    // Draw distance indicator lines between each consecutive pair
+                    for (let i = 0; i < nodes.length - 1; i++) {
+                        const nodeA = nodes[i];
+                        const nodeB = nodes[i + 1];
+
+                        // Create group for this spacing segment
+                        const segmentGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+                        // Draw measurement line (short perpendicular indicators at each end)
+                        const INDICATOR_LENGTH = 20;
+
+                        if (isHorizontal) {
+                            // Horizontal spacing - draw vertical indicators
+                            const y = alignmentPos;
+
+                            // Left indicator
+                            const leftIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            leftIndicator.setAttribute('x1', nodeA.pos);
+                            leftIndicator.setAttribute('y1', y - INDICATOR_LENGTH / 2);
+                            leftIndicator.setAttribute('x2', nodeA.pos);
+                            leftIndicator.setAttribute('y2', y + INDICATOR_LENGTH / 2);
+                            leftIndicator.setAttribute('stroke', '#9b59b6');
+                            leftIndicator.setAttribute('stroke-width', '2');
+                            leftIndicator.setAttribute('opacity', '0.7');
+                            leftIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(leftIndicator);
+
+                            // Right indicator
+                            const rightIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            rightIndicator.setAttribute('x1', nodeB.pos);
+                            rightIndicator.setAttribute('y1', y - INDICATOR_LENGTH / 2);
+                            rightIndicator.setAttribute('x2', nodeB.pos);
+                            rightIndicator.setAttribute('y2', y + INDICATOR_LENGTH / 2);
+                            rightIndicator.setAttribute('stroke', '#9b59b6');
+                            rightIndicator.setAttribute('stroke-width', '2');
+                            rightIndicator.setAttribute('opacity', '0.7');
+                            rightIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(rightIndicator);
+
+                            // Connecting line with arrows
+                            const connectingLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            connectingLine.setAttribute('x1', nodeA.pos);
+                            connectingLine.setAttribute('y1', y);
+                            connectingLine.setAttribute('x2', nodeB.pos);
+                            connectingLine.setAttribute('y2', y);
+                            connectingLine.setAttribute('stroke', '#9b59b6');
+                            connectingLine.setAttribute('stroke-width', '1.5');
+                            connectingLine.setAttribute('stroke-dasharray', '4,4');
+                            connectingLine.setAttribute('opacity', '0.6');
+                            connectingLine.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(connectingLine);
+
+                            // Distance label (centered between nodes)
+                            const midX = (nodeA.pos + nodeB.pos) / 2;
+                            const distanceText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            distanceText.setAttribute('x', midX);
+                            distanceText.setAttribute('y', y - INDICATOR_LENGTH / 2 - 5);
+                            distanceText.setAttribute('text-anchor', 'middle');
+                            distanceText.setAttribute('fill', '#9b59b6');
+                            distanceText.setAttribute('font-size', '11');
+                            distanceText.setAttribute('font-weight', 'bold');
+                            distanceText.setAttribute('opacity', '0.8');
+                            distanceText.setAttribute('pointer-events', 'none');
+                            distanceText.textContent = Math.round(snapLine.spacing) + 'px';
+                            segmentGroup.appendChild(distanceText);
+
+                        } else {
+                            // Vertical spacing - draw horizontal indicators
+                            const x = alignmentPos;
+
+                            // Top indicator
+                            const topIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            topIndicator.setAttribute('x1', x - INDICATOR_LENGTH / 2);
+                            topIndicator.setAttribute('y1', nodeA.pos);
+                            topIndicator.setAttribute('x2', x + INDICATOR_LENGTH / 2);
+                            topIndicator.setAttribute('y2', nodeA.pos);
+                            topIndicator.setAttribute('stroke', '#9b59b6');
+                            topIndicator.setAttribute('stroke-width', '2');
+                            topIndicator.setAttribute('opacity', '0.7');
+                            topIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(topIndicator);
+
+                            // Bottom indicator
+                            const bottomIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            bottomIndicator.setAttribute('x1', x - INDICATOR_LENGTH / 2);
+                            bottomIndicator.setAttribute('y1', nodeB.pos);
+                            bottomIndicator.setAttribute('x2', x + INDICATOR_LENGTH / 2);
+                            bottomIndicator.setAttribute('y2', nodeB.pos);
+                            bottomIndicator.setAttribute('stroke', '#9b59b6');
+                            bottomIndicator.setAttribute('stroke-width', '2');
+                            bottomIndicator.setAttribute('opacity', '0.7');
+                            bottomIndicator.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(bottomIndicator);
+
+                            // Connecting line with arrows
+                            const connectingLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            connectingLine.setAttribute('x1', x);
+                            connectingLine.setAttribute('y1', nodeA.pos);
+                            connectingLine.setAttribute('x2', x);
+                            connectingLine.setAttribute('y2', nodeB.pos);
+                            connectingLine.setAttribute('stroke', '#9b59b6');
+                            connectingLine.setAttribute('stroke-width', '1.5');
+                            connectingLine.setAttribute('stroke-dasharray', '4,4');
+                            connectingLine.setAttribute('opacity', '0.6');
+                            connectingLine.setAttribute('pointer-events', 'none');
+                            segmentGroup.appendChild(connectingLine);
+
+                            // Distance label (centered between nodes)
+                            const midY = (nodeA.pos + nodeB.pos) / 2;
+                            const distanceText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            distanceText.setAttribute('x', x + INDICATOR_LENGTH / 2 + 5);
+                            distanceText.setAttribute('y', midY + 4);
+                            distanceText.setAttribute('text-anchor', 'start');
+                            distanceText.setAttribute('fill', '#9b59b6');
+                            distanceText.setAttribute('font-size', '11');
+                            distanceText.setAttribute('font-weight', 'bold');
+                            distanceText.setAttribute('opacity', '0.8');
+                            distanceText.setAttribute('pointer-events', 'none');
+                            distanceText.textContent = Math.round(snapLine.spacing) + 'px';
+                            segmentGroup.appendChild(distanceText);
+                        }
+
+                        nodesGroup.appendChild(segmentGroup);
+                    }
+
+                } else {
+                    // Regular vertical/horizontal snap lines
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+                    if (snapLine.type === 'vertical') {
+                        // Vertical snap line (spans entire viewport height)
+                        line.setAttribute('x1', snapLine.position);
+                        line.setAttribute('y1', this.viewBox.y);
+                        line.setAttribute('x2', snapLine.position);
+                        line.setAttribute('y2', this.viewBox.y + this.viewBox.height);
+                    } else if (snapLine.type === 'horizontal') {
+                        // Horizontal snap line (spans entire viewport width)
+                        line.setAttribute('x1', this.viewBox.x);
+                        line.setAttribute('y1', snapLine.position);
+                        line.setAttribute('x2', this.viewBox.x + this.viewBox.width);
+                        line.setAttribute('y2', snapLine.position);
+                    }
+
+                    // Style: semi-transparent, dashed line
+                    // Use different colors for edge vs center alignment
+                    const isCenter = snapLine.alignType === 'center';
+                    line.setAttribute('stroke', isCenter ? '#ff6b6b' : '#4dabf7');
+                    line.setAttribute('stroke-width', '1.5');
+                    line.setAttribute('stroke-dasharray', '5,5');
+                    line.setAttribute('opacity', '0.6');
+                    line.setAttribute('pointer-events', 'none');
+
+                    nodesGroup.appendChild(line);
                 }
-
-                // Style: semi-transparent, dashed line
-                // Use different colors for edge vs center alignment
-                const isCenter = snapLine.alignType === 'center';
-                line.setAttribute('stroke', isCenter ? '#ff6b6b' : '#4dabf7');
-                line.setAttribute('stroke-width', '1.5');
-                line.setAttribute('stroke-dasharray', '5,5');
-                line.setAttribute('opacity', '0.6');
-                line.setAttribute('pointer-events', 'none');
-
-                nodesGroup.appendChild(line);
             });
         }
 
