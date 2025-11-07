@@ -979,7 +979,12 @@ Stored in localStorage as:
 
 - **Paste from clipboard**: Copy image to clipboard → Press Ctrl+V (⌘+V) in Task Tree → Image appears as node
 - **Smart paste detection**: Automatically detects whether clipboard contains image or text subtree
-- **Original resolution**: Images keep their original dimensions (resizable with drag handles)
+- **Progressive disclosure viewing** (minimum clutter, maximum access):
+  - **Compact default**: Images can be resized small for clean, traversable graphs
+  - **Hover preview**: Hover over image → Shows original full-size (in-place with drop shadow)
+  - **Double-click modal**: Double-click image → Opens full-size modal viewer
+  - **Scroll wheel zoom**: In modal, scroll to zoom 50%-500% (click toggles 1x/2x)
+  - **Quick access**: Get full detail without cluttering your graph layout
 - **Drag to resize**: Select image node → Drag corner handles to resize (maintains aspect ratio)
 - **IndexedDB storage**: Images stored in IndexedDB (~50MB+ capacity) separate from localStorage
 - **ZIP export/import**: Export creates `.zip` with `tasks.json` + `images/` folder
@@ -7557,5 +7562,177 @@ After: Entire group aligns as a unit
 **Files Modified**: 2 files (mouse.js, README.md)
 **Lines Changed**: +73 lines
 **Implementation Time**: ~30 minutes
+**Tests**: ✅ All 28 tests passing
+
+---
+
+### Session N+6: Image Progressive Disclosure (Hover Preview & Modal Zoom)
+
+**Date**: 2025-01-07
+**Focus**: Progressive disclosure for images - minimum clutter, maximum access
+
+#### 🎯 Design Philosophy
+
+**Core Principle**: "Minimum Clutter, Maximum Access"
+- Keep graphs clean and traversable (compact images)
+- Make all information accessible on demand (hover/click to reveal)
+- Progressive disclosure: compact → hover preview → full modal
+
+#### ✨ Features Implemented
+
+**1. Hover Preview** (render.js:1445-1473)
+- **Trigger**: Mouse enters image → Shows original full-size
+- **Visual**: In-place enlargement with drop shadow for depth
+- **Performance**: Uses stored `imageNaturalWidth/Height` (no loading)
+- **UX**: Instant feedback, no clicks needed for quick viewing
+- **Return**: Mouse leaves → Returns to compact size
+
+**2. Double-Click Modal Viewer** (render.js:1509-1629)
+- **Trigger**: Double-click image → Opens full-screen modal
+- **Dark backdrop**: 90% black overlay, click outside to close
+- **Centered display**: Image centered, max 90vw × 90vh
+- **ESC to close**: Standard modal dismiss pattern
+
+**3. Scroll Wheel Zoom** (render.js:1555-1566)
+- **Range**: 50% to 500% zoom (0.5x - 5x)
+- **Step**: 10% per scroll tick
+- **Smooth**: CSS transition for visual polish
+- **Alternative**: Click image to toggle 1x ↔ 2x zoom
+- **Indicator**: Bottom overlay shows current zoom % + instructions
+
+**4. Natural Dimensions Storage** (clipboard.js:356-357, state.js:41)
+- **New fields**: `imageNaturalWidth`, `imageNaturalHeight` (immutable)
+- **Existing fields**: `imageWidth`, `imageHeight` (user-resizable)
+- **Separation**: Allows resize without losing original dimensions
+- **Stored on paste**: Captured from `img.naturalWidth/Height` on initial load
+
+#### 🔧 Technical Implementation
+
+**State Management**:
+```javascript
+// state.js
+hoveredImageTaskId: null,  // Track which image is being previewed
+```
+
+**Task Data Model**:
+```javascript
+{
+    imageId: 'uuid',              // IndexedDB reference
+    imageWidth: 150,              // Current display width (resizable)
+    imageHeight: 100,             // Current display height (resizable)
+    imageNaturalWidth: 1920,      // Original width (immutable)
+    imageNaturalHeight: 1080      // Original height (immutable)
+}
+```
+
+**Hover Detection**:
+```javascript
+// render.js:1476-1484
+image.addEventListener('mouseenter', () => {
+    this.hoveredImageTaskId = task.id;
+    this.render();  // Re-render to show enlarged
+});
+
+image.addEventListener('mouseleave', () => {
+    this.hoveredImageTaskId = null;
+    this.render();  // Re-render to restore compact
+});
+```
+
+**Modal Zoom Implementation**:
+```javascript
+// render.js:1555-1566
+const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1 : -1;
+    zoomLevel += delta * 0.1;
+    zoomLevel = Math.max(0.5, Math.min(5, zoomLevel));
+    img.style.transform = `scale(${zoomLevel})`;
+};
+```
+
+#### 📁 Files Modified
+
+1. **src/js/rendering/render.js** (+198 lines)
+   - Lines 1445-1502: Enhanced `renderTaskImage()` with hover and double-click
+   - Lines 1509-1629: `openImageModal()` - Full modal viewer
+   - Lines 1634-1645: `closeImageModal()` - Cleanup
+
+2. **src/js/state.js** (+1 line)
+   - Line 41: Added `hoveredImageTaskId` state
+
+3. **src/js/data/clipboard.js** (+2 lines)
+   - Lines 356-357: Store `imageNaturalWidth/Height` on paste
+
+4. **README.md** (+6 lines)
+   - Lines 982-987: Document progressive disclosure features
+
+#### 🎯 User Impact
+
+**Before**: Images either cluttered the graph (large) or lacked detail (small)
+
+**After**: Best of both worlds:
+- Clean graph traversal (small images)
+- Quick preview on hover (no click needed)
+- Detailed viewing in modal (zoom to pixel-peep)
+
+**User Workflows Enabled**:
+1. **Quick scan**: Hover over images while browsing to preview without disrupting flow
+2. **Detailed review**: Double-click to examine full resolution with zoom
+3. **Clean layouts**: Resize images small, access detail on demand
+4. **Fast navigation**: No need to enlarge images permanently to see detail
+
+**Examples**:
+```
+Scenario: UI mockup screenshots in task graph
+Before: Large images clutter graph OR small images hide detail
+After: Small images in graph, hover to preview, double-click to zoom and review pixels
+
+Scenario: Architecture diagrams
+Before: Must choose between readable diagrams (cluttered) or compact layout (unreadable)
+After: Compact layout with instant access to full detail on hover/click
+```
+
+#### 🎨 UX Design Decisions
+
+**Why hover shows original size?**
+- Fast access without clicks
+- Preserves user's chosen display size
+- No ambiguity about what "original" means
+
+**Why double-click instead of single-click?**
+- Prevents accidental modal opens during dragging
+- Single-click already used for node selection
+- Standard pattern for "open in detail view"
+
+**Why scroll wheel zoom?**
+- Industry standard (Google Photos, Figma, etc.)
+- Fine-grained control (10% steps)
+- Natural gesture for "get closer/further"
+
+**Why click toggles 1x/2x?**
+- Quick zoom for keyboard-free navigation
+- Common pattern in image viewers
+- Simple toggle is faster than scroll for 2x zoom
+
+#### 🚀 Future Enhancements
+
+**Potential Improvements**:
+- [ ] Pan/drag within modal for large zoomed images
+- [ ] Keyboard shortcuts in modal (+ / - to zoom)
+- [ ] Smooth zoom animation (currently instant)
+- [ ] Remember last zoom level per session
+- [ ] Gallery mode (arrow keys to browse images)
+- [ ] Thumbnail grid view for all images in graph
+
+**Performance Ideas**:
+- [ ] Lazy load hover preview (debounce 100ms)
+- [ ] Preload adjacent images in modal gallery mode
+- [ ] WebP/AVIF conversion for smaller file sizes
+
+**Version**: 1.22.0 (Image Progressive Disclosure)
+**Files Modified**: 4 files (render.js, state.js, clipboard.js, README.md)
+**Lines Changed**: +207 lines
+**Implementation Time**: ~1 hour
 **Tests**: ✅ All 28 tests passing
 

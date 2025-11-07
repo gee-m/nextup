@@ -351,8 +351,10 @@ app.pasteImage = async function(parentId = null, x = null, y = null) {
             textLocked: false,
             links: [],
             imageId: imageId,  // Reference to IndexedDB image
-            imageWidth: imageWidth,  // Original width
-            imageHeight: imageHeight,  // Original height
+            imageWidth: imageWidth,  // Current display width (can be resized)
+            imageHeight: imageHeight,  // Current display height (can be resized)
+            imageNaturalWidth: imageWidth,  // Original natural width (immutable)
+            imageNaturalHeight: imageHeight,  // Original natural height (immutable)
             priority: 'normal',
             customAttachPoints: {},
             customSourcePoints: {},

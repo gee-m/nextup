@@ -38,6 +38,7 @@ const app = {
     selectedTaskIds: new Set(),  // Multi-select: Set of task IDs
     lastClickedTaskId: null,     // For Shift+Click range selection
     hoveredTaskId: null,         // For hover-based priority changes
+    hoveredImageTaskId: null,    // For image hover preview (shows original size)
     lastWorkingTaskId: null,     // Track last selected/cycled working task for Jump button
     suggestedNextTaskId: null,   // Suggested next task to work on (shown in purple)
     selectedLine: null,          // Selected relationship line {type: 'parent'|'dependency', taskId, parentId/depId}
