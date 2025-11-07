@@ -1534,6 +1534,23 @@ export const RenderMixin = {
         const minZoom = 0.5;
         const maxZoom = 5;
 
+        // Pan/drag state
+        let isPanning = false;
+        let panX = 0;
+        let panY = 0;
+        let startX = 0;
+        let startY = 0;
+
+        // Zoom indicator reference (will be set later)
+        let updateZoomIndicator = null;
+
+        // Update transform with both zoom and pan
+        const updateTransform = () => {
+            img.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+            img.style.cursor = isPanning ? 'grabbing' : (zoomLevel > 1 ? 'grab' : 'zoom-in');
+            if (updateZoomIndicator) updateZoomIndicator();
+        };
+
         // Zoom with scroll wheel
         const handleWheel = (e) => {
             e.preventDefault();
@@ -1543,22 +1560,61 @@ export const RenderMixin = {
             zoomLevel += delta * zoomStep;
             zoomLevel = Math.max(minZoom, Math.min(maxZoom, zoomLevel));
 
-            img.style.transform = `scale(${zoomLevel})`;
-            img.style.cursor = zoomLevel > 1 ? 'zoom-out' : 'zoom-in';
+            updateTransform();
         };
 
         container.addEventListener('wheel', handleWheel, { passive: false });
 
-        // Click image to toggle zoom
+        // Mouse down - start panning
+        img.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // Only left click
+            if (zoomLevel <= 1) return; // Only pan when zoomed in
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            isPanning = true;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+            updateTransform();
+        });
+
+        // Mouse move - pan
+        const handleMouseMove = (e) => {
+            if (!isPanning) return;
+
+            e.preventDefault();
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            updateTransform();
+        };
+        document.addEventListener('mousemove', handleMouseMove);
+
+        // Mouse up - stop panning
+        const handleMouseUp = (e) => {
+            if (!isPanning) return;
+            isPanning = false;
+            updateTransform();
+        };
+        document.addEventListener('mouseup', handleMouseUp);
+
+        // Click image to toggle zoom (only when not panning)
         img.addEventListener('click', (e) => {
             e.stopPropagation();
+
+            // Don't toggle zoom if we were panning
+            if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
+                return;
+            }
+
             if (zoomLevel === 1) {
                 zoomLevel = 2;
             } else {
                 zoomLevel = 1;
+                panX = 0;
+                panY = 0;
             }
-            img.style.transform = `scale(${zoomLevel})`;
-            img.style.cursor = zoomLevel > 1 ? 'zoom-out' : 'zoom-in';
+            updateTransform();
         });
 
         // Close on backdrop click
@@ -1575,7 +1631,13 @@ export const RenderMixin = {
             }
         };
         document.addEventListener('keydown', handleEscape);
-        modal.dataset.escapeListener = 'true';
+
+        // Store cleanup functions on modal for later removal
+        modal._cleanupFunctions = [
+            () => document.removeEventListener('keydown', handleEscape),
+            () => document.removeEventListener('mousemove', handleMouseMove),
+            () => document.removeEventListener('mouseup', handleMouseUp)
+        ];
 
         // Add zoom indicator
         const zoomIndicator = document.createElement('div');
@@ -1593,15 +1655,12 @@ export const RenderMixin = {
             font-size: 14px;
             pointer-events: none;
         `;
-        zoomIndicator.textContent = `${Math.round(zoomLevel * 100)}% • Scroll to zoom`;
-
-        // Update indicator on zoom
-        const updateIndicator = () => {
-            zoomIndicator.textContent = `${Math.round(zoomLevel * 100)}% • Scroll to zoom`;
+        updateZoomIndicator = () => {
+            const zoomText = `${Math.round(zoomLevel * 100)}%`;
+            const helpText = zoomLevel > 1 ? 'Drag to pan • Scroll to zoom' : 'Scroll to zoom • Click to zoom 2x';
+            zoomIndicator.textContent = `${zoomText} • ${helpText}`;
         };
-
-        container.addEventListener('wheel', updateIndicator);
-        img.addEventListener('click', updateIndicator);
+        updateZoomIndicator();
 
         // Assemble modal
         container.appendChild(img);
@@ -1616,11 +1675,9 @@ export const RenderMixin = {
     closeImageModal() {
         const modal = document.getElementById('image-modal');
         if (modal) {
-            // Remove escape listener
-            if (modal.dataset.escapeListener) {
-                document.removeEventListener('keydown', (e) => {
-                    if (e.key === 'Escape') this.closeImageModal();
-                });
+            // Clean up event listeners
+            if (modal._cleanupFunctions) {
+                modal._cleanupFunctions.forEach(cleanup => cleanup());
             }
             modal.remove();
         }

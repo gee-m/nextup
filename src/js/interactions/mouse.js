@@ -196,8 +196,30 @@ export const MouseMixin = {
         // Check if hovering over an image (for preview)
         // Only check when not dragging or resizing
         if (!this.dragMode && !this.imageResizing) {
-            if (e.target.classList && e.target.classList.contains('task-image')) {
-                const taskId = parseInt(e.target.dataset.taskId);
+            // Find image element by traversing up the DOM or checking siblings
+            let imageElement = null;
+            let element = e.target;
+
+            // Check if target is the image or traverse to find it
+            while (element && element !== this.svg) {
+                if (element.tagName === 'image' && element.classList.contains('task-image')) {
+                    imageElement = element;
+                    break;
+                }
+                element = element.parentElement;
+            }
+
+            // If not found by traversing up, it might be a sibling (e.g., hovering over rect)
+            // Check if we're over a task-node that has an image
+            if (!imageElement) {
+                const taskNode = e.target.closest('.task-node');
+                if (taskNode) {
+                    imageElement = taskNode.querySelector('.task-image');
+                }
+            }
+
+            if (imageElement) {
+                const taskId = parseInt(imageElement.dataset.taskId);
                 if (this.hoveredImageTaskId !== taskId) {
                     this.hoveredImageTaskId = taskId;
                     this.render();
