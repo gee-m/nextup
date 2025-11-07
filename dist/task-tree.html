@@ -9309,11 +9309,50 @@ Object.assign(app, {
 
                 // Apply snapping
                 if (this.enableSnapping) {
-                    const dims = this.calculateTaskDimensions(task);
                     const excludeIds = this.selectedTaskIds.has(this.selectedNode) ? this.selectedTaskIds : new Set([this.selectedNode]);
-                    const snapped = this.calculateSnapping(newX, newY, dims.width, dims.height, excludeIds);
-                    newX = snapped.x;
-                    newY = snapped.y;
+
+                    // For multi-select, use bounding box of entire group for alignment
+                    let snapWidth, snapHeight, snapCenterX, snapCenterY;
+                    if (this.selectedTaskIds.has(this.selectedNode) && this.selectedTaskIds.size > 1) {
+                        // Calculate bounding box of all selected nodes
+                        const bbox = this.calculateMultiSelectBoundingBox(this.selectedTaskIds);
+
+                        // Calculate where the bounding box center WOULD BE after drag
+                        const dx = newX - task.x;
+                        const dy = newY - task.y;
+                        snapCenterX = bbox.centerX + dx;
+                        snapCenterY = bbox.centerY + dy;
+                        snapWidth = bbox.width;
+                        snapHeight = bbox.height;
+                    } else {
+                        // Single node - use its dimensions
+                        const dims = this.calculateTaskDimensions(task);
+                        snapCenterX = newX;
+                        snapCenterY = newY;
+                        snapWidth = dims.width;
+                        snapHeight = dims.height;
+                    }
+
+                    const snapped = this.calculateSnapping(snapCenterX, snapCenterY, snapWidth, snapHeight, excludeIds);
+
+                    // Apply snap offset back to the dragged node position
+                    if (this.selectedTaskIds.has(this.selectedNode) && this.selectedTaskIds.size > 1) {
+                        // For groups, calculate offset from where bbox would be to where it should be
+                        const bbox = this.calculateMultiSelectBoundingBox(this.selectedTaskIds);
+                        const dx = newX - task.x;
+                        const dy = newY - task.y;
+                        const bboxWouldBeX = bbox.centerX + dx;
+                        const bboxWouldBeY = bbox.centerY + dy;
+                        const snapOffsetX = snapped.x - bboxWouldBeX;
+                        const snapOffsetY = snapped.y - bboxWouldBeY;
+                        newX += snapOffsetX;
+                        newY += snapOffsetY;
+                    } else {
+                        // Single node - direct snap
+                        newX = snapped.x;
+                        newY = snapped.y;
+                    }
+
                     this.activeSnapLines = snapped.snapLines;
                 } else {
                     this.activeSnapLines = [];
@@ -9446,14 +9485,31 @@ Object.assign(app, {
             let newX = pt.x - this.dragStart.x;
             let newY = pt.y - this.dragStart.y;
 
-            // Apply snapping to root node
+            // Apply snapping to entire subtree bounding box (not just root)
             if (this.enableSnapping) {
                 const rootTask = this.tasks.find(t => t.id === this.selectedNode);
-                const dims = this.calculateTaskDimensions(rootTask);
                 const excludeIds = new Set(this.draggedSubtree);
-                const snapped = this.calculateSnapping(newX, newY, dims.width, dims.height, excludeIds);
-                newX = snapped.x;
-                newY = snapped.y;
+
+                // Use bounding box of entire subtree for alignment
+                const subtreeIds = new Set(this.draggedSubtree);
+                const bbox = this.calculateMultiSelectBoundingBox(subtreeIds);
+
+                // Calculate where the bounding box center WOULD BE after drag
+                const dx = newX - rootTask.x;
+                const dy = newY - rootTask.y;
+                const snapCenterX = bbox.centerX + dx;
+                const snapCenterY = bbox.centerY + dy;
+
+                const snapped = this.calculateSnapping(snapCenterX, snapCenterY, bbox.width, bbox.height, excludeIds);
+
+                // Apply snap offset back to the root node position
+                const bboxWouldBeX = bbox.centerX + dx;
+                const bboxWouldBeY = bbox.centerY + dy;
+                const snapOffsetX = snapped.x - bboxWouldBeX;
+                const snapOffsetY = snapped.y - bboxWouldBeY;
+                newX += snapOffsetX;
+                newY += snapOffsetY;
+
                 this.activeSnapLines = snapped.snapLines;
             } else {
                 this.activeSnapLines = [];
@@ -9829,6 +9885,44 @@ Object.assign(app, {
             }
         }
         document.getElementById('canvas-container').classList.remove('dragging');
+    },
+
+    /**
+     * Calculate bounding box for a group of selected nodes
+     * Used for multi-select alignment snapping
+     * @param {Set<number>} taskIds - Set of task IDs to calculate bounding box for
+     * @returns {{left, right, top, bottom, centerX, centerY, width, height}} Bounding box
+     */
+    calculateMultiSelectBoundingBox(taskIds) {
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        taskIds.forEach(taskId => {
+            const task = this.tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const dims = this.calculateTaskDimensions(task);
+            const left = task.x - dims.width / 2;
+            const right = task.x + dims.width / 2;
+            const top = task.y - dims.height / 2;
+            const bottom = task.y + dims.height / 2;
+
+            minX = Math.min(minX, left);
+            maxX = Math.max(maxX, right);
+            minY = Math.min(minY, top);
+            maxY = Math.max(maxY, bottom);
+        });
+
+        return {
+            left: minX,
+            right: maxX,
+            top: minY,
+            bottom: maxY,
+            centerX: (minX + maxX) / 2,
+            centerY: (minY + maxY) / 2,
+            width: maxX - minX,
+            height: maxY - minY
+        };
     },
 
     /**

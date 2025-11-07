@@ -344,6 +344,11 @@ Then `node build.js` → auto-discovered!
 - **Move Multiple**: Drag any selected task to move all selected together
   - Maintains relative positions between selected tasks
   - Snap distance: 5px (less = click, more = drag)
+  - **Smart Group Alignment**: Uses bounding box of entire selection for snapping
+    - Group's geometric center aligns with other nodes
+    - Group's edges (outermost nodes) align with other nodes
+    - Works with both edge/center alignment and equi-distance spacing
+    - Makes it easy to align groups of nodes as a single unit
 - **Delete Multiple**: Select tasks, press Backspace or use right-click menu
   - Shows confirmation with count: "Delete 3 tasks?"
   - Deletes all selected tasks and their descendants
@@ -7446,5 +7451,111 @@ After:  A
 **Files Modified**: 3 files (snapping.js, render.js, README.md)
 **Lines Changed**: +328 lines
 **Implementation Time**: ~2 hours (including performance optimization)
+**Tests**: ✅ All 28 tests passing
+
+---
+
+### Session N+5: Multi-Select Bounding Box Alignment
+
+**Date**: 2025-01-07
+**Focus**: Smart group alignment for multi-select and subtree dragging
+
+#### 🎯 Overview
+
+Enhanced multi-select and subtree dragging to use the bounding box of the entire group for alignment snapping, rather than just the single dragged node. This allows groups of nodes to snap as a cohesive unit based on their collective geometry.
+
+#### ✨ Features Implemented
+
+**1. Multi-Select Group Alignment** (mouse.js:311-356)
+- **Bounding box calculation**: When dragging multiple selected nodes, calculates the bounding box of all selected nodes
+- **Group center alignment**: The geometric center of the group aligns with other nodes (not just the dragged node)
+- **Group edge alignment**: The outermost edges of the group align with other nodes
+- **Maintains relative positions**: All nodes in the group maintain their relative positions during snapping
+
+**2. Subtree Bounding Box Alignment** (mouse.js:485-513)
+- **Entire subtree snapping**: When dragging a subtree with Shift+drag, uses the bounding box of all nodes in the subtree
+- **Collective geometry**: The group snaps based on the outermost nodes and center point
+- **Better UX**: Makes it easier to align entire hierarchies with other parts of the graph
+
+**3. Helper Function** (mouse.js:876-906)
+- **`calculateMultiSelectBoundingBox(taskIds)`**: Calculates the bounding box for a set of task IDs
+- **Returns**: `{left, right, top, bottom, centerX, centerY, width, height}`
+- **Efficient**: O(n) where n = number of selected tasks
+- **Reusable**: Works for both multi-select and subtree dragging
+
+#### 🔧 Technical Implementation
+
+**Algorithm**:
+```javascript
+// 1. Calculate bounding box of all selected nodes
+const bbox = calculateMultiSelectBoundingBox(selectedTaskIds);
+
+// 2. Calculate where bbox center WOULD BE after drag
+const dx = newX - draggedTask.x;
+const dy = newY - draggedTask.y;
+const snapCenterX = bbox.centerX + dx;
+const snapCenterY = bbox.centerY + dy;
+
+// 3. Run snapping on the bbox center and dimensions
+const snapped = calculateSnapping(snapCenterX, snapCenterY, bbox.width, bbox.height, excludeIds);
+
+// 4. Apply snap offset back to all nodes in the group
+const snapOffsetX = snapped.x - (bbox.centerX + dx);
+const snapOffsetY = snapped.y - (bbox.centerY + dy);
+newX += snapOffsetX;
+newY += snapOffsetY;
+```
+
+**Benefits**:
+- **Intuitive UX**: Groups behave as a single entity for alignment
+- **Consistent with design tools**: Matches behavior of Figma, Sketch, etc.
+- **Works with all snap types**: Edge alignment, center alignment, and equi-distance spacing
+- **No performance impact**: Bounding box calculation is O(n) where n is typically 2-10 nodes
+
+#### 📁 Files Modified
+
+1. **src/js/interactions/mouse.js** (+68 lines)
+   - Lines 311-356: Multi-select group alignment logic
+   - Lines 485-513: Subtree group alignment logic
+   - Lines 876-906: `calculateMultiSelectBoundingBox()` helper function
+
+2. **README.md** (+5 lines)
+   - Lines 347-351: Documentation in Multi-Select section
+   - This session entry in Development History
+
+#### 🎯 User Impact
+
+**Before**: When dragging multiple selected nodes, only the dragged node aligned with others. The group could end up misaligned.
+
+**After**: The entire group snaps as a unit, with its center and edges aligning with other nodes.
+
+**Use Cases**:
+1. **Align groups horizontally**: Select multiple nodes, drag until group center aligns
+2. **Edge-align groups**: Drag until the leftmost/rightmost node of the group aligns with other nodes
+3. **Equi-distance with groups**: Space groups of nodes evenly, treating each group as a single unit
+4. **Subtree organization**: Align entire hierarchies with consistent spacing
+
+**Examples**:
+```
+Before: Dragging 3 selected nodes - only the dragged one aligns
+[A] [B] [C]  dragging B →  [A]    [B] [C]  (misaligned)
+                                ↓ (only B aligned)
+
+After: Entire group aligns as a unit
+[A] [B] [C]  dragging B →  [A] [B] [C]  (all aligned)
+                                ↓ (group center aligned)
+```
+
+#### 🔍 Edge Cases Handled
+
+- **Single node drag**: Falls back to original behavior (no bounding box calculation)
+- **Empty selection**: Doesn't affect unselected node dragging
+- **Mixed selection sizes**: Works with any combination of node sizes in the group
+- **Subtree with children**: Includes all descendants in bounding box calculation
+
+**Version**: 1.21.1 (Multi-Select Bounding Box Alignment)
+**Files Modified**: 2 files (mouse.js, README.md)
+**Lines Changed**: +73 lines
+**Implementation Time**: ~30 minutes
 **Tests**: ✅ All 28 tests passing
 
