@@ -159,6 +159,9 @@ export const TasksMixin = {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
+            imageId: null,  // Reference to image in IndexedDB
+            imageWidth: null,  // Original image width in pixels
+            imageHeight: null,  // Original image height in pixels
             priority: 'normal',  // Priority: 'high', 'medium', 'normal'
             customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
             customSourcePoints: {},  // Custom arrow source points { [childId]: { edge, normalized } }
@@ -329,5 +332,37 @@ export const TasksMixin = {
 
         countNode(taskId);
         return count;
+    },
+
+    /**
+     * Remove image from a task
+     * @param {number} taskId - Task ID
+     */
+    async removeTaskImage(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task || !task.imageId) {
+            this.showToast('❌ Task has no image', 'error', 2000);
+            return;
+        }
+
+        const imageId = task.imageId;
+
+        // Save snapshot
+        this.saveSnapshot(`Removed image from "${this.truncateTitle(task.title, 20)}"`);
+
+        // Delete from IndexedDB
+        await this.deleteImage(imageId);
+
+        // Clear reference from task
+        task.imageId = null;
+
+        // If task title is just the image indicator, clear it
+        if (task.title === '🖼️') {
+            task.title = '';
+        }
+
+        this.saveToStorage();
+        this.render();
+        this.showToast('✓ Image removed', 'success', 2000);
     }
 };

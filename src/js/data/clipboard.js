@@ -268,4 +268,180 @@ app.pasteFromClipboard = async function(parentId = null, x = null, y = null) {
     }
 };
 
+/**
+ * Paste image from clipboard as a new task node
+ * @param {number|null} parentId - Optional parent task ID
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ */
+app.pasteImage = async function(parentId = null, x = null, y = null) {
+    try {
+        // Check if Clipboard API is available
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+            this.showToast('❌ Clipboard API not available in this browser', 'error', 3000);
+            return;
+        }
+
+        // Read clipboard
+        const clipboardItems = await navigator.clipboard.read();
+
+        // Find first image item
+        let imageBlob = null;
+        for (const item of clipboardItems) {
+            for (const type of item.types) {
+                if (type.startsWith('image/')) {
+                    imageBlob = await item.getType(type);
+                    break;
+                }
+            }
+            if (imageBlob) break;
+        }
+
+        if (!imageBlob) {
+            this.showToast('❌ No image found in clipboard', 'error', 2000);
+            return;
+        }
+
+        // Check image size (limit to 5MB)
+        const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+        if (imageBlob.size > MAX_SIZE) {
+            this.showToast(`❌ Image too large (${(imageBlob.size / 1024 / 1024).toFixed(1)}MB). Max 5MB.`, 'error', 3000);
+            return;
+        }
+
+        // Save image to IndexedDB
+        const imageId = await this.saveImage(imageBlob);
+
+        // Get original image dimensions
+        const blobUrl = URL.createObjectURL(imageBlob);
+        const img = new Image();
+        await new Promise((resolve) => {
+            img.onload = resolve;
+            img.src = blobUrl;
+        });
+        const imageWidth = img.naturalWidth;
+        const imageHeight = img.naturalHeight;
+        URL.revokeObjectURL(blobUrl);
+
+        // Create new task with image
+        if (x === null || y === null) {
+            x = this.viewBox.x + this.viewBox.width / 2;
+            y = this.viewBox.y + this.viewBox.height / 2;
+        }
+
+        const snapped = this.snapPointToGrid(x, y);
+
+        this.saveSnapshot(`Pasted image`);
+
+        const newTask = {
+            id: this.taskIdCounter++,
+            title: '',  // Empty title for image-only nodes
+            x: snapped.x,
+            y: snapped.y,
+            vx: 0,
+            vy: 0,
+            mainParent: parentId,
+            otherParents: [],
+            children: [],
+            dependencies: [],
+            status: 'pending',
+            currentlyWorking: false,
+            hidden: false,
+            textExpanded: false,
+            textLocked: false,
+            links: [],
+            imageId: imageId,  // Reference to IndexedDB image
+            imageWidth: imageWidth,  // Original width
+            imageHeight: imageHeight,  // Original height
+            priority: 'normal',
+            customAttachPoints: {},
+            customSourcePoints: {},
+            timeTracking: {
+                totalSeconds: 0,
+                sessions: []
+            }
+        };
+
+        this.tasks.push(newTask);
+
+        // If pasting as child, update parent's children array
+        if (parentId !== null) {
+            const parent = this.tasks.find(t => t.id === parentId);
+            if (parent) {
+                parent.children.push(newTask.id);
+            }
+        }
+
+        this.saveToStorage();
+        this.render();
+
+        const sizeMB = (imageBlob.size / 1024 / 1024).toFixed(2);
+        this.showToast(`✓ Pasted image (${sizeMB}MB)`, 'success', 2000);
+
+    } catch (error) {
+        console.error('Paste image error:', error);
+        this.showToast(`❌ Failed to paste image: ${error.message}`, 'error', 3000);
+    }
+};
+
+/**
+ * Smart paste - auto-detects clipboard content type
+ * Tries image first, falls back to subtree/JSON
+ * @param {number|null} parentId - Optional parent task ID
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ */
+app.smartPaste = async function(parentId = null, x = null, y = null) {
+    try {
+        // Use last mouse position if not specified
+        if (x === null || y === null) {
+            x = this.lastMousePosition.x;
+            y = this.lastMousePosition.y;
+        }
+
+        // Check if Clipboard API is available
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+            // Fall back to subtree paste
+            if (this.copiedSubtree) {
+                this.pasteSubtree(parentId, x, y);
+            } else {
+                this.showToast('❌ Clipboard empty', 'error', 2000);
+            }
+            return;
+        }
+
+        // Read clipboard
+        const clipboardItems = await navigator.clipboard.read();
+
+        // Check for image first
+        let hasImage = false;
+        for (const item of clipboardItems) {
+            if (item.types.some(type => type.startsWith('image/'))) {
+                hasImage = true;
+                break;
+            }
+        }
+
+        if (hasImage) {
+            // Paste image
+            await this.pasteImage(parentId, x, y);
+        } else {
+            // No image - try subtree paste
+            if (this.copiedSubtree) {
+                this.pasteSubtree(parentId, x, y);
+            } else {
+                this.showToast('❌ Clipboard empty - copy a subtree first (Ctrl+C)', 'error', 2000);
+            }
+        }
+    } catch (error) {
+        console.error('Smart paste error:', error);
+        // Fall back to subtree paste on error
+        if (this.copiedSubtree) {
+            this.pasteSubtree(parentId, x, y);
+        } else {
+            this.showToast('❌ Clipboard empty', 'error', 2000);
+        }
+    }
+};
+
 console.log('[clipboard.js] Copy/paste subtree operations loaded');

@@ -33,6 +33,12 @@ body.dark-mode .task-node.working rect {
     filter: drop-shadow(0 3px 10px rgba(237, 137, 54, 0.5));
 }
 
+body.dark-mode .task-node.in-progress rect {
+    /* Inherit fill from dark mode base .task-node rect */
+    stroke: #ffeb3b;  /* Bright pure yellow for dark mode */
+    filter: drop-shadow(0 2px 6px rgba(255, 235, 59, 0.4));
+}
+
 body.dark-mode .task-node.parent-of-working rect {
     stroke: #ed8936;
     filter: drop-shadow(0 0 6px rgba(237, 137, 54, 0.5));
@@ -264,4 +270,15 @@ body.dark-mode .links-dropdown > div {
 
 body.dark-mode .links-dropdown > div:hover {
     background-color: #333 !important;
+}
+
+/* Emoji picker dark mode */
+body.dark-mode #emoji-custom-input {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+body.dark-mode #emoji-picker-grid {
+    background: #0f172a !important;
 }

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Tree</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%234f46e5'/%3E%3Cstop offset='100%25' style='stop-color:%237c3aed'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='32' height='32' rx='6'/%3E%3Cpath stroke='%23fff' stroke-width='2' fill='none' d='M16 8v6m0 0l-6 4m6-4l6 4'/%3E%3Ccircle cx='16' cy='8' r='2.5' fill='%23fff'/%3E%3Ccircle cx='10' cy='18' r='2.5' fill='%23fff'/%3E%3Ccircle cx='22' cy='18' r='2.5' fill='%23fff'/%3E%3Cpath stroke='%23fff' stroke-width='1.5' fill='none' d='M10 20.5v3.5m12-3.5v3.5'/%3E%3Ccircle cx='10' cy='26' r='2' fill='%23fbbf24'/%3E%3Ccircle cx='22' cy='26' r='2' fill='%2310b981'/%3E%3C/svg%3E">
+    <!-- JSZip library for .zip export/import -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
 
 /* ============================================================
@@ -515,10 +517,10 @@ input:focus {
 }
 
 .task-node.in-progress rect {
-    fill: #e3f2fd !important;  /* Light blue background */
-    stroke: #2196f3 !important;  /* Blue border */
-    stroke-width: 2.5 !important;
-    filter: drop-shadow(0 2px 6px rgba(33, 150, 243, 0.3)) !important;
+    /* Inherit fill from base .task-node rect (respects light/dark mode) */
+    stroke: #fdd835;  /* Bright yellow border */
+    stroke-width: 2.5;
+    filter: drop-shadow(0 2px 6px rgba(253, 216, 53, 0.3));
 }
 
 .task-node.suggested-next rect {
@@ -538,6 +540,42 @@ input:focus {
     stroke: #e74c3c;
     stroke-width: 2.5;
     filter: drop-shadow(0 0 2px rgba(231, 76, 60, 0.3));
+}
+
+/* Visual indicator for nodes with custom arrow attachments while dragging */
+.task-node.tied rect {
+    stroke: #2196f3;  /* Blue border to indicate custom attachments */
+    stroke-width: 3;
+    filter: drop-shadow(0 0 8px rgba(33, 150, 243, 0.5)) !important;
+    animation: pulse-tied 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-tied {
+    0%, 100% {
+        filter: drop-shadow(0 0 8px rgba(33, 150, 243, 0.5));
+    }
+    50% {
+        filter: drop-shadow(0 0 12px rgba(33, 150, 243, 0.7));
+    }
+}
+
+/* Flash effect when arrow attachments are copied */
+.task-node.attachment-copied-flash rect {
+    animation: flash-copy 0.6s ease-out;
+}
+
+@keyframes flash-copy {
+    0% {
+        fill: #4caf50;
+        filter: drop-shadow(0 0 20px rgba(76, 175, 80, 0.9)) brightness(1.3);
+    }
+    50% {
+        fill: #8bc34a;
+        filter: drop-shadow(0 0 30px rgba(76, 175, 80, 1)) brightness(1.5);
+    }
+    100% {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1)) brightness(1);
+    }
 }
 
 .task-node.hidden {
@@ -1407,6 +1445,12 @@ body.dark-mode .task-node.working rect {
     filter: drop-shadow(0 3px 10px rgba(237, 137, 54, 0.5));
 }
 
+body.dark-mode .task-node.in-progress rect {
+    /* Inherit fill from dark mode base .task-node rect */
+    stroke: #ffeb3b;  /* Bright pure yellow for dark mode */
+    filter: drop-shadow(0 2px 6px rgba(255, 235, 59, 0.4));
+}
+
 body.dark-mode .task-node.parent-of-working rect {
     stroke: #ed8936;
     filter: drop-shadow(0 0 6px rgba(237, 137, 54, 0.5));
@@ -1640,6 +1684,17 @@ body.dark-mode .links-dropdown > div:hover {
     background-color: #333 !important;
 }
 
+/* Emoji picker dark mode */
+body.dark-mode #emoji-custom-input {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+body.dark-mode #emoji-picker-grid {
+    background: #0f172a !important;
+}
+
 
 </style>
 </head>
@@ -1716,8 +1771,10 @@ body.dark-mode .links-dropdown > div:hover {
 
     <div id="import-modal" class="modal">
         <div class="modal-content">
-            <h2>Import JSON Data</h2>
-            <p>Paste your exported JSON data below:</p>
+            <h2>Import Data</h2>
+            <p>Choose a .zip or .json file, or paste JSON below:</p>
+            <input type="file" id="import-file" accept=".zip,.json" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+            <p style="text-align: center; margin: 10px 0; color: #666;">— OR —</p>
             <textarea id="import-textarea" placeholder="Paste JSON here..."></textarea>
             <div class="modal-buttons">
                 <button onclick="app.importData()">Import</button>
@@ -1864,6 +1921,21 @@ body.dark-mode .links-dropdown > div:hover {
             </div>
             <div class="modal-buttons" style="margin-top: 20px;">
                 <button onclick="app.hideTimeTrackingDashboard()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="emoji-picker-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2 id="emoji-picker-title">Select Emoji Icon</h2>
+            <p style="color: #666; font-size: 13px; margin-bottom: 16px;">Click an emoji or type one in the box:</p>
+            <input type="text" id="emoji-custom-input" placeholder="Or type/paste an emoji..." maxlength="10" style="width: 100%; padding: 8px; margin-bottom: 16px; font-size: 24px; text-align: center; border: 1px solid #ccc; border-radius: 4px;">
+            <div id="emoji-picker-grid" style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; max-height: 300px; overflow-y: auto; padding: 8px; background: #f5f5f5; border-radius: 4px;">
+                <!-- Populated dynamically by showEmojiPicker() -->
+            </div>
+            <div class="modal-buttons" style="margin-top: 16px;">
+                <button id="emoji-picker-ok">OK</button>
+                <button class="secondary" id="emoji-picker-cancel">Cancel</button>
             </div>
         </div>
     </div>
@@ -3875,6 +3947,260 @@ console.log('[timer.js] Time tracking utilities loaded');
 
 
 // ============================================================
+// DATA/IMAGE-STORE.JS (Order: 11, Category: Data)
+// ============================================================
+
+/**
+ * @order 11.5
+ * @category Data
+ * @description IndexedDB image storage for task images
+ *
+ * Provides binary image storage separate from localStorage
+ * Uses IndexedDB for ~50MB+ capacity (hundreds of images)
+ *
+ * KEY FUNCTIONS:
+ * - initImageStore() - Initialize IndexedDB database
+ * - saveImage(blob, id) - Store image blob with optional custom ID
+ * - getImage(id) - Retrieve image blob by ID
+ * - deleteImage(id) - Delete image from store
+ * - getAllImages() - Get all stored images (for export)
+ * - clearAllImages() - Delete all images (for import/reset)
+ */
+
+Object.assign(app, {
+    imageStore: null,  // IndexedDB database reference
+    imageCache: new Map(),  // In-memory cache for loaded images (blob URLs)
+
+    /**
+     * Initialize IndexedDB for image storage
+     * Called on app startup
+     */
+    async initImageStore() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open('TaskTreeImages', 1);
+
+            request.onerror = () => {
+                console.error('Failed to open IndexedDB:', request.error);
+                this.showToast('⚠️ Image storage unavailable', 'warning', 3000);
+                reject(request.error);
+            };
+
+            request.onsuccess = () => {
+                this.imageStore = request.result;
+                console.log('[image-store.js] IndexedDB initialized');
+                resolve();
+            };
+
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+
+                // Create object store for images
+                if (!db.objectStoreNames.contains('images')) {
+                    const objectStore = db.createObjectStore('images', { keyPath: 'id' });
+                    objectStore.createIndex('taskId', 'taskId', { unique: false });
+                    console.log('[image-store.js] Created images object store');
+                }
+            };
+        });
+    },
+
+    /**
+     * Save image to IndexedDB
+     * @param {Blob} blob - Image blob data
+     * @param {string} id - Optional custom ID (defaults to generated ID)
+     * @returns {Promise<string>} - Image ID
+     */
+    async saveImage(blob, id = null) {
+        if (!this.imageStore) {
+            await this.initImageStore();
+        }
+
+        // Generate ID if not provided
+        const imageId = id || `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.imageStore.transaction(['images'], 'readwrite');
+            const objectStore = transaction.objectStore('images');
+
+            const imageData = {
+                id: imageId,
+                blob: blob,
+                type: blob.type,
+                size: blob.size,
+                timestamp: Date.now()
+            };
+
+            const request = objectStore.put(imageData);
+
+            request.onsuccess = () => {
+                console.log(`[image-store.js] Saved image: ${imageId} (${Math.round(blob.size / 1024)}KB)`);
+                resolve(imageId);
+            };
+
+            request.onerror = () => {
+                console.error('Failed to save image:', request.error);
+                reject(request.error);
+            };
+        });
+    },
+
+    /**
+     * Get image from IndexedDB
+     * @param {string} id - Image ID
+     * @returns {Promise<Blob|null>} - Image blob or null if not found
+     */
+    async getImage(id) {
+        if (!this.imageStore) {
+            await this.initImageStore();
+        }
+
+        // Check cache first
+        if (this.imageCache.has(id)) {
+            const cachedUrl = this.imageCache.get(id);
+            // Verify blob URL is still valid
+            try {
+                await fetch(cachedUrl);
+                return cachedUrl;
+            } catch {
+                // Blob URL expired, remove from cache
+                this.imageCache.delete(id);
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.imageStore.transaction(['images'], 'readonly');
+            const objectStore = transaction.objectStore('images');
+            const request = objectStore.get(id);
+
+            request.onsuccess = () => {
+                if (request.result) {
+                    const blob = request.result.blob;
+                    // Create blob URL and cache it
+                    const blobUrl = URL.createObjectURL(blob);
+                    this.imageCache.set(id, blobUrl);
+                    resolve(blobUrl);
+                } else {
+                    console.warn(`[image-store.js] Image not found: ${id}`);
+                    resolve(null);
+                }
+            };
+
+            request.onerror = () => {
+                console.error('Failed to get image:', request.error);
+                reject(request.error);
+            };
+        });
+    },
+
+    /**
+     * Delete image from IndexedDB
+     * @param {string} id - Image ID
+     * @returns {Promise<boolean>} - Success status
+     */
+    async deleteImage(id) {
+        if (!this.imageStore) {
+            await this.initImageStore();
+        }
+
+        // Remove from cache
+        if (this.imageCache.has(id)) {
+            const blobUrl = this.imageCache.get(id);
+            URL.revokeObjectURL(blobUrl);
+            this.imageCache.delete(id);
+        }
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.imageStore.transaction(['images'], 'readwrite');
+            const objectStore = transaction.objectStore('images');
+            const request = objectStore.delete(id);
+
+            request.onsuccess = () => {
+                console.log(`[image-store.js] Deleted image: ${id}`);
+                resolve(true);
+            };
+
+            request.onerror = () => {
+                console.error('Failed to delete image:', request.error);
+                reject(request.error);
+            };
+        });
+    },
+
+    /**
+     * Get all images (for export)
+     * @returns {Promise<Array>} - Array of {id, blob, type, size}
+     */
+    async getAllImages() {
+        if (!this.imageStore) {
+            await this.initImageStore();
+        }
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.imageStore.transaction(['images'], 'readonly');
+            const objectStore = transaction.objectStore('images');
+            const request = objectStore.getAll();
+
+            request.onsuccess = () => {
+                resolve(request.result);
+            };
+
+            request.onerror = () => {
+                console.error('Failed to get all images:', request.error);
+                reject(request.error);
+            };
+        });
+    },
+
+    /**
+     * Clear all images (for import/reset)
+     * @returns {Promise<boolean>} - Success status
+     */
+    async clearAllImages() {
+        if (!this.imageStore) {
+            await this.initImageStore();
+        }
+
+        // Clear cache
+        this.imageCache.forEach(blobUrl => URL.revokeObjectURL(blobUrl));
+        this.imageCache.clear();
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.imageStore.transaction(['images'], 'readwrite');
+            const objectStore = transaction.objectStore('images');
+            const request = objectStore.clear();
+
+            request.onsuccess = () => {
+                console.log('[image-store.js] Cleared all images');
+                resolve(true);
+            };
+
+            request.onerror = () => {
+                console.error('Failed to clear images:', request.error);
+                reject(request.error);
+            };
+        });
+    },
+
+    /**
+     * Get storage usage stats
+     * @returns {Promise<{count: number, totalSize: number}>}
+     */
+    async getImageStats() {
+        const images = await this.getAllImages();
+        const totalSize = images.reduce((sum, img) => sum + img.size, 0);
+        return {
+            count: images.length,
+            totalSize: totalSize,
+            totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
+        };
+    }
+});
+
+console.log('[image-store.js] Image storage module loaded');
+
+
+
+// ============================================================
 // DATA/PERSISTENCE.JS (Order: 11, Category: Data)
 // ============================================================
 
@@ -4037,6 +4363,13 @@ app.loadFromStorage = function() {
         this.homes = parsed.homes || [];
         this.homeIdCounter = parsed.homeIdCounter || 1;
 
+        // MIGRATION: Add default icon to homes that don't have one
+        this.homes.forEach(home => {
+            if (!home.icon) {
+                home.icon = '🏠';
+            }
+        });
+
         // MIGRATION: Convert old origin system to "Origin Home"
         if (parsed.originMarked && this.homes.length === 0) {
             this.homes.push({
@@ -4045,7 +4378,8 @@ app.loadFromStorage = function() {
                 centerX: parsed.originX || 0,
                 centerY: parsed.originY || 0,
                 zoomLevel: parsed.originZoomLevel || 1,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                icon: '🏠'
             });
             // Save immediately to persist migration
             setTimeout(() => {
@@ -4157,18 +4491,66 @@ console.log('[persistence.js] localStorage persistence layer loaded');
  */
 
 /**
- * Export complete app state as downloadable JSON file
- * Filename format: task-tree-YYYY-MM-DD.json
+ * Export complete app state as downloadable .zip file containing:
+ * - tasks.json: All task data and settings
+ * - images/: Folder with all images from IndexedDB
+ * Filename format: task-tree-YYYY-MM-DD.zip
  */
-app.exportData = function() {
-    const json = localStorage.getItem('taskTree') || '{}';
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `task-tree-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+app.exportData = async function() {
+    try {
+        // Get all images from IndexedDB
+        const images = await this.getAllImages();
+
+        // If no images, export as JSON for backwards compatibility
+        if (images.length === 0) {
+            const json = localStorage.getItem('taskTree') || '{}';
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `task-tree-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.showToast('✓ Exported as JSON', 'success', 2000);
+            return;
+        }
+
+        // Create .zip with JSZip
+        const zip = new JSZip();
+
+        // Add tasks.json
+        const json = localStorage.getItem('taskTree') || '{}';
+        zip.file('tasks.json', json);
+
+        // Add images folder
+        const imagesFolder = zip.folder('images');
+        for (const image of images) {
+            // Save each image with its ID as filename
+            const extension = image.type.split('/')[1] || 'png';
+            imagesFolder.file(`${image.id}.${extension}`, image.blob);
+        }
+
+        // Generate .zip blob
+        const zipBlob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+
+        // Download .zip file
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `task-tree-${new Date().toISOString().slice(0,10)}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        const sizeMB = (zipBlob.size / 1024 / 1024).toFixed(2);
+        this.showToast(`✓ Exported .zip (${sizeMB}MB, ${images.length} images)`, 'success', 3000);
+    } catch (error) {
+        console.error('Export error:', error);
+        this.showToast(`❌ Export failed: ${error.message}`, 'error', 3000);
+    }
 };
 
 /**
@@ -4194,13 +4576,14 @@ app.copyDataToClipboard = function(e) {
 };
 
 /**
- * Show import modal for pasting JSON data
- * Clears textarea and displays modal
+ * Show import modal for uploading files or pasting JSON data
+ * Clears textarea and file input, displays modal
  */
 app.showImportModal = function() {
     const modal = document.getElementById('import-modal');
     modal.classList.add('show');
     document.getElementById('import-textarea').value = '';
+    document.getElementById('import-file').value = '';
 };
 
 /**
@@ -4212,19 +4595,111 @@ app.hideImportModal = function() {
 };
 
 /**
- * Import JSON data from textarea
+ * Import data from file (.zip or .json) or pasted JSON
+ * Handles .zip files with images, backwards compatible with .json
  * Validates format, creates undo snapshot, and loads data
- * Shows success/error alert
  */
-app.importData = function() {
-    const textarea = document.getElementById('import-textarea');
-    const json = textarea.value.trim();
+app.importData = async function() {
+    try {
+        const fileInput = document.getElementById('import-file');
+        const textarea = document.getElementById('import-textarea');
 
-    if (!json) {
-        this.showAlert('Import Error', 'Please paste JSON data first.');
-        return;
+        // Check if file was selected
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+
+            if (file.name.endsWith('.zip')) {
+                // Handle .zip file
+                await this.importZipFile(file);
+            } else if (file.name.endsWith('.json')) {
+                // Handle .json file
+                const text = await file.text();
+                await this.importJsonData(text);
+            } else {
+                this.showAlert('Import Error', 'Please select a .zip or .json file.');
+                return;
+            }
+        } else {
+            // Check if JSON was pasted
+            const json = textarea.value.trim();
+            if (!json) {
+                this.showAlert('Import Error', 'Please select a file or paste JSON data.');
+                return;
+            }
+            await this.importJsonData(json);
+        }
+
+        this.hideImportModal();
+    } catch (error) {
+        console.error('Import error:', error);
+        this.showAlert('Import Error', error.message);
     }
+};
 
+/**
+ * Import .zip file containing tasks.json and images folder
+ * @param {File} file - .zip file
+ */
+app.importZipFile = async function(file) {
+    try {
+        // Load .zip file
+        const zip = await JSZip.loadAsync(file);
+
+        // Extract tasks.json
+        const tasksFile = zip.file('tasks.json');
+        if (!tasksFile) {
+            throw new Error('.zip must contain tasks.json file');
+        }
+
+        const jsonText = await tasksFile.async('text');
+        const parsed = JSON.parse(jsonText);
+
+        if (!parsed.tasks || !Array.isArray(parsed.tasks)) {
+            throw new Error('Invalid task tree format in tasks.json');
+        }
+
+        // Clear existing images
+        await this.clearAllImages();
+
+        // Import images from images/ folder
+        const imagesFolder = zip.folder('images');
+        if (imagesFolder) {
+            const imageFiles = [];
+            imagesFolder.forEach((relativePath, file) => {
+                imageFiles.push({ path: relativePath, file: file });
+            });
+
+            for (const { path, file } of imageFiles) {
+                const blob = await file.async('blob');
+                const imageId = path.split('.')[0]; // Extract ID from filename
+                await this.saveImage(blob, imageId);
+            }
+
+            console.log(`[import-export.js] Imported ${imageFiles.length} images`);
+        }
+
+        // Save snapshot before importing
+        const taskCount = parsed.tasks.length;
+        this.saveSnapshot(`Imported ${taskCount} task${taskCount !== 1 ? 's' : ''} from .zip`);
+
+        // Save and load
+        localStorage.setItem('taskTree', jsonText);
+        this.loadFromStorage();
+        this.updateStatusBar();
+        this.render();
+
+        const imageCount = imagesFolder ? Object.keys(zip.folder('images').files).length : 0;
+        this.showAlert('Success', `Imported ${taskCount} tasks and ${imageCount} images!`);
+    } catch (error) {
+        throw new Error(`Failed to import .zip: ${error.message}`);
+    }
+};
+
+/**
+ * Import JSON data from text string
+ * @param {string} json - JSON string
+ */
+app.importJsonData = async function(json) {
     try {
         // Validate JSON
         const parsed = JSON.parse(json);
@@ -4233,7 +4708,7 @@ app.importData = function() {
         }
 
         // Save snapshot before importing
-        const taskCount = parsed.tasks ? parsed.tasks.length : 0;
+        const taskCount = parsed.tasks.length;
         this.saveSnapshot(`Imported ${taskCount} task${taskCount !== 1 ? 's' : ''} from JSON`);
 
         // Save and load
@@ -4241,11 +4716,10 @@ app.importData = function() {
         this.loadFromStorage();
         this.updateStatusBar();
         this.render();
-        this.hideImportModal();
 
-        this.showAlert('Success', 'Data imported successfully!');
-    } catch (err) {
-        this.showAlert('Import Error', 'Invalid JSON data: ' + err.message);
+        this.showAlert('Success', `Imported ${taskCount} tasks!`);
+    } catch (error) {
+        throw new Error(`Invalid JSON data: ${error.message}`);
     }
 };
 
@@ -4527,6 +5001,182 @@ app.pasteFromClipboard = async function(parentId = null, x = null, y = null) {
     }
 };
 
+/**
+ * Paste image from clipboard as a new task node
+ * @param {number|null} parentId - Optional parent task ID
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ */
+app.pasteImage = async function(parentId = null, x = null, y = null) {
+    try {
+        // Check if Clipboard API is available
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+            this.showToast('❌ Clipboard API not available in this browser', 'error', 3000);
+            return;
+        }
+
+        // Read clipboard
+        const clipboardItems = await navigator.clipboard.read();
+
+        // Find first image item
+        let imageBlob = null;
+        for (const item of clipboardItems) {
+            for (const type of item.types) {
+                if (type.startsWith('image/')) {
+                    imageBlob = await item.getType(type);
+                    break;
+                }
+            }
+            if (imageBlob) break;
+        }
+
+        if (!imageBlob) {
+            this.showToast('❌ No image found in clipboard', 'error', 2000);
+            return;
+        }
+
+        // Check image size (limit to 5MB)
+        const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+        if (imageBlob.size > MAX_SIZE) {
+            this.showToast(`❌ Image too large (${(imageBlob.size / 1024 / 1024).toFixed(1)}MB). Max 5MB.`, 'error', 3000);
+            return;
+        }
+
+        // Save image to IndexedDB
+        const imageId = await this.saveImage(imageBlob);
+
+        // Get original image dimensions
+        const blobUrl = URL.createObjectURL(imageBlob);
+        const img = new Image();
+        await new Promise((resolve) => {
+            img.onload = resolve;
+            img.src = blobUrl;
+        });
+        const imageWidth = img.naturalWidth;
+        const imageHeight = img.naturalHeight;
+        URL.revokeObjectURL(blobUrl);
+
+        // Create new task with image
+        if (x === null || y === null) {
+            x = this.viewBox.x + this.viewBox.width / 2;
+            y = this.viewBox.y + this.viewBox.height / 2;
+        }
+
+        const snapped = this.snapPointToGrid(x, y);
+
+        this.saveSnapshot(`Pasted image`);
+
+        const newTask = {
+            id: this.taskIdCounter++,
+            title: '',  // Empty title for image-only nodes
+            x: snapped.x,
+            y: snapped.y,
+            vx: 0,
+            vy: 0,
+            mainParent: parentId,
+            otherParents: [],
+            children: [],
+            dependencies: [],
+            status: 'pending',
+            currentlyWorking: false,
+            hidden: false,
+            textExpanded: false,
+            textLocked: false,
+            links: [],
+            imageId: imageId,  // Reference to IndexedDB image
+            imageWidth: imageWidth,  // Original width
+            imageHeight: imageHeight,  // Original height
+            priority: 'normal',
+            customAttachPoints: {},
+            customSourcePoints: {},
+            timeTracking: {
+                totalSeconds: 0,
+                sessions: []
+            }
+        };
+
+        this.tasks.push(newTask);
+
+        // If pasting as child, update parent's children array
+        if (parentId !== null) {
+            const parent = this.tasks.find(t => t.id === parentId);
+            if (parent) {
+                parent.children.push(newTask.id);
+            }
+        }
+
+        this.saveToStorage();
+        this.render();
+
+        const sizeMB = (imageBlob.size / 1024 / 1024).toFixed(2);
+        this.showToast(`✓ Pasted image (${sizeMB}MB)`, 'success', 2000);
+
+    } catch (error) {
+        console.error('Paste image error:', error);
+        this.showToast(`❌ Failed to paste image: ${error.message}`, 'error', 3000);
+    }
+};
+
+/**
+ * Smart paste - auto-detects clipboard content type
+ * Tries image first, falls back to subtree/JSON
+ * @param {number|null} parentId - Optional parent task ID
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ */
+app.smartPaste = async function(parentId = null, x = null, y = null) {
+    try {
+        // Use last mouse position if not specified
+        if (x === null || y === null) {
+            x = this.lastMousePosition.x;
+            y = this.lastMousePosition.y;
+        }
+
+        // Check if Clipboard API is available
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+            // Fall back to subtree paste
+            if (this.copiedSubtree) {
+                this.pasteSubtree(parentId, x, y);
+            } else {
+                this.showToast('❌ Clipboard empty', 'error', 2000);
+            }
+            return;
+        }
+
+        // Read clipboard
+        const clipboardItems = await navigator.clipboard.read();
+
+        // Check for image first
+        let hasImage = false;
+        for (const item of clipboardItems) {
+            if (item.types.some(type => type.startsWith('image/'))) {
+                hasImage = true;
+                break;
+            }
+        }
+
+        if (hasImage) {
+            // Paste image
+            await this.pasteImage(parentId, x, y);
+        } else {
+            // No image - try subtree paste
+            if (this.copiedSubtree) {
+                this.pasteSubtree(parentId, x, y);
+            } else {
+                this.showToast('❌ Clipboard empty - copy a subtree first (Ctrl+C)', 'error', 2000);
+            }
+        }
+    } catch (error) {
+        console.error('Smart paste error:', error);
+        // Fall back to subtree paste on error
+        if (this.copiedSubtree) {
+            this.pasteSubtree(parentId, x, y);
+        } else {
+            this.showToast('❌ Clipboard empty', 'error', 2000);
+        }
+    }
+};
+
 console.log('[clipboard.js] Copy/paste subtree operations loaded');
 
 
@@ -4747,6 +5397,9 @@ Object.assign(app, {
             textExpanded: false,
             textLocked: false,
             links: [],  // Array of URLs attached to this task
+            imageId: null,  // Reference to image in IndexedDB
+            imageWidth: null,  // Original image width in pixels
+            imageHeight: null,  // Original image height in pixels
             priority: 'normal',  // Priority: 'high', 'medium', 'normal'
             customAttachPoints: {},  // Custom arrow attachment points { [parentId]: { edge, normalized } }
             customSourcePoints: {},  // Custom arrow source points { [childId]: { edge, normalized } }
@@ -4917,6 +5570,38 @@ Object.assign(app, {
 
         countNode(taskId);
         return count;
+    },
+
+    /**
+     * Remove image from a task
+     * @param {number} taskId - Task ID
+     */
+    async removeTaskImage(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task || !task.imageId) {
+            this.showToast('❌ Task has no image', 'error', 2000);
+            return;
+        }
+
+        const imageId = task.imageId;
+
+        // Save snapshot
+        this.saveSnapshot(`Removed image from "${this.truncateTitle(task.title, 20)}"`);
+
+        // Delete from IndexedDB
+        await this.deleteImage(imageId);
+
+        // Clear reference from task
+        task.imageId = null;
+
+        // If task title is just the image indicator, clear it
+        if (task.title === '🖼️') {
+            task.title = '';
+        }
+
+        this.saveToStorage();
+        this.render();
+        this.showToast('✓ Image removed', 'success', 2000);
     }
 });
 
@@ -5927,7 +6612,14 @@ Object.assign(app, {
         const screenWidth = canvasContainer.clientWidth;
         const screenHeight = canvasContainer.clientHeight;
         const margin = 20; // Pixels from edge
-        const topMargin = 75; // Extra margin from top to avoid header overlap (includes button text + extra clearance)
+
+        // Calculate top margin to avoid controls bar overlap
+        // Controls bar is position:fixed, canvas-container has top:65px, but controls might be taller
+        const controlsBar = document.getElementById('controls');
+        const controlsBottom = controlsBar ? controlsBar.getBoundingClientRect().bottom : 65; // Actual bottom position
+        const canvasTop = canvasContainer.getBoundingClientRect().top; // Actual canvas top position
+        const overlap = Math.max(0, controlsBottom - canvasTop); // How much controls extends into canvas
+        const topMargin = overlap + 20; // Overlap + 20px buffer (increased for safety)
 
         // Render indicators for each off-screen working task
         offscreenTasks.forEach(task => {
@@ -5961,12 +6653,13 @@ Object.assign(app, {
                 topMargin,
                 type: 'home',
                 title: home.name,
+                icon: home.icon || '🏠',  // Use custom icon or default
                 onClick: () => this.jumpToHome(home.id)
             });
         });
     },
 
-    createDirectionalIndicator({ container, targetX, targetY, viewportCenterX, viewportCenterY, screenWidth, screenHeight, margin, topMargin, type, title, onClick }) {
+    createDirectionalIndicator({ container, targetX, targetY, viewportCenterX, viewportCenterY, screenWidth, screenHeight, margin, topMargin, type, title, icon, onClick }) {
         // Calculate angle from viewport center to target
         const dx = targetX - viewportCenterX;
         const dy = targetY - viewportCenterY;
@@ -6009,13 +6702,13 @@ Object.assign(app, {
         // Rotate arrows and homes to point toward target
         indicator.style.transform = `translate(-50%, -50%) rotate(${finalRotation}deg)`;
 
-        // Use different emojis: arrow for tasks, house for homes
-        indicator.innerHTML = type === 'home' ? '🏠' : '➤';
+        // Use different emojis: arrow for tasks, custom icon for homes
+        indicator.innerHTML = type === 'home' ? (icon || '🏠') : '➤';
 
         // Create separate tooltip element (won't rotate with indicator)
         const tooltip = document.createElement('div');
         tooltip.className = 'indicator-tooltip';
-        const prefix = type === 'home' ? '🏠 Home: ' : '🎯 Task: ';
+        const prefix = type === 'home' ? `${icon || '🏠'} Home: ` : '🎯 Task: ';
         tooltip.textContent = prefix + title;
 
         // Position tooltip on opposite side (visible side) based on angle
@@ -6057,6 +6750,19 @@ Object.assign(app, {
 
         indicator.title = title; // Fallback for browsers without CSS support
         indicator.onclick = onClick;
+
+        // Add right-click support for home indicators to set icon
+        if (type === 'home') {
+            indicator.oncontextmenu = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Find the home by name to get its ID
+                const home = this.homes.find(h => h.name === title);
+                if (home) {
+                    this.setHomeIcon(home.id);
+                }
+            };
+        }
 
         container.appendChild(indicator);
         container.appendChild(tooltip);
@@ -6182,6 +6888,18 @@ Object.assign(app, {
      */
     calculateTaskDimensions(task) {
         // Helper: Calculate task dimensions with multiline support
+
+        // For image nodes, use image dimensions with padding
+        if (task.imageId && task.imageWidth && task.imageHeight) {
+            const imagePadding = 20;
+            return {
+                width: task.imageWidth + imagePadding * 2,
+                height: task.imageHeight + imagePadding * 2,
+                lines: []
+            };
+        }
+
+        // For text nodes, calculate based on text content
         const padding = this.nodePadding;
         const charWidth = this.charWidth;
         const minWidth = this.minNodeWidth;
@@ -6851,8 +7569,8 @@ Object.assign(app, {
         this.renderGrid();
 
         // PERF: Calculate visible viewport bounds for culling
-        // Add margin so tasks smoothly appear when scrolling
-        const VIEWPORT_MARGIN = 300;
+        // Add margin so tasks smoothly appear when scrolling (increased for smoother experience)
+        const VIEWPORT_MARGIN = 1000;
         const viewportBounds = {
             left: viewBoxX - VIEWPORT_MARGIN,
             right: viewBoxX + viewBoxWidth + VIEWPORT_MARGIN,
@@ -6865,6 +7583,27 @@ Object.assign(app, {
             !task.hidden && this.isTaskVisible(task, viewportBounds)
         );
         const visibleTaskIds = new Set(visibleTasks.map(t => t.id));
+
+        // Trigger background loading for uncached images (non-blocking)
+        // Track loading images to prevent duplicate requests
+        if (!this._loadingImages) this._loadingImages = new Set();
+
+        visibleTasks.forEach(task => {
+            if (task.imageId && !this.imageCache.has(task.imageId) && !this._loadingImages.has(task.imageId)) {
+                // Mark as loading to prevent duplicate requests
+                this._loadingImages.add(task.imageId);
+
+                // Image not cached - trigger async load in background
+                this.getImage(task.imageId).then(() => {
+                    this._loadingImages.delete(task.imageId);
+                    // Re-render once when image loads to show it
+                    requestAnimationFrame(() => this.render());
+                }).catch(err => {
+                    this._loadingImages.delete(task.imageId);
+                    console.warn(`Failed to load image ${task.imageId}:`, err);
+                });
+            }
+        });
 
         // Find ALL working tasks (one per root graph) using the log for O(1) lookup
         const workingTasks = [];
@@ -7285,6 +8024,13 @@ Object.assign(app, {
             if (task.hidden) g.classList.add('hidden');
             if (this.selectedTaskIds.has(task.id)) g.classList.add('selected');
 
+            // Add visual indicator for "tied" nodes (with custom attachments) while dragging
+            const hasCustomAttachments = (task.customAttachPoints && Object.keys(task.customAttachPoints).length > 0) ||
+                                         (task.customSourcePoints && Object.keys(task.customSourcePoints).length > 0);
+            if (this.dragMode === 'node' && this.selectedNode === task.id && hasCustomAttachments) {
+                g.classList.add('tied');
+            }
+
             // Determine display text (truncated or full)
             const isLongText = task.title.length > this.textLengthThreshold;
             const charsOverLimit = task.title.length - this.textLengthThreshold;
@@ -7300,48 +8046,60 @@ Object.assign(app, {
                 isTruncated = true;
             }
 
-            // Calculate rect dimensions with multiline support
-            const padding = this.nodePadding;
-            const charWidth = this.charWidth;
-            const minWidth = this.minNodeWidth;
-            // When multiline is enabled, always use full text for wrapping (maxNodeHeight handles limiting)
-            // When multiline is disabled, use truncated displayTitle
-            // When editing, always use full text
-            const textForSizing = this.editingTaskId === task.id || this.enableMultiline ? task.title : displayTitle;
+            // Calculate rect dimensions
+            let rectWidth, rectHeight, lines;
+            const verticalPadding = 10; // Used for both image and text nodes
+            let isOverflowing = false; // Used in text rendering later
+            let actualRenderedLines = 0; // Used in text rendering later
+            const padding = this.nodePadding; // Used in text rendering later
 
-            // Wrap text into lines based on max width (subtract padding to ensure text fits within available space)
-            const availableWidth = this.maxNodeWidth - padding * 2;
-            const lines = this.wrapText(textForSizing, availableWidth, charWidth, this.wordWrap);
+            // For image nodes, size based on original image dimensions
+            if (task.imageId && task.imageWidth && task.imageHeight) {
+                const imagePadding = 20;
+                rectWidth = task.imageWidth + imagePadding * 2;
+                rectHeight = task.imageHeight + imagePadding * 2;
+                lines = []; // No text lines for image nodes
+            } else {
+                // For text nodes, calculate based on text
+                const charWidth = this.charWidth;
+                const minWidth = this.minNodeWidth;
+                // When multiline is enabled, always use full text for wrapping (maxNodeHeight handles limiting)
+                // When multiline is disabled, use truncated displayTitle
+                // When editing, always use full text
+                const textForSizing = this.editingTaskId === task.id || this.enableMultiline ? task.title : displayTitle;
 
-            // Calculate width: minimum of (maxNodeWidth OR longest line width OR minWidth)
-            const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
-            const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
+                // Wrap text into lines based on max width (subtract padding to ensure text fits within available space)
+                const availableWidth = this.maxNodeWidth - padding * 2;
+                lines = this.wrapText(textForSizing, availableWidth, charWidth, this.wordWrap);
 
-            // Calculate height: lines * lineHeight + vertical padding
-            // Use fixed vertical padding (not nodePadding which is for horizontal)
-            const verticalPadding = 10;
-            const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
+                // Calculate width: minimum of (maxNodeWidth OR longest line width OR minWidth)
+                const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
+                rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
 
-            // Determine if we should bypass maxNodeHeight and show full text
-            // - When editing: show all lines for easier editing
-            // - When selected: show all lines so user can see full text and use lock button
-            // - When already expanded (currentlyWorking, textLocked, etc.): show all lines
-            const shouldFullyExpand = this.editingTaskId === task.id || this.selectedTaskIds.has(task.id) || shouldExpand;
+                // Calculate height: lines * lineHeight + vertical padding
+                const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
 
-            // Check if text overflows BEFORE calculating rectHeight
-            const isOverflowing = this.maxNodeHeight > 0 && !shouldFullyExpand && calculatedHeight > this.maxNodeHeight;
+                // Determine if we should bypass maxNodeHeight and show full text
+                // - When editing: show all lines for easier editing
+                // - When selected: show all lines so user can see full text and use lock button
+                // - When already expanded (currentlyWorking, textLocked, etc.): show all lines
+                const shouldFullyExpand = this.editingTaskId === task.id || this.selectedTaskIds.has(task.id) || shouldExpand;
 
-            // Calculate how many lines will actually be rendered when overflowing
-            let actualRenderedLines = lines.length;
-            if (isOverflowing) {
-                const availableHeightForOverflow = this.maxNodeHeight - verticalPadding * 2;
-                actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
+                // Check if text overflows BEFORE calculating rectHeight
+                isOverflowing = this.maxNodeHeight > 0 && !shouldFullyExpand && calculatedHeight > this.maxNodeHeight;
+
+                // Calculate how many lines will actually be rendered when overflowing
+                actualRenderedLines = lines.length;
+                if (isOverflowing) {
+                    const availableHeightForOverflow = this.maxNodeHeight - verticalPadding * 2;
+                    actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
+                }
+
+                // Size rectangle based on actual rendered content (not blindly using maxNodeHeight)
+                rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
+                    ? actualRenderedLines * this.lineHeight + verticalPadding * 2
+                    : calculatedHeight;
             }
-
-            // Size rectangle based on actual rendered content (not blindly using maxNodeHeight)
-            const rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
-                ? actualRenderedLines * this.lineHeight + verticalPadding * 2
-                : calculatedHeight;
 
             // ⭐ NEW: Rect positioned RELATIVE to group (centered at 0,0)
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -7360,6 +8118,11 @@ Object.assign(app, {
             // For normal priority, let CSS handle it (no inline style needed)
 
             g.appendChild(rect);
+
+            // Render image if task has one
+            if (task.imageId) {
+                this.renderTaskImage(g, task, rectWidth, rectHeight);
+            }
 
             // Add link badge if task has links
             if (task.links && task.links.length > 0) {
@@ -7731,41 +8494,57 @@ Object.assign(app, {
             let dotToRender = this.arrowDotDrag.active ? {
                 type: this.arrowDotDrag.dotType,
                 taskId: this.arrowDotDrag.taskId,
-                parentId: this.arrowDotDrag.relatedTaskId
+                parentId: this.arrowDotDrag.relatedTaskId,
+                childId: this.arrowDotDrag.relatedChildId
             } : this.hoveredArrowDot;
 
             if (dotToRender) {
-                const task = this.tasks.find(t => t.id === dotToRender.taskId);
-                const parent = this.tasks.find(t => t.id === dotToRender.parentId);
+                const isSourceDot = dotToRender.type === 'source';
 
-                if (task && parent) {
+                // For source dots: taskId is parent, childId is child
+                // For target dots: taskId is child, parentId is parent
+                const dotOwner = this.tasks.find(t => t.id === dotToRender.taskId);
+                const relatedTask = isSourceDot ?
+                    this.tasks.find(t => t.id === dotToRender.childId) :
+                    this.tasks.find(t => t.id === dotToRender.parentId);
+
+                if (dotOwner && relatedTask) {
                     // Get dot position
                     let dotPos;
                     if (this.arrowDotDrag.active) {
-                        // During drag: use LIVE drag position for real-time cursor following
-                        const dims = this.calculateTaskDimensions(task);
+                        // During drag: use LIVE drag position
+                        const dims = this.calculateTaskDimensions(dotOwner);
                         dotPos = this.denormalizeEdgePosition(
                             this.arrowDotDrag.edge,
                             this.arrowDotDrag.normalized,
-                            task.x,
-                            task.y,
+                            dotOwner.x,
+                            dotOwner.y,
                             dims.width,
                             dims.height
                         );
                     } else {
                         // When hovering: use saved or default position
-                        dotPos = this.getArrowEndpoint(parent, task, 'target');
+                        if (isSourceDot) {
+                            // Source dot on parent node
+                            dotPos = this.getArrowEndpoint(dotOwner, relatedTask, 'source');
+                        } else {
+                            // Target dot on child node
+                            dotPos = this.getArrowEndpoint(relatedTask, dotOwner, 'target');
+                        }
                     }
 
-                    // Check if this arrow has a custom attach point (for coloring)
-                    const hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[dotToRender.parentId]);
+                    // Check if this arrow has a custom position (for coloring)
+                    const hasCustomPosition = isSourceDot ?
+                        !!(dotOwner.customSourcePoints && dotOwner.customSourcePoints[dotToRender.childId]) :
+                        !!(dotOwner.customAttachPoints && dotOwner.customAttachPoints[dotToRender.parentId]);
 
                     // Render the arrow dot
+                    const relatedId = isSourceDot ? dotToRender.childId : dotToRender.parentId;
                     const dot = this.renderArrowDot(
                         dotPos.x, dotPos.y,
                         dotToRender.type,
                         dotToRender.taskId,
-                        dotToRender.parentId,
+                        relatedId,
                         this.hoveredArrowDot !== null,
                         this.arrowDotDrag.active,
                         hasCustomPosition
@@ -7778,9 +8557,9 @@ Object.assign(app, {
 
                     // Render snap indicators if dragging
                     if (this.arrowDotDrag.active) {
-                        const dims = this.calculateTaskDimensions(task);
+                        const dims = this.calculateTaskDimensions(dotOwner);
                         const indicators = this.renderSnapIndicators(
-                            task.x, task.y,
+                            dotOwner.x, dotOwner.y,
                             dims.width, dims.height,
                             this.arrowDotDrag.edge,
                             this.arrowDotDrag.normalized
@@ -8001,6 +8780,85 @@ Object.assign(app, {
             </div>
         `;
     },
+
+    /**
+     * Render task image in SVG node
+     * @param {SVGElement} g - Group element to append to
+     * @param {Object} task - Task object with imageId
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     */
+    renderTaskImage(g, task, rectWidth, rectHeight) {
+        try {
+            // Get image blob URL from cache (already pre-loaded in render())
+            const blobUrl = this.imageCache.get(task.imageId);
+
+            if (!blobUrl) {
+                console.warn(`[render.js] Image not in cache for task ${task.id}: ${task.imageId}`);
+                return;
+            }
+
+            // Use original image dimensions (already stored in task)
+            const imageWidth = task.imageWidth || 200;
+            const imageHeight = task.imageHeight || 150;
+
+            // Create SVG image element at original size
+            const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            image.setAttribute('x', -imageWidth / 2);
+            image.setAttribute('y', -imageHeight / 2);
+            image.setAttribute('width', imageWidth);
+            image.setAttribute('height', imageHeight);
+            image.setAttribute('href', blobUrl);
+            image.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            image.style.pointerEvents = 'none';  // Don't block mouse events
+
+            g.appendChild(image);
+
+            // Add resize handles for selected image nodes
+            if (this.selectedTaskIds.has(task.id)) {
+                this.addResizeHandles(g, task, imageWidth, imageHeight);
+            }
+        } catch (error) {
+            console.error(`[render.js] Failed to render image for task ${task.id}:`, error);
+        }
+    },
+
+    /**
+     * Add resize handles to image node corners
+     * @param {SVGElement} g - Group element
+     * @param {Object} task - Task object
+     * @param {number} imageWidth - Current image width
+     * @param {number} imageHeight - Current image height
+     */
+    addResizeHandles(g, task, imageWidth, imageHeight) {
+        const handleSize = 12;
+        const handleOffset = 4;
+
+        // Corner positions
+        const corners = [
+            { x: imageWidth / 2 + handleOffset, y: imageHeight / 2 + handleOffset, cursor: 'nwse-resize', corner: 'se' },  // SE
+            { x: -imageWidth / 2 - handleOffset, y: imageHeight / 2 + handleOffset, cursor: 'nesw-resize', corner: 'sw' }, // SW
+            { x: imageWidth / 2 + handleOffset, y: -imageHeight / 2 - handleOffset, cursor: 'nesw-resize', corner: 'ne' }, // NE
+            { x: -imageWidth / 2 - handleOffset, y: -imageHeight / 2 - handleOffset, cursor: 'nwse-resize', corner: 'nw' }  // NW
+        ];
+
+        corners.forEach(({ x, y, cursor, corner }) => {
+            const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            handle.setAttribute('cx', x);
+            handle.setAttribute('cy', y);
+            handle.setAttribute('r', handleSize / 2);
+            handle.setAttribute('fill', '#2196f3');
+            handle.setAttribute('stroke', 'white');
+            handle.setAttribute('stroke-width', '2');
+            handle.style.cursor = cursor;
+            handle.style.pointerEvents = 'all';
+            handle.classList.add('resize-handle');
+            handle.dataset.taskId = task.id;
+            handle.dataset.corner = corner;
+
+            g.appendChild(handle);
+        });
+    },
 });
 
 
@@ -8022,7 +8880,17 @@ Object.assign(app, {
         // Don't start drag if we're editing
         if (this.editingTaskId !== null) return;
 
-        // Check if clicking on arrow dot (highest priority)
+        // Check if clicking on resize handle (highest priority)
+        if (e.target.classList && e.target.classList.contains('resize-handle')) {
+            const taskId = parseInt(e.target.dataset.taskId);
+            const corner = e.target.dataset.corner;
+            this.startImageResize(taskId, corner, e);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        // Check if clicking on arrow dot (high priority)
         if (e.target.classList && e.target.classList.contains('arrow-dot')) {
             const dotType = e.target.getAttribute('data-dot-type');
             const taskId = parseInt(e.target.getAttribute('data-task-id'));
@@ -8050,11 +8918,20 @@ Object.assign(app, {
             setTimeout(() => {
                 // Only start drag if not double-clicked in the meantime
                 if (this.arrowDotDrag.lastClickedDotId === dotId) {
-                    this.startArrowDotDrag({
+                    // For source dots: taskId is parent, relatedId is child
+                    // For target dots: taskId is child, relatedId is parent
+                    const dotInfo = {
                         type: dotType,
-                        taskId: taskId,
-                        parentId: relatedId
-                    });
+                        taskId: taskId
+                    };
+
+                    if (dotType === 'source') {
+                        dotInfo.childId = relatedId;
+                    } else {
+                        dotInfo.parentId = relatedId;
+                    }
+
+                    this.startArrowDotDrag(dotInfo);
                 }
             }, 250);
 
@@ -8185,6 +9062,51 @@ Object.assign(app, {
         const pt = this.getSVGPoint(e);
         this.lastMousePosition = { x: pt.x, y: pt.y };
 
+        // Handle image resizing
+        if (this.imageResizing) {
+            const task = this.tasks.find(t => t.id === this.imageResizing.taskId);
+            if (!task) return;
+
+            const dx = pt.x - this.imageResizing.startPoint.x;
+            const dy = pt.y - this.imageResizing.startPoint.y;
+
+            // Calculate new dimensions based on corner
+            let newWidth = this.imageResizing.originalWidth;
+            let newHeight = this.imageResizing.originalHeight;
+
+            switch (this.imageResizing.corner) {
+                case 'se': // Southeast - drag right/down
+                    newWidth = this.imageResizing.originalWidth + dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+                case 'sw': // Southwest - drag left/down
+                    newWidth = this.imageResizing.originalWidth - dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+                case 'ne': // Northeast - drag right/up
+                    newWidth = this.imageResizing.originalWidth + dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+                case 'nw': // Northwest - drag left/up
+                    newWidth = this.imageResizing.originalWidth - dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+            }
+
+            // Enforce minimum size
+            const MIN_SIZE = 50;
+            newWidth = Math.max(MIN_SIZE, newWidth);
+            newHeight = Math.max(MIN_SIZE, newHeight);
+
+            // Update task dimensions
+            task.imageWidth = Math.round(newWidth);
+            task.imageHeight = Math.round(newHeight);
+
+            this.render();
+            e.preventDefault();
+            return;
+        }
+
         // Update arrow dot hover detection (even when not dragging)
         if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
             this.updateArrowDotHover(pt.x, pt.y);
@@ -8286,6 +9208,73 @@ Object.assign(app, {
                     task.vx = 0;
                     task.vy = 0;
                 }
+
+                // Check for hover copy of arrow attachments (with 750ms delay)
+                // Temporarily hide dragged node from elementFromPoint to see what's underneath
+                const draggedNodeElement = document.querySelector(`.task-node[data-id="${task.id}"]`);
+                const originalPointerEvents = draggedNodeElement ? draggedNodeElement.style.pointerEvents : null;
+                if (draggedNodeElement) {
+                    draggedNodeElement.style.pointerEvents = 'none';
+                }
+
+                const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
+                const hoveredNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
+
+                // Restore pointer events
+                if (draggedNodeElement) {
+                    draggedNodeElement.style.pointerEvents = originalPointerEvents || '';
+                }
+
+                if (hoveredNode) {
+                    const hoveredId = parseInt(hoveredNode.dataset.id);
+                    if (hoveredId !== task.id && !isNaN(hoveredId)) {
+                        // Start hover timer if this is a new hover target OR revert if same target
+                        if (this._attachmentCopyHoverTarget !== hoveredId || this._attachmentCopyApplied) {
+                            // Clear any existing timer
+                            if (this._attachmentCopyHoverTimer) {
+                                clearTimeout(this._attachmentCopyHoverTimer);
+                            }
+
+                            // Capture IDs for closure
+                            const draggedId = task.id;
+                            const targetId = hoveredId;
+                            const shouldRevert = this._attachmentCopyHoverTarget === hoveredId && this._attachmentCopyApplied;
+
+                            // Set new timer for 750ms
+                            this._attachmentCopyHoverTimer = setTimeout(() => {
+                                if (shouldRevert) {
+                                    // Revert to original
+                                    this.revertArrowAttachments(draggedId);
+                                    this._attachmentCopyApplied = false;
+                                } else {
+                                    // Apply copy
+                                    this.handleArrowAttachmentHoverCopy(draggedId, targetId);
+                                    this._attachmentCopyApplied = true;
+                                }
+                            }, 750);
+
+                            this._attachmentCopyHoverTarget = hoveredId;
+                        }
+                    }
+                } else {
+                    // No longer hovering - moved to empty space
+                    // Clear timer and reset state to allow multiple copies per drag
+                    if (this._attachmentCopyHoverTimer) {
+                        clearTimeout(this._attachmentCopyHoverTimer);
+                        this._attachmentCopyHoverTimer = null;
+                    }
+
+                    // If we've copied attachments, commit them by updating the original state
+                    // This allows multiple copies per drag session (reset after moving to empty space)
+                    if (this._attachmentCopyApplied && this._attachmentCopyOriginal) {
+                        // Update the "original" to current state so next revert doesn't undo this copy
+                        this.saveOriginalArrowAttachments(task.id);
+                        this._attachmentCopyApplied = false; // Allow copying again
+                    }
+
+                    this._attachmentCopyHoverTarget = null;
+                }
+
                 this.render();
             }
         } else if (this.dragMode === 'subtree-pending' && this.selectedNode !== null) {
@@ -8488,6 +9477,14 @@ Object.assign(app, {
     },
 
     onCanvasMouseUp(e) {
+        // End image resizing
+        if (this.imageResizing) {
+            this.imageResizing = null;
+            this.saveToStorage();
+            e.preventDefault();
+            return;
+        }
+
         // Handle arrow dot drag finish
         if (this.arrowDotDrag.active) {
             this.finishArrowDotDrag();
@@ -8582,6 +9579,11 @@ Object.assign(app, {
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
                 if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
+                    // Update timestamps for all moved nodes in the subtree
+                    this.draggedSubtree.forEach(nodeId => {
+                        this.updateConnectedArrowsTimestamps(nodeId);
+                    });
+
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -8604,6 +9606,16 @@ Object.assign(app, {
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
                 if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
+                    // Update timestamps for all connected arrows to prioritize them
+                    // If multi-select, update all selected nodes; otherwise just the moved node
+                    if (this.selectedTaskIds.has(this.selectedNode) && this.selectedTaskIds.size > 1) {
+                        this.selectedTaskIds.forEach(taskId => {
+                            this.updateConnectedArrowsTimestamps(taskId);
+                        });
+                    } else {
+                        this.updateConnectedArrowsTimestamps(this.selectedNode);
+                    }
+
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -8658,6 +9670,15 @@ Object.assign(app, {
         this.isBoxSelecting = false;
         this.boxSelectStart = null;
 
+        // Clear arrow attachment copy state
+        if (this._attachmentCopyHoverTimer) {
+            clearTimeout(this._attachmentCopyHoverTimer);
+            this._attachmentCopyHoverTimer = null;
+        }
+        this._attachmentCopyHoverTarget = null;
+        this._attachmentCopyApplied = false;
+        this._attachmentCopyOriginal = null;
+
         if (wasCanvasDrag) {
             // Only clear selection if we didn't actually pan (click without movement)
             const pt = this.getSVGPoint(e);
@@ -8674,10 +9695,202 @@ Object.assign(app, {
             }
         }
         document.getElementById('canvas-container').classList.remove('dragging');
-    }
-});
+    },
 
-console.log('[mouse.js] Mouse event handlers loaded');
+    /**
+     * Start resizing an image node
+     * @param {number} taskId - Task ID
+     * @param {string} corner - Corner being dragged ('se', 'sw', 'ne', 'nw')
+     * @param {MouseEvent} e - Mouse event
+     */
+    startImageResize(taskId, corner, e) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task || !task.imageId) return;
+
+        this.imageResizing = {
+            taskId: taskId,
+            corner: corner,
+            startPoint: this.getSVGPoint(e),
+            originalWidth: task.imageWidth,
+            originalHeight: task.imageHeight,
+            aspectRatio: task.imageWidth / task.imageHeight
+        };
+
+        // Save snapshot for undo
+        this.saveSnapshot(`Resize image`);
+    },
+
+    /**
+     * Save original arrow attachments before copying (for revert)
+     * @param {number} draggedId - ID of node being dragged
+     */
+    saveOriginalArrowAttachments(draggedId) {
+        const draggedTask = this.tasks.find(t => t.id === draggedId);
+        if (!draggedTask) return;
+
+        this._attachmentCopyOriginal = {
+            taskId: draggedId,
+            customAttachPoints: JSON.parse(JSON.stringify(draggedTask.customAttachPoints || {})),
+            customSourcePoints: JSON.parse(JSON.stringify(draggedTask.customSourcePoints || {}))
+        };
+    },
+
+    /**
+     * Revert arrow attachments to original state
+     * @param {number} draggedId - ID of node being dragged
+     */
+    revertArrowAttachments(draggedId) {
+        if (!this._attachmentCopyOriginal || this._attachmentCopyOriginal.taskId !== draggedId) {
+            return;
+        }
+
+        const draggedTask = this.tasks.find(t => t.id === draggedId);
+        if (!draggedTask) return;
+
+        draggedTask.customAttachPoints = JSON.parse(JSON.stringify(this._attachmentCopyOriginal.customAttachPoints));
+        draggedTask.customSourcePoints = JSON.parse(JSON.stringify(this._attachmentCopyOriginal.customSourcePoints));
+
+        this.showToast('↩️ Reverted arrow attachments', 'info', 1500);
+    },
+
+    /**
+     * Handle arrow attachment copying when hovering dragged node over another node
+     * Copies both target points (where arrows land) and source points (where arrows start)
+     * @param {number} draggedId - ID of node being dragged
+     * @param {number} hoveredId - ID of node being hovered over
+     */
+    handleArrowAttachmentHoverCopy(draggedId, hoveredId) {
+        const draggedTask = this.tasks.find(t => t.id === draggedId);
+        const hoveredTask = this.tasks.find(t => t.id === hoveredId);
+
+        if (!draggedTask || !hoveredTask) {
+            return;
+        }
+
+        // Save original state before first copy
+        if (!this._attachmentCopyOriginal) {
+            this.saveOriginalArrowAttachments(draggedId);
+        }
+
+        let copiedCount = 0;
+
+        // Process matching parent relationships (arrows coming INTO both nodes)
+        const draggedParents = [draggedTask.mainParent, ...draggedTask.otherParents].filter(p => p !== null);
+        const hoveredParents = [hoveredTask.mainParent, ...hoveredTask.otherParents].filter(p => p !== null);
+        const sharedParents = draggedParents.filter(p => hoveredParents.includes(p));
+
+        sharedParents.forEach(parentId => {
+            const parent = this.tasks.find(t => t.id === parentId);
+            if (!parent) return;
+
+            // Copy TARGET point (where arrow lands on child)
+            let targetPoint;
+            if (hoveredTask.customAttachPoints && hoveredTask.customAttachPoints[parentId]) {
+                targetPoint = hoveredTask.customAttachPoints[parentId];
+            } else {
+                const hoveredEndpoint = this.getArrowEndpoint(parent, hoveredTask, 'target');
+                const hoveredDims = this.calculateTaskDimensions(hoveredTask);
+                targetPoint = this.constrainToRectEdge(
+                    hoveredEndpoint.x, hoveredEndpoint.y,
+                    hoveredTask.x, hoveredTask.y,
+                    hoveredDims.width, hoveredDims.height
+                );
+            }
+
+            if (!draggedTask.customAttachPoints) {
+                draggedTask.customAttachPoints = {};
+            }
+            draggedTask.customAttachPoints[parentId] = JSON.parse(JSON.stringify(targetPoint));
+            copiedCount++;
+
+            // Copy SOURCE point (where arrow starts from parent)
+            let sourcePoint;
+            if (parent.customSourcePoints && parent.customSourcePoints[hoveredId]) {
+                sourcePoint = parent.customSourcePoints[hoveredId];
+            } else {
+                const parentStartpoint = this.getArrowEndpoint(parent, hoveredTask, 'source');
+                const parentDims = this.calculateTaskDimensions(parent);
+                sourcePoint = this.constrainToRectEdge(
+                    parentStartpoint.x, parentStartpoint.y,
+                    parent.x, parent.y,
+                    parentDims.width, parentDims.height
+                );
+            }
+
+            if (!parent.customSourcePoints) {
+                parent.customSourcePoints = {};
+            }
+            parent.customSourcePoints[draggedId] = JSON.parse(JSON.stringify(sourcePoint));
+            copiedCount++;
+        });
+
+        // Process matching child relationships (arrows going OUT from both nodes)
+        const sharedChildren = draggedTask.children.filter(c => hoveredTask.children.includes(c));
+
+        sharedChildren.forEach(childId => {
+            const child = this.tasks.find(t => t.id === childId);
+            if (!child) return;
+
+            // Copy TARGET point (where arrow lands on child)
+            let targetPoint;
+            if (child.customAttachPoints && child.customAttachPoints[hoveredId]) {
+                targetPoint = child.customAttachPoints[hoveredId];
+            } else {
+                const childTargetEndpoint = this.getArrowEndpoint(hoveredTask, child, 'target');
+                const childDims = this.calculateTaskDimensions(child);
+                targetPoint = this.constrainToRectEdge(
+                    childTargetEndpoint.x, childTargetEndpoint.y,
+                    child.x, child.y,
+                    childDims.width, childDims.height
+                );
+            }
+
+            if (!child.customAttachPoints) {
+                child.customAttachPoints = {};
+            }
+            child.customAttachPoints[draggedId] = JSON.parse(JSON.stringify(targetPoint));
+            copiedCount++;
+
+            // Copy SOURCE point (where arrow starts from parent)
+            let sourcePoint;
+            if (hoveredTask.customSourcePoints && hoveredTask.customSourcePoints[childId]) {
+                sourcePoint = hoveredTask.customSourcePoints[childId];
+            } else {
+                const draggedStartpoint = this.getArrowEndpoint(hoveredTask, child, 'source');
+                const hoveredDims = this.calculateTaskDimensions(hoveredTask);
+                sourcePoint = this.constrainToRectEdge(
+                    draggedStartpoint.x, draggedStartpoint.y,
+                    hoveredTask.x, hoveredTask.y,
+                    hoveredDims.width, hoveredDims.height
+                );
+            }
+
+            if (!draggedTask.customSourcePoints) {
+                draggedTask.customSourcePoints = {};
+            }
+            draggedTask.customSourcePoints[childId] = JSON.parse(JSON.stringify(sourcePoint));
+            copiedCount++;
+        });
+
+        // Show feedback with prominent toast and visual flash effect
+        if (copiedCount > 0) {
+            // Bigger, longer toast for better visibility
+            this.showToast(`✨ Copied ${copiedCount} arrow attachment${copiedCount > 1 ? 's' : ''} from hover target!`, 'success', 3000);
+
+            // Add flash effect to dragged node
+            const draggedNodeElement = document.querySelector(`.task-node[data-id="${draggedId}"]`);
+            if (draggedNodeElement) {
+                draggedNodeElement.classList.add('attachment-copied-flash');
+                setTimeout(() => {
+                    draggedNodeElement.classList.remove('attachment-copied-flash');
+                }, 600); // Remove after animation completes
+            }
+        } else {
+            this.showToast('⚠️ No matching relationships to copy', 'warning', 2000);
+        }
+    },
+
+});
 
 
 
@@ -9067,20 +10280,22 @@ Object.assign(app, {
 
     /**
      * Find arrow dot near mouse position
-     * Returns dot info or null
+     * If multiple dots overlap, prioritizes the most recently moved (highest timestamp)
      *
      * @param {number} mouseX - Mouse X in SVG coordinates
      * @param {number} mouseY - Mouse Y in SVG coordinates
-     * @returns {{type: string, taskId: number, parentId: number, x: number, y: number}|null}
+     * @returns {{type: string, taskId: number, parentId: number, childId: number, x: number, y: number}|null}
      */
     findArrowDotNearMouse(mouseX, mouseY) {
         // DEFENSIVE: Validate radius
         const radius = this.arrowDotRadius || 5;
-        const radiusSquared = radius * radius;
 
         // PERF: Only check tasks near mouse cursor (rough viewport culling)
         // This avoids checking 100+ tasks when mouse is far away
         const QUICK_CHECK_MARGIN = 500;
+
+        // Collect ALL dots near mouse, then prioritize by timestamp
+        const nearbyDots = [];
 
         // Check all arrows (main parent + other parents)
         for (const task of this.tasks) {
@@ -9100,13 +10315,15 @@ Object.assign(app, {
                     const endPos = this.getArrowEndpoint(parent, task, 'target');
 
                     if (this.isPointNearPosition(mouseX, mouseY, endPos.x, endPos.y, radius)) {
-                        return {
+                        const customPoint = task.customAttachPoints?.[task.mainParent];
+                        nearbyDots.push({
                             type: 'target',
                             taskId: task.id,
                             parentId: task.mainParent,
                             x: endPos.x,
-                            y: endPos.y
-                        };
+                            y: endPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
                     }
                 }
             }
@@ -9117,19 +10334,69 @@ Object.assign(app, {
                 if (parent && !parent.hidden) {
                     const endPos = this.getArrowEndpoint(parent, task, 'target');
                     if (this.isPointNearPosition(mouseX, mouseY, endPos.x, endPos.y, radius)) {
-                        return {
+                        const customPoint = task.customAttachPoints?.[parentId];
+                        nearbyDots.push({
                             type: 'target',
                             taskId: task.id,
                             parentId: parentId,
                             x: endPos.x,
-                            y: endPos.y
-                        };
+                            y: endPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
+                    }
+                }
+            }
+
+            // Check main parent arrow (SOURCE end - where arrow starts from parent)
+            if (task.mainParent !== null) {
+                const parent = this.tasks.find(t => t.id === task.mainParent);
+                if (parent && !parent.hidden) {
+                    const startPos = this.getArrowEndpoint(parent, task, 'source');
+
+                    if (this.isPointNearPosition(mouseX, mouseY, startPos.x, startPos.y, radius)) {
+                        const customPoint = parent.customSourcePoints?.[task.id];
+                        nearbyDots.push({
+                            type: 'source',
+                            taskId: parent.id,  // Source dot belongs to parent node
+                            childId: task.id,   // Related to this child
+                            x: startPos.x,
+                            y: startPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
+                    }
+                }
+            }
+
+            // Check other parents (SOURCE end - where arrow starts from parent)
+            for (const parentId of task.otherParents || []) {
+                const parent = this.tasks.find(t => t.id === parentId);
+                if (parent && !parent.hidden) {
+                    const startPos = this.getArrowEndpoint(parent, task, 'source');
+                    if (this.isPointNearPosition(mouseX, mouseY, startPos.x, startPos.y, radius)) {
+                        const customPoint = parent.customSourcePoints?.[task.id];
+                        nearbyDots.push({
+                            type: 'source',
+                            taskId: parent.id,  // Source dot belongs to parent node
+                            childId: task.id,   // Related to this child
+                            x: startPos.x,
+                            y: startPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
                     }
                 }
             }
         }
 
-        return null;
+        // If no dots found, return null
+        if (nearbyDots.length === 0) return null;
+
+        // If multiple dots overlap, return the one with highest timestamp (most recently moved)
+        nearbyDots.sort((a, b) => b.timestamp - a.timestamp);
+
+        // Remove timestamp before returning (not needed in result)
+        const result = nearbyDots[0];
+        delete result.timestamp;
+        return result;
     },
 
     /**
@@ -9333,20 +10600,32 @@ Object.assign(app, {
             // Source end
             const sourceDims = this.calculateTaskDimensions(sourceTask);
 
-            // Check for custom source point (not implemented yet for dragging, but structure is here)
-            // const customPoint = sourceTask.customSourcePoints?.[targetTask.id];
+            // Check for custom source point
+            const customPoint = sourceTask.customSourcePoints?.[targetTask.id];
 
-            // Use default calculation based on setting
-            if (this.arrowOppositeEdge) {
-                // New behavior: start from edge center facing target
-                return this.getOppositeEdgeCenter(
-                    targetTask.x, targetTask.y,
-                    sourceTask.x, sourceTask.y,
-                    sourceDims.width, sourceDims.height
+            if (customPoint) {
+                // Use custom position
+                return this.denormalizeEdgePosition(
+                    customPoint.edge,
+                    customPoint.normalized,
+                    sourceTask.x,
+                    sourceTask.y,
+                    sourceDims.width,
+                    sourceDims.height
                 );
             } else {
-                // Original behavior: start from center of source
-                return { x: sourceTask.x, y: sourceTask.y };
+                // Use default calculation based on setting
+                if (this.arrowOppositeEdge) {
+                    // New behavior: start from edge center facing target
+                    return this.getOppositeEdgeCenter(
+                        targetTask.x, targetTask.y,
+                        sourceTask.x, sourceTask.y,
+                        sourceDims.width, sourceDims.height
+                    );
+                } else {
+                    // Original behavior: start from center of source
+                    return { x: sourceTask.x, y: sourceTask.y };
+                }
             }
         }
     },
@@ -9355,7 +10634,7 @@ Object.assign(app, {
      * Start dragging arrow dot
      * Called from onCanvasMouseDown when clicking on hoveredArrowDot
      *
-     * @param {object} dotInfo - Dot information {type, taskId, parentId}
+     * @param {object} dotInfo - Dot information {type, taskId, parentId, childId}
      */
     startArrowDotDrag(dotInfo) {
         if (!dotInfo) return;
@@ -9377,6 +10656,7 @@ Object.assign(app, {
         let currentEdge, currentNormalized;
 
         if (dotInfo.type === 'target') {
+            // Target dot: dragging arrowhead on child node
             const customPoint = task.customAttachPoints?.[dotInfo.parentId];
             if (customPoint) {
                 currentEdge = customPoint.edge;
@@ -9401,6 +10681,32 @@ Object.assign(app, {
                 currentEdge = constrained.edge;
                 currentNormalized = constrained.normalized;
             }
+        } else if (dotInfo.type === 'source') {
+            // Source dot: dragging arrow start on parent node
+            const customPoint = task.customSourcePoints?.[dotInfo.childId];
+            if (customPoint) {
+                currentEdge = customPoint.edge;
+                currentNormalized = customPoint.normalized;
+            } else {
+                // Calculate current default position
+                const child = this.tasks.find(t => t.id === dotInfo.childId);
+                if (!child) return;
+
+                const startPos = this.getOppositeEdgeCenter(
+                    child.x, child.y,
+                    task.x, task.y,
+                    cachedDims.width, cachedDims.height
+                );
+
+                // Convert to edge + normalized
+                const constrained = this.constrainToRectEdge(
+                    startPos.x, startPos.y,
+                    task.x, task.y,
+                    cachedDims.width, cachedDims.height
+                );
+                currentEdge = constrained.edge;
+                currentNormalized = constrained.normalized;
+            }
         }
 
         // Set drag state with cached values
@@ -9408,7 +10714,7 @@ Object.assign(app, {
             active: true,
             dotType: dotInfo.type,
             taskId: dotInfo.taskId,
-            relatedTaskId: dotInfo.parentId,
+            relatedTaskId: dotInfo.type === 'target' ? dotInfo.parentId : dotInfo.childId,
             edge: currentEdge,
             normalized: currentNormalized,
             lastRenderTime: 0,
@@ -9419,7 +10725,11 @@ Object.assign(app, {
         };
 
         // GPU ACCEL: Add class to arrow link for GPU acceleration
-        const arrowSelector = `.parent-visible[data-task-id="${dotInfo.taskId}"][data-parent-id="${dotInfo.parentId}"]`;
+        // For source dots, the arrow is from taskId (parent) to childId
+        // For target dots, the arrow is from parentId to taskId (child)
+        const parentId = dotInfo.type === 'source' ? dotInfo.taskId : dotInfo.parentId;
+        const childId = dotInfo.type === 'source' ? dotInfo.childId : dotInfo.taskId;
+        const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
         const arrowLine = document.querySelector(arrowSelector);
         if (arrowLine) {
             arrowLine.classList.add('dragging-arrow');
@@ -9495,8 +10805,8 @@ Object.assign(app, {
         const task = this.tasks.find(t => t.id === this.arrowDotDrag.taskId);
         if (!task) return;
 
-        const parent = this.tasks.find(t => t.id === this.arrowDotDrag.relatedTaskId);
-        if (!parent) return;
+        const relatedTask = this.tasks.find(t => t.id === this.arrowDotDrag.relatedTaskId);
+        if (!relatedTask) return;
 
         const dims = this.arrowDotDrag.cachedDims;
 
@@ -9521,39 +10831,59 @@ Object.assign(app, {
         dotElement.setAttribute('cy', dotPos.y);
         dotElement.setAttribute('r', this.arrowDotDragSize || 7);
 
-        // Determine color based on whether position is custom
-        const hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[this.arrowDotDrag.relatedTaskId]);
+        // Determine color based on whether position is custom and dot type
+        let hasCustomPosition;
+        if (this.arrowDotDrag.dotType === 'source') {
+            hasCustomPosition = !!(task.customSourcePoints && task.customSourcePoints[this.arrowDotDrag.relatedTaskId]);
+        } else {
+            hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[this.arrowDotDrag.relatedTaskId]);
+        }
         dotElement.setAttribute('fill', hasCustomPosition ? '#2196f3' : '#4caf50');
 
-        // Find and update arrow line endpoint
-        // Look for the specific arrow being dragged
-        const arrowSelector = `.parent-visible[data-task-id="${task.id}"][data-parent-id="${parent.id}"]`;
+        // Find and update arrow line
+        // For source dots: arrow is from taskId (parent) to relatedTaskId (child)
+        // For target dots: arrow is from relatedTaskId (parent) to taskId (child)
+        const parentId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.taskId : this.arrowDotDrag.relatedTaskId;
+        const childId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.relatedTaskId : this.arrowDotDrag.taskId;
+        const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
         const arrowLine = document.querySelector(arrowSelector);
 
         if (arrowLine) {
-            // Update arrow endpoint to match dot
+            // Update arrow to match dot
             // All arrows are <path> elements (created by createMultiSegmentCurvedLine)
             if (arrowLine.tagName === 'path') {
-                // Get arrow start point (source)
-                const arrowStart = this.getArrowEndpoint(parent, task, 'source');
+                // Get the OTHER end of the arrow (the one we're NOT dragging)
+                let arrowStart, arrowEnd;
+                const parentTask = this.tasks.find(t => t.id === parentId);
+                const childTask = this.tasks.find(t => t.id === childId);
 
-                // Get control points for this arrow
-                const controlPoints = task.curveControlPoints?.[parent.id];
+                if (this.arrowDotDrag.dotType === 'source') {
+                    // Dragging source dot - start is what we're dragging, end is fixed
+                    arrowStart = dotPos;
+                    arrowEnd = this.getArrowEndpoint(parentTask, childTask, 'target');
+                } else {
+                    // Dragging target dot - start is fixed, end is what we're dragging
+                    arrowStart = this.getArrowEndpoint(parentTask, childTask, 'source');
+                    arrowEnd = dotPos;
+                }
+
+                // Get control points for this arrow (stored on child task)
+                const controlPoints = childTask.curveControlPoints?.[parentId];
 
                 // Check if we're also dragging curve control points
                 const isDraggingThisCurve = this.curveDotDrag.active &&
-                                            this.curveDotDrag.taskId === task.id &&
-                                            this.curveDotDrag.parentId === parent.id;
+                                            this.curveDotDrag.taskId === childId &&
+                                            this.curveDotDrag.parentId === parentId;
                 const effectiveControlPoints = isDraggingThisCurve ?
                     this.curveDotDrag.controlPoints : controlPoints;
 
-                // Recreate the path with new endpoint
+                // Recreate the path with new endpoints
                 if (effectiveControlPoints && effectiveControlPoints.length > 0) {
                     // Multi-segment curve - use Catmull-Rom spline
                     const points = [
                         { x: arrowStart.x, y: arrowStart.y },
                         ...effectiveControlPoints,
-                        { x: dotPos.x, y: dotPos.y }
+                        { x: arrowEnd.x, y: arrowEnd.y }
                     ];
 
                     let pathData = `M ${points[0].x} ${points[0].y}`;
@@ -9573,7 +10903,7 @@ Object.assign(app, {
                     arrowLine.setAttribute('d', pathData);
                 } else {
                     // Straight line - simple path
-                    arrowLine.setAttribute('d', `M ${arrowStart.x} ${arrowStart.y} L ${dotPos.x} ${dotPos.y}`);
+                    arrowLine.setAttribute('d', `M ${arrowStart.x} ${arrowStart.y} L ${arrowEnd.x} ${arrowEnd.y}`);
                 }
             }
         }
@@ -9609,21 +10939,35 @@ Object.assign(app, {
             return;
         }
 
-        // Initialize customAttachPoints if needed
-        if (!task.customAttachPoints) {
-            task.customAttachPoints = {};
-        }
-
-        // Save custom position
+        // Save custom position based on dot type (with timestamp for prioritization)
         if (this.arrowDotDrag.dotType === 'target') {
+            // Target dot: save to customAttachPoints (arrow endpoint on child)
+            if (!task.customAttachPoints) {
+                task.customAttachPoints = {};
+            }
             task.customAttachPoints[this.arrowDotDrag.relatedTaskId] = {
                 edge: this.arrowDotDrag.edge,
-                normalized: this.arrowDotDrag.normalized
+                normalized: this.arrowDotDrag.normalized,
+                timestamp: Date.now()  // For prioritization when overlapping
+            };
+        } else if (this.arrowDotDrag.dotType === 'source') {
+            // Source dot: save to customSourcePoints (arrow start on parent)
+            if (!task.customSourcePoints) {
+                task.customSourcePoints = {};
+            }
+            task.customSourcePoints[this.arrowDotDrag.relatedTaskId] = {
+                edge: this.arrowDotDrag.edge,
+                normalized: this.arrowDotDrag.normalized,
+                timestamp: Date.now()  // For prioritization when overlapping
             };
         }
 
         // GPU ACCEL: Remove dragging-arrow class
-        const arrowSelector = `.parent-visible[data-task-id="${this.arrowDotDrag.taskId}"][data-parent-id="${this.arrowDotDrag.relatedTaskId}"]`;
+        // For source dots, the arrow is from taskId (parent) to relatedTaskId (child)
+        // For target dots, the arrow is from relatedTaskId (parent) to taskId (child)
+        const parentId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.taskId : this.arrowDotDrag.relatedTaskId;
+        const childId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.relatedTaskId : this.arrowDotDrag.taskId;
+        const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
         const arrowLine = document.querySelector(arrowSelector);
         if (arrowLine) {
             arrowLine.classList.remove('dragging-arrow');
@@ -9657,7 +11001,11 @@ Object.assign(app, {
     cancelArrowDotDrag() {
         // GPU ACCEL: Remove dragging-arrow class if exists
         if (this.arrowDotDrag.taskId && this.arrowDotDrag.relatedTaskId) {
-            const arrowSelector = `.parent-visible[data-task-id="${this.arrowDotDrag.taskId}"][data-parent-id="${this.arrowDotDrag.relatedTaskId}"]`;
+            // For source dots: arrow is from taskId (parent) to relatedTaskId (child)
+            // For target dots: arrow is from relatedTaskId (parent) to taskId (child)
+            const parentId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.taskId : this.arrowDotDrag.relatedTaskId;
+            const childId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.relatedTaskId : this.arrowDotDrag.taskId;
+            const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
             const arrowLine = document.querySelector(arrowSelector);
             if (arrowLine) {
                 arrowLine.classList.remove('dragging-arrow');
@@ -9681,9 +11029,81 @@ Object.assign(app, {
     },
 
     /**
+     * Update timestamp for a specific arrow (both source and target endpoints)
+     * Used when selecting an arrow or moving a connected node
+     *
+     * @param {number} childId - Child task ID
+     * @param {number} parentId - Parent task ID
+     */
+    updateArrowTimestamp(childId, parentId) {
+        const child = this.tasks.find(t => t.id === childId);
+        const parent = this.tasks.find(t => t.id === parentId);
+
+        if (!child || !parent) return;
+
+        const timestamp = Date.now();
+
+        // Update target endpoint (arrow landing on child)
+        if (child.customAttachPoints && child.customAttachPoints[parentId]) {
+            child.customAttachPoints[parentId].timestamp = timestamp;
+        }
+
+        // Update source endpoint (arrow starting from parent)
+        if (parent.customSourcePoints && parent.customSourcePoints[childId]) {
+            parent.customSourcePoints[childId].timestamp = timestamp;
+        }
+    },
+
+    /**
+     * Update timestamps for all arrows connected to a node
+     * Used when moving a node to prioritize its arrows
+     *
+     * @param {number} taskId - Task ID that was moved
+     */
+    updateConnectedArrowsTimestamps(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const timestamp = Date.now();
+
+        // Update all parent arrows (arrows coming INTO this node)
+        const allParents = [task.mainParent, ...(task.otherParents || [])].filter(p => p !== null);
+        for (const parentId of allParents) {
+            const parent = this.tasks.find(t => t.id === parentId);
+            if (!parent) continue;
+
+            // Update target endpoint on child
+            if (task.customAttachPoints && task.customAttachPoints[parentId]) {
+                task.customAttachPoints[parentId].timestamp = timestamp;
+            }
+
+            // Update source endpoint on parent
+            if (parent.customSourcePoints && parent.customSourcePoints[taskId]) {
+                parent.customSourcePoints[taskId].timestamp = timestamp;
+            }
+        }
+
+        // Update all child arrows (arrows going OUT from this node)
+        for (const childId of task.children || []) {
+            const child = this.tasks.find(t => t.id === childId);
+            if (!child) continue;
+
+            // Update target endpoint on child
+            if (child.customAttachPoints && child.customAttachPoints[taskId]) {
+                child.customAttachPoints[taskId].timestamp = timestamp;
+            }
+
+            // Update source endpoint on this node
+            if (task.customSourcePoints && task.customSourcePoints[childId]) {
+                task.customSourcePoints[childId].timestamp = timestamp;
+            }
+        }
+    },
+
+    /**
      * Reset arrow to default position (double-click or context menu)
      *
-     * @param {object} dotInfo - Dot information {type, taskId, parentId}
+     * @param {object} dotInfo - Dot information {type, taskId, parentId, childId}
      */
     resetArrowPosition(dotInfo) {
         if (!dotInfo) return;
@@ -9694,9 +11114,19 @@ Object.assign(app, {
         if (!task) return;
 
         if (dotInfo.type === 'target') {
-            // Remove custom attach point
+            // Remove custom attach point (child-side)
             if (task.customAttachPoints && task.customAttachPoints[dotInfo.parentId]) {
                 delete task.customAttachPoints[dotInfo.parentId];
+
+                this.saveToStorage();
+                this.render();
+
+                this.showToast('Arrow position reset', 'success', 2000);
+            }
+        } else if (dotInfo.type === 'source') {
+            // Remove custom source point (parent-side)
+            if (task.customSourcePoints && task.customSourcePoints[dotInfo.childId]) {
+                delete task.customSourcePoints[dotInfo.childId];
 
                 this.saveToStorage();
                 this.render();
@@ -10472,6 +11902,113 @@ Object.assign(app, {
     hideTimeHistoryModal() {
         const modal = document.getElementById('time-history-modal');
         modal.classList.remove('show');
+    },
+
+    /**
+     * Show emoji picker modal for selecting an icon
+     * @param {string} title - Modal title
+     * @param {string} currentEmoji - Currently selected emoji
+     * @param {function} onConfirm - Callback with selected emoji
+     */
+    showEmojiPicker(title, currentEmoji, onConfirm) {
+        document.getElementById('emoji-picker-title').textContent = title;
+        const input = document.getElementById('emoji-custom-input');
+        input.value = currentEmoji || '';
+
+        const modal = document.getElementById('emoji-picker-modal');
+        modal.classList.add('show');
+
+        // Popular emojis organized by category
+        const emojiCategories = {
+            'Places & Navigation': ['🏠', '🏡', '🏢', '🏛️', '🏗️', '🏰', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '⛩️', '🗾', '🎪', '🎭'],
+            'Symbols': ['⭐', '🌟', '💫', '✨', '🔥', '💥', '⚡', '🌈', '☀️', '🌙', '⭕', '❌', '✅', '❗', '❓', '💯'],
+            'Arrows & Directions': ['➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '🔄', '🔁', '🔀', '🔃', '🔂', '▶️', '⏸️', '⏹️'],
+            'Flags & Markers': ['🚩', '🏁', '🏳️', '🏴', '🎌', '🎏', '📍', '📌', '📎', '🔖', '🏷️', '💼', '🗂️', '📂', '📁', '🗃️'],
+            'Activities': ['🎯', '🎲', '🎮', '🎰', '🎳', '🎸', '🎹', '🎺', '🎻', '🎬', '🎨', '🎭', '🎪', '🎢', '🎡', '🎠'],
+            'Work & Tools': ['💼', '📊', '📈', '📉', '🗂️', '📋', '📝', '🖊️', '✏️', '📌', '📍', '🔨', '⚒️', '🛠️', '⚙️', '🔧'],
+            'Nature': ['🌲', '🌳', '🌴', '🌵', '🌾', '🌿', '☘️', '🍀', '🍃', '🍂', '🍁', '🌺', '🌻', '🌹', '🌷', '💐'],
+            'Food & Drink': ['☕', '🍵', '🧃', '🧋', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🍾', '🍴', '🍽️', '🥄', '🥢']
+        };
+
+        const grid = document.getElementById('emoji-picker-grid');
+        grid.innerHTML = '';
+
+        // Add emojis to grid
+        Object.entries(emojiCategories).forEach(([category, emojis]) => {
+            // Category header spanning all columns
+            const header = document.createElement('div');
+            header.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 600; color: #666; margin-top: 8px; margin-bottom: 4px;';
+            header.textContent = category;
+            grid.appendChild(header);
+
+            // Emoji buttons
+            emojis.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.textContent = emoji;
+                btn.style.cssText = 'font-size: 24px; padding: 8px; background: white; border: 2px solid #ddd; border-radius: 6px; cursor: pointer; transition: all 0.2s;';
+                btn.onclick = () => {
+                    input.value = emoji;
+                    // Highlight selected
+                    grid.querySelectorAll('button').forEach(b => b.style.borderColor = '#ddd');
+                    btn.style.borderColor = '#007bff';
+                };
+                btn.onmouseenter = () => {
+                    if (btn.style.borderColor !== 'rgb(0, 123, 255)') {
+                        btn.style.borderColor = '#999';
+                        btn.style.transform = 'scale(1.1)';
+                    }
+                };
+                btn.onmouseleave = () => {
+                    if (btn.style.borderColor !== 'rgb(0, 123, 255)') {
+                        btn.style.borderColor = '#ddd';
+                        btn.style.transform = 'scale(1)';
+                    }
+                };
+                grid.appendChild(btn);
+            });
+        });
+
+        // Clone buttons to remove old event listeners
+        const okBtn = document.getElementById('emoji-picker-ok');
+        const cancelBtn = document.getElementById('emoji-picker-cancel');
+        const newOkBtn = okBtn.cloneNode(true);
+        const newCancelBtn = cancelBtn.cloneNode(true);
+        okBtn.replaceWith(newOkBtn);
+        cancelBtn.replaceWith(newCancelBtn);
+
+        newOkBtn.onclick = () => {
+            const value = input.value.trim();
+            this.hideEmojiPicker();
+            if (value && onConfirm) onConfirm(value);
+        };
+
+        newCancelBtn.onclick = () => {
+            this.hideEmojiPicker();
+        };
+
+        // Enter key submits
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = input.value.trim();
+                this.hideEmojiPicker();
+                if (value && onConfirm) onConfirm(value);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.hideEmojiPicker();
+            }
+        };
+
+        // Focus input after modal shows
+        setTimeout(() => input.focus(), 100);
+    },
+
+    /**
+     * Hide emoji picker modal
+     */
+    hideEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        modal.classList.remove('show');
     }
 });
 
@@ -10671,6 +12208,15 @@ Object.assign(app, {
                 buttons.push({ label: `🔗 Links (${task.links.length})`, isLinksSubmenu: true });
                 buttons.push({ label: '📎 Attach Another Link', action: () => this.attachLink(taskId) });
                 buttons.push({ label: '🗑️ Remove All Links', action: () => this.removeAllLinks(taskId) });
+            }
+
+            // Image management options
+            if (task.imageId) {
+                // Task has image - show remove option
+                buttons.push({ label: '🗑️ Remove Image', action: () => this.removeTaskImage(taskId) });
+            } else {
+                // No image - show paste image option
+                buttons.push({ label: '🖼️ Paste Image', action: () => this.pasteImage(taskId) });
             }
 
             buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
@@ -10987,13 +12533,14 @@ Object.assign(app, {
                     item.classList.add('special');
                 }
 
-                // Display home name with keybind if it exists
+                // Display home icon + name with keybind if it exists
+                const icon = home.icon || '🏠';
                 const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
 
                 // Don't use textContent - it can interfere with appendChild
                 // Instead, create a span for the text
                 const textSpan = document.createElement('span');
-                textSpan.textContent = nameText;
+                textSpan.textContent = `${icon} ${nameText}`;
                 item.appendChild(textSpan);
 
                 // Click on home name navigates to that home
@@ -11077,6 +12624,17 @@ Object.assign(app, {
                     this.updateHome(home.id);
                 };
                 homeSubmenu.appendChild(updateOption);
+
+                // Set Icon option
+                const setIconOption = document.createElement('div');
+                setIconOption.className = 'submenu-item';
+                setIconOption.textContent = `${home.icon || '🏠'} Set Icon`;
+                setIconOption.onclick = (evt) => {
+                    evt.stopPropagation();
+                    this.closeMenu();
+                    this.setHomeIcon(home.id);
+                };
+                homeSubmenu.appendChild(setIconOption);
 
                 // Append nested submenu to body (not to item) since it uses fixed positioning
                 // This avoids parent overflow issues
@@ -13095,7 +14653,8 @@ Object.assign(app, {
             centerY: centerY,
             zoomLevel: this.zoomLevel,
             timestamp: Date.now(),
-            keybind: null  // No keybind by default
+            keybind: null,  // No keybind by default
+            icon: '🏠'  // Default home icon
         };
 
         this.homes.push(newHome);
@@ -13299,6 +14858,33 @@ Object.assign(app, {
         return true;
     },
 
+    setHomeIcon(homeId) {
+        // Set a custom emoji icon for a home
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) return;
+
+        // Show emoji picker to get emoji from user
+        const title = `Set Icon for "${home.name}"`;
+
+        this.showEmojiPicker(title, home.icon || '🏠', (newIcon) => {
+            if (!newIcon || newIcon.trim() === '') {
+                this.showToast('Icon cannot be empty', 'error');
+                return;
+            }
+
+            const trimmedIcon = newIcon.trim();
+
+            // Update the icon
+            home.icon = trimmedIcon;
+            home.timestamp = Date.now();
+
+            this.saveToStorage();
+            this.renderManageHomesModal();
+            this.render();  // Update indicators
+            this.showToast(`✓ Icon updated for "${home.name}"`, 'success');
+        });
+    },
+
     toggleHomesDropdown(event) {
         // Toggle the Homes dropdown menu
         event.stopPropagation();
@@ -13343,9 +14929,10 @@ Object.assign(app, {
                     item.classList.add('special');
                 }
 
-                // Display home name with keybind if it exists
+                // Display home icon + name with keybind if it exists
+                const icon = home.icon || '🏠';
                 const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
-                item.textContent = nameText;
+                item.textContent = `${icon} ${nameText}`;
 
                 item.onclick = (e) => {
                     e.stopPropagation();
@@ -13454,7 +15041,8 @@ Object.assign(app, {
             infoDiv.style.cssText = 'flex: 1;';
 
             const nameSpan = document.createElement('div');
-            nameSpan.textContent = home.name;
+            const icon = home.icon || '🏠';
+            nameSpan.textContent = `${icon} ${home.name}`;
             // Use light colors in dark mode for visibility
             const isDarkMode = document.body.classList.contains('dark-mode');
             const nameColor = home.name === "Origin Home" ? '#9c27b0' : (isDarkMode ? '#e2e8f0' : '#333');
@@ -13507,6 +15095,16 @@ Object.assign(app, {
                 this.setKeybindForHome(home.id);
             };
             actionsDiv.appendChild(keybindBtn);
+
+            // Set Icon button
+            const setIconBtn = document.createElement('button');
+            setIconBtn.className = 'secondary';
+            setIconBtn.textContent = `${home.icon || '🏠'} Icon`;
+            setIconBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+            setIconBtn.onclick = () => {
+                this.setHomeIcon(home.id);
+            };
+            actionsDiv.appendChild(setIconBtn);
 
             // Rename button
             const renameBtn = document.createElement('button');
@@ -13951,10 +15549,13 @@ Object.assign(app, {
      * 5. Update UI help text
      * 6. Initial render
      */
-    init() {
+    async init() {
         const data = localStorage.getItem('taskTree');
         const parsed = data ? JSON.parse(data) : null;
         const hasStoredViewBox = parsed && parsed.viewBoxX !== undefined && parsed.viewBoxY !== undefined;
+
+        // Initialize IndexedDB image store
+        await this.initImageStore();
 
         this.loadFromStorage();
 
@@ -13990,7 +15591,7 @@ Object.assign(app, {
 
         const helpElement = document.getElementById('shortcuts-help');
         if (helpElement) {
-            helpElement.textContent = `Double-click: edit | ${mod}+Dbl-click: create | ${shift}+Double-click: hide/show | ${mod}+Drag: reparent | Right-click: menu | ${mod}+Click: multi-select | Backspace: delete | Middle-click: cycle | ${mod}+K: link | P: priority | J: jump | ${shift}+Drag: subtree | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo`;
+            helpElement.textContent = `Double-click: edit | ${mod}+Dbl-click: create | ${shift}+Double-click: hide/show | ${mod}+Drag: reparent | Right-click: menu | ${mod}+Click: multi-select | Backspace: delete | Middle-click: cycle | ${mod}+K: link | P: priority | J: jump | ${shift}+Drag: subtree | ${mod}+C: copy | ${mod}+V: paste (auto-detects image) | ${mod}+Z: undo`;
         }
 
         // Update tooltips with platform-specific text
@@ -14033,11 +15634,20 @@ Object.assign(app, {
                 const taskId = parseInt(e.target.getAttribute('data-task-id'));
                 const relatedId = parseInt(e.target.getAttribute('data-related-id'));
 
-                this.resetArrowPosition({
+                // For source dots: taskId is parent, relatedId is child
+                // For target dots: taskId is child, relatedId is parent
+                const dotInfo = {
                     type: dotType,
-                    taskId: taskId,
-                    parentId: relatedId
-                });
+                    taskId: taskId
+                };
+
+                if (dotType === 'source') {
+                    dotInfo.childId = relatedId;
+                } else {
+                    dotInfo.parentId = relatedId;
+                }
+
+                this.resetArrowPosition(dotInfo);
 
                 e.preventDefault();
                 e.stopPropagation();
@@ -14164,22 +15774,25 @@ Object.assign(app, {
                 }
             }
 
-            // Click on line: select it
-            if (e.target.tagName === 'line' && e.target.classList.contains('link')) {
-                const line = e.target;
-                if (line.dataset.type && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                    // Select the line
-                    if (line.dataset.type === 'parent') {
+            // Click on arrow: select it (arrows can be <path> or <line> elements)
+            if ((e.target.tagName === 'path' || e.target.tagName === 'line') && e.target.classList.contains('link')) {
+                const arrow = e.target;
+                if (arrow.dataset.type && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    // Select the arrow
+                    if (arrow.dataset.type === 'parent') {
                         this.selectedLine = {
                             type: 'parent',
-                            taskId: parseInt(line.dataset.taskId),
-                            parentId: parseInt(line.dataset.parentId)
+                            taskId: parseInt(arrow.dataset.taskId),
+                            parentId: parseInt(arrow.dataset.parentId)
                         };
-                    } else if (line.dataset.type === 'dependency') {
+
+                        // Update timestamp to prioritize this arrow's dots
+                        this.updateArrowTimestamp(parseInt(arrow.dataset.taskId), parseInt(arrow.dataset.parentId));
+                    } else if (arrow.dataset.type === 'dependency') {
                         this.selectedLine = {
                             type: 'dependency',
-                            from: parseInt(line.dataset.from),
-                            to: parseInt(line.dataset.to)
+                            from: parseInt(arrow.dataset.from),
+                            to: parseInt(arrow.dataset.to)
                         };
                     }
                     this.selectedTaskIds.clear(); // Clear node selection
@@ -14473,15 +16086,11 @@ Object.assign(app, {
                 }
             }
 
-            // Ctrl/Cmd + V = paste subtree at cursor position
+            // Ctrl/Cmd + V = smart paste (auto-detect image vs subtree)
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
                 e.preventDefault();
-                if (!this.copiedSubtree) {
-                    this.showToast('❌ Clipboard empty - copy a subtree first (Ctrl+C)', 'error', 2000);
-                } else {
-                    // Paste at last known mouse position
-                    this.pasteSubtree(null, this.lastMousePosition.x, this.lastMousePosition.y);
-                }
+                // Smart paste: check clipboard for image first, then fall back to subtree
+                this.smartPaste();
             }
 
             // Ctrl/Cmd + K = attach link to selected node
@@ -14558,9 +16167,9 @@ console.log('✓ App initialization loaded');
 
 
 // Initialize app on load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     if (typeof app !== 'undefined' && typeof app.init === 'function') {
-        app.init();
+        await app.init();
     } else {
         console.error('App initialization failed: app.init() not found');
     }

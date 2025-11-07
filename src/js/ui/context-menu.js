@@ -190,6 +190,15 @@ export const ContextMenuMixin = {
                 buttons.push({ label: '🗑️ Remove All Links', action: () => this.removeAllLinks(taskId) });
             }
 
+            // Image management options
+            if (task.imageId) {
+                // Task has image - show remove option
+                buttons.push({ label: '🗑️ Remove Image', action: () => this.removeTaskImage(taskId) });
+            } else {
+                // No image - show paste image option
+                buttons.push({ label: '🖼️ Paste Image', action: () => this.pasteImage(taskId) });
+            }
+
             buttons.push({ label: '🗑️ Delete', action: () => this.deleteTask(taskId) });
         }
 
@@ -504,13 +513,14 @@ export const ContextMenuMixin = {
                     item.classList.add('special');
                 }
 
-                // Display home name with keybind if it exists
+                // Display home icon + name with keybind if it exists
+                const icon = home.icon || '🏠';
                 const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
 
                 // Don't use textContent - it can interfere with appendChild
                 // Instead, create a span for the text
                 const textSpan = document.createElement('span');
-                textSpan.textContent = nameText;
+                textSpan.textContent = `${icon} ${nameText}`;
                 item.appendChild(textSpan);
 
                 // Click on home name navigates to that home
@@ -594,6 +604,17 @@ export const ContextMenuMixin = {
                     this.updateHome(home.id);
                 };
                 homeSubmenu.appendChild(updateOption);
+
+                // Set Icon option
+                const setIconOption = document.createElement('div');
+                setIconOption.className = 'submenu-item';
+                setIconOption.textContent = `${home.icon || '🏠'} Set Icon`;
+                setIconOption.onclick = (evt) => {
+                    evt.stopPropagation();
+                    this.closeMenu();
+                    this.setHomeIcon(home.id);
+                };
+                homeSubmenu.appendChild(setIconOption);
 
                 // Append nested submenu to body (not to item) since it uses fixed positioning
                 // This avoids parent overflow issues

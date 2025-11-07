@@ -186,5 +186,112 @@ export const ModalsMixin = {
     hideTimeHistoryModal() {
         const modal = document.getElementById('time-history-modal');
         modal.classList.remove('show');
+    },
+
+    /**
+     * Show emoji picker modal for selecting an icon
+     * @param {string} title - Modal title
+     * @param {string} currentEmoji - Currently selected emoji
+     * @param {function} onConfirm - Callback with selected emoji
+     */
+    showEmojiPicker(title, currentEmoji, onConfirm) {
+        document.getElementById('emoji-picker-title').textContent = title;
+        const input = document.getElementById('emoji-custom-input');
+        input.value = currentEmoji || '';
+
+        const modal = document.getElementById('emoji-picker-modal');
+        modal.classList.add('show');
+
+        // Popular emojis organized by category
+        const emojiCategories = {
+            'Places & Navigation': ['🏠', '🏡', '🏢', '🏛️', '🏗️', '🏰', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '⛩️', '🗾', '🎪', '🎭'],
+            'Symbols': ['⭐', '🌟', '💫', '✨', '🔥', '💥', '⚡', '🌈', '☀️', '🌙', '⭕', '❌', '✅', '❗', '❓', '💯'],
+            'Arrows & Directions': ['➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '🔄', '🔁', '🔀', '🔃', '🔂', '▶️', '⏸️', '⏹️'],
+            'Flags & Markers': ['🚩', '🏁', '🏳️', '🏴', '🎌', '🎏', '📍', '📌', '📎', '🔖', '🏷️', '💼', '🗂️', '📂', '📁', '🗃️'],
+            'Activities': ['🎯', '🎲', '🎮', '🎰', '🎳', '🎸', '🎹', '🎺', '🎻', '🎬', '🎨', '🎭', '🎪', '🎢', '🎡', '🎠'],
+            'Work & Tools': ['💼', '📊', '📈', '📉', '🗂️', '📋', '📝', '🖊️', '✏️', '📌', '📍', '🔨', '⚒️', '🛠️', '⚙️', '🔧'],
+            'Nature': ['🌲', '🌳', '🌴', '🌵', '🌾', '🌿', '☘️', '🍀', '🍃', '🍂', '🍁', '🌺', '🌻', '🌹', '🌷', '💐'],
+            'Food & Drink': ['☕', '🍵', '🧃', '🧋', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🍾', '🍴', '🍽️', '🥄', '🥢']
+        };
+
+        const grid = document.getElementById('emoji-picker-grid');
+        grid.innerHTML = '';
+
+        // Add emojis to grid
+        Object.entries(emojiCategories).forEach(([category, emojis]) => {
+            // Category header spanning all columns
+            const header = document.createElement('div');
+            header.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 600; color: #666; margin-top: 8px; margin-bottom: 4px;';
+            header.textContent = category;
+            grid.appendChild(header);
+
+            // Emoji buttons
+            emojis.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.textContent = emoji;
+                btn.style.cssText = 'font-size: 24px; padding: 8px; background: white; border: 2px solid #ddd; border-radius: 6px; cursor: pointer; transition: all 0.2s;';
+                btn.onclick = () => {
+                    input.value = emoji;
+                    // Highlight selected
+                    grid.querySelectorAll('button').forEach(b => b.style.borderColor = '#ddd');
+                    btn.style.borderColor = '#007bff';
+                };
+                btn.onmouseenter = () => {
+                    if (btn.style.borderColor !== 'rgb(0, 123, 255)') {
+                        btn.style.borderColor = '#999';
+                        btn.style.transform = 'scale(1.1)';
+                    }
+                };
+                btn.onmouseleave = () => {
+                    if (btn.style.borderColor !== 'rgb(0, 123, 255)') {
+                        btn.style.borderColor = '#ddd';
+                        btn.style.transform = 'scale(1)';
+                    }
+                };
+                grid.appendChild(btn);
+            });
+        });
+
+        // Clone buttons to remove old event listeners
+        const okBtn = document.getElementById('emoji-picker-ok');
+        const cancelBtn = document.getElementById('emoji-picker-cancel');
+        const newOkBtn = okBtn.cloneNode(true);
+        const newCancelBtn = cancelBtn.cloneNode(true);
+        okBtn.replaceWith(newOkBtn);
+        cancelBtn.replaceWith(newCancelBtn);
+
+        newOkBtn.onclick = () => {
+            const value = input.value.trim();
+            this.hideEmojiPicker();
+            if (value && onConfirm) onConfirm(value);
+        };
+
+        newCancelBtn.onclick = () => {
+            this.hideEmojiPicker();
+        };
+
+        // Enter key submits
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = input.value.trim();
+                this.hideEmojiPicker();
+                if (value && onConfirm) onConfirm(value);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.hideEmojiPicker();
+            }
+        };
+
+        // Focus input after modal shows
+        setTimeout(() => input.focus(), 100);
+    },
+
+    /**
+     * Hide emoji picker modal
+     */
+    hideEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        modal.classList.remove('show');
     }
 };

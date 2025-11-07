@@ -111,6 +111,18 @@ export const NodesMixin = {
      */
     calculateTaskDimensions(task) {
         // Helper: Calculate task dimensions with multiline support
+
+        // For image nodes, use image dimensions with padding
+        if (task.imageId && task.imageWidth && task.imageHeight) {
+            const imagePadding = 20;
+            return {
+                width: task.imageWidth + imagePadding * 2,
+                height: task.imageHeight + imagePadding * 2,
+                lines: []
+            };
+        }
+
+        // For text nodes, calculate based on text content
         const padding = this.nodePadding;
         const charWidth = this.charWidth;
         const minWidth = this.minNodeWidth;

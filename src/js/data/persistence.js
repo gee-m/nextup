@@ -157,6 +157,13 @@ app.loadFromStorage = function() {
         this.homes = parsed.homes || [];
         this.homeIdCounter = parsed.homeIdCounter || 1;
 
+        // MIGRATION: Add default icon to homes that don't have one
+        this.homes.forEach(home => {
+            if (!home.icon) {
+                home.icon = '🏠';
+            }
+        });
+
         // MIGRATION: Convert old origin system to "Origin Home"
         if (parsed.originMarked && this.homes.length === 0) {
             this.homes.push({
@@ -165,7 +172,8 @@ app.loadFromStorage = function() {
                 centerX: parsed.originX || 0,
                 centerY: parsed.originY || 0,
                 zoomLevel: parsed.originZoomLevel || 1,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                icon: '🏠'
             });
             // Save immediately to persist migration
             setTimeout(() => {

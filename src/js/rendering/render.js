@@ -75,8 +75,8 @@ export const RenderMixin = {
         this.renderGrid();
 
         // PERF: Calculate visible viewport bounds for culling
-        // Add margin so tasks smoothly appear when scrolling
-        const VIEWPORT_MARGIN = 300;
+        // Add margin so tasks smoothly appear when scrolling (increased for smoother experience)
+        const VIEWPORT_MARGIN = 1000;
         const viewportBounds = {
             left: viewBoxX - VIEWPORT_MARGIN,
             right: viewBoxX + viewBoxWidth + VIEWPORT_MARGIN,
@@ -89,6 +89,27 @@ export const RenderMixin = {
             !task.hidden && this.isTaskVisible(task, viewportBounds)
         );
         const visibleTaskIds = new Set(visibleTasks.map(t => t.id));
+
+        // Trigger background loading for uncached images (non-blocking)
+        // Track loading images to prevent duplicate requests
+        if (!this._loadingImages) this._loadingImages = new Set();
+
+        visibleTasks.forEach(task => {
+            if (task.imageId && !this.imageCache.has(task.imageId) && !this._loadingImages.has(task.imageId)) {
+                // Mark as loading to prevent duplicate requests
+                this._loadingImages.add(task.imageId);
+
+                // Image not cached - trigger async load in background
+                this.getImage(task.imageId).then(() => {
+                    this._loadingImages.delete(task.imageId);
+                    // Re-render once when image loads to show it
+                    requestAnimationFrame(() => this.render());
+                }).catch(err => {
+                    this._loadingImages.delete(task.imageId);
+                    console.warn(`Failed to load image ${task.imageId}:`, err);
+                });
+            }
+        });
 
         // Find ALL working tasks (one per root graph) using the log for O(1) lookup
         const workingTasks = [];
@@ -509,6 +530,13 @@ export const RenderMixin = {
             if (task.hidden) g.classList.add('hidden');
             if (this.selectedTaskIds.has(task.id)) g.classList.add('selected');
 
+            // Add visual indicator for "tied" nodes (with custom attachments) while dragging
+            const hasCustomAttachments = (task.customAttachPoints && Object.keys(task.customAttachPoints).length > 0) ||
+                                         (task.customSourcePoints && Object.keys(task.customSourcePoints).length > 0);
+            if (this.dragMode === 'node' && this.selectedNode === task.id && hasCustomAttachments) {
+                g.classList.add('tied');
+            }
+
             // Determine display text (truncated or full)
             const isLongText = task.title.length > this.textLengthThreshold;
             const charsOverLimit = task.title.length - this.textLengthThreshold;
@@ -524,48 +552,60 @@ export const RenderMixin = {
                 isTruncated = true;
             }
 
-            // Calculate rect dimensions with multiline support
-            const padding = this.nodePadding;
-            const charWidth = this.charWidth;
-            const minWidth = this.minNodeWidth;
-            // When multiline is enabled, always use full text for wrapping (maxNodeHeight handles limiting)
-            // When multiline is disabled, use truncated displayTitle
-            // When editing, always use full text
-            const textForSizing = this.editingTaskId === task.id || this.enableMultiline ? task.title : displayTitle;
+            // Calculate rect dimensions
+            let rectWidth, rectHeight, lines;
+            const verticalPadding = 10; // Used for both image and text nodes
+            let isOverflowing = false; // Used in text rendering later
+            let actualRenderedLines = 0; // Used in text rendering later
+            const padding = this.nodePadding; // Used in text rendering later
 
-            // Wrap text into lines based on max width (subtract padding to ensure text fits within available space)
-            const availableWidth = this.maxNodeWidth - padding * 2;
-            const lines = this.wrapText(textForSizing, availableWidth, charWidth, this.wordWrap);
+            // For image nodes, size based on original image dimensions
+            if (task.imageId && task.imageWidth && task.imageHeight) {
+                const imagePadding = 20;
+                rectWidth = task.imageWidth + imagePadding * 2;
+                rectHeight = task.imageHeight + imagePadding * 2;
+                lines = []; // No text lines for image nodes
+            } else {
+                // For text nodes, calculate based on text
+                const charWidth = this.charWidth;
+                const minWidth = this.minNodeWidth;
+                // When multiline is enabled, always use full text for wrapping (maxNodeHeight handles limiting)
+                // When multiline is disabled, use truncated displayTitle
+                // When editing, always use full text
+                const textForSizing = this.editingTaskId === task.id || this.enableMultiline ? task.title : displayTitle;
 
-            // Calculate width: minimum of (maxNodeWidth OR longest line width OR minWidth)
-            const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
-            const rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
+                // Wrap text into lines based on max width (subtract padding to ensure text fits within available space)
+                const availableWidth = this.maxNodeWidth - padding * 2;
+                lines = this.wrapText(textForSizing, availableWidth, charWidth, this.wordWrap);
 
-            // Calculate height: lines * lineHeight + vertical padding
-            // Use fixed vertical padding (not nodePadding which is for horizontal)
-            const verticalPadding = 10;
-            const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
+                // Calculate width: minimum of (maxNodeWidth OR longest line width OR minWidth)
+                const longestLineWidth = Math.max(...lines.map(line => line.length * charWidth + padding * 2));
+                rectWidth = Math.max(minWidth, Math.min(this.maxNodeWidth, longestLineWidth));
 
-            // Determine if we should bypass maxNodeHeight and show full text
-            // - When editing: show all lines for easier editing
-            // - When selected: show all lines so user can see full text and use lock button
-            // - When already expanded (currentlyWorking, textLocked, etc.): show all lines
-            const shouldFullyExpand = this.editingTaskId === task.id || this.selectedTaskIds.has(task.id) || shouldExpand;
+                // Calculate height: lines * lineHeight + vertical padding
+                const calculatedHeight = lines.length * this.lineHeight + verticalPadding * 2;
 
-            // Check if text overflows BEFORE calculating rectHeight
-            const isOverflowing = this.maxNodeHeight > 0 && !shouldFullyExpand && calculatedHeight > this.maxNodeHeight;
+                // Determine if we should bypass maxNodeHeight and show full text
+                // - When editing: show all lines for easier editing
+                // - When selected: show all lines so user can see full text and use lock button
+                // - When already expanded (currentlyWorking, textLocked, etc.): show all lines
+                const shouldFullyExpand = this.editingTaskId === task.id || this.selectedTaskIds.has(task.id) || shouldExpand;
 
-            // Calculate how many lines will actually be rendered when overflowing
-            let actualRenderedLines = lines.length;
-            if (isOverflowing) {
-                const availableHeightForOverflow = this.maxNodeHeight - verticalPadding * 2;
-                actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
+                // Check if text overflows BEFORE calculating rectHeight
+                isOverflowing = this.maxNodeHeight > 0 && !shouldFullyExpand && calculatedHeight > this.maxNodeHeight;
+
+                // Calculate how many lines will actually be rendered when overflowing
+                actualRenderedLines = lines.length;
+                if (isOverflowing) {
+                    const availableHeightForOverflow = this.maxNodeHeight - verticalPadding * 2;
+                    actualRenderedLines = Math.floor(availableHeightForOverflow / this.lineHeight);
+                }
+
+                // Size rectangle based on actual rendered content (not blindly using maxNodeHeight)
+                rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
+                    ? actualRenderedLines * this.lineHeight + verticalPadding * 2
+                    : calculatedHeight;
             }
-
-            // Size rectangle based on actual rendered content (not blindly using maxNodeHeight)
-            const rectHeight = (this.maxNodeHeight > 0 && !shouldFullyExpand)
-                ? actualRenderedLines * this.lineHeight + verticalPadding * 2
-                : calculatedHeight;
 
             // ⭐ NEW: Rect positioned RELATIVE to group (centered at 0,0)
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -584,6 +624,11 @@ export const RenderMixin = {
             // For normal priority, let CSS handle it (no inline style needed)
 
             g.appendChild(rect);
+
+            // Render image if task has one
+            if (task.imageId) {
+                this.renderTaskImage(g, task, rectWidth, rectHeight);
+            }
 
             // Add link badge if task has links
             if (task.links && task.links.length > 0) {
@@ -955,41 +1000,57 @@ export const RenderMixin = {
             let dotToRender = this.arrowDotDrag.active ? {
                 type: this.arrowDotDrag.dotType,
                 taskId: this.arrowDotDrag.taskId,
-                parentId: this.arrowDotDrag.relatedTaskId
+                parentId: this.arrowDotDrag.relatedTaskId,
+                childId: this.arrowDotDrag.relatedChildId
             } : this.hoveredArrowDot;
 
             if (dotToRender) {
-                const task = this.tasks.find(t => t.id === dotToRender.taskId);
-                const parent = this.tasks.find(t => t.id === dotToRender.parentId);
+                const isSourceDot = dotToRender.type === 'source';
 
-                if (task && parent) {
+                // For source dots: taskId is parent, childId is child
+                // For target dots: taskId is child, parentId is parent
+                const dotOwner = this.tasks.find(t => t.id === dotToRender.taskId);
+                const relatedTask = isSourceDot ?
+                    this.tasks.find(t => t.id === dotToRender.childId) :
+                    this.tasks.find(t => t.id === dotToRender.parentId);
+
+                if (dotOwner && relatedTask) {
                     // Get dot position
                     let dotPos;
                     if (this.arrowDotDrag.active) {
-                        // During drag: use LIVE drag position for real-time cursor following
-                        const dims = this.calculateTaskDimensions(task);
+                        // During drag: use LIVE drag position
+                        const dims = this.calculateTaskDimensions(dotOwner);
                         dotPos = this.denormalizeEdgePosition(
                             this.arrowDotDrag.edge,
                             this.arrowDotDrag.normalized,
-                            task.x,
-                            task.y,
+                            dotOwner.x,
+                            dotOwner.y,
                             dims.width,
                             dims.height
                         );
                     } else {
                         // When hovering: use saved or default position
-                        dotPos = this.getArrowEndpoint(parent, task, 'target');
+                        if (isSourceDot) {
+                            // Source dot on parent node
+                            dotPos = this.getArrowEndpoint(dotOwner, relatedTask, 'source');
+                        } else {
+                            // Target dot on child node
+                            dotPos = this.getArrowEndpoint(relatedTask, dotOwner, 'target');
+                        }
                     }
 
-                    // Check if this arrow has a custom attach point (for coloring)
-                    const hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[dotToRender.parentId]);
+                    // Check if this arrow has a custom position (for coloring)
+                    const hasCustomPosition = isSourceDot ?
+                        !!(dotOwner.customSourcePoints && dotOwner.customSourcePoints[dotToRender.childId]) :
+                        !!(dotOwner.customAttachPoints && dotOwner.customAttachPoints[dotToRender.parentId]);
 
                     // Render the arrow dot
+                    const relatedId = isSourceDot ? dotToRender.childId : dotToRender.parentId;
                     const dot = this.renderArrowDot(
                         dotPos.x, dotPos.y,
                         dotToRender.type,
                         dotToRender.taskId,
-                        dotToRender.parentId,
+                        relatedId,
                         this.hoveredArrowDot !== null,
                         this.arrowDotDrag.active,
                         hasCustomPosition
@@ -1002,9 +1063,9 @@ export const RenderMixin = {
 
                     // Render snap indicators if dragging
                     if (this.arrowDotDrag.active) {
-                        const dims = this.calculateTaskDimensions(task);
+                        const dims = this.calculateTaskDimensions(dotOwner);
                         const indicators = this.renderSnapIndicators(
-                            task.x, task.y,
+                            dotOwner.x, dotOwner.y,
                             dims.width, dims.height,
                             this.arrowDotDrag.edge,
                             this.arrowDotDrag.normalized
@@ -1224,5 +1285,84 @@ export const RenderMixin = {
                 ${isLagging ? '<div style="color: #ff5252; font-weight: bold; text-align: center; margin-top: 4px;">⚠️ LAG DETECTED</div>' : ''}
             </div>
         `;
+    },
+
+    /**
+     * Render task image in SVG node
+     * @param {SVGElement} g - Group element to append to
+     * @param {Object} task - Task object with imageId
+     * @param {number} rectWidth - Rectangle width
+     * @param {number} rectHeight - Rectangle height
+     */
+    renderTaskImage(g, task, rectWidth, rectHeight) {
+        try {
+            // Get image blob URL from cache (already pre-loaded in render())
+            const blobUrl = this.imageCache.get(task.imageId);
+
+            if (!blobUrl) {
+                console.warn(`[render.js] Image not in cache for task ${task.id}: ${task.imageId}`);
+                return;
+            }
+
+            // Use original image dimensions (already stored in task)
+            const imageWidth = task.imageWidth || 200;
+            const imageHeight = task.imageHeight || 150;
+
+            // Create SVG image element at original size
+            const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            image.setAttribute('x', -imageWidth / 2);
+            image.setAttribute('y', -imageHeight / 2);
+            image.setAttribute('width', imageWidth);
+            image.setAttribute('height', imageHeight);
+            image.setAttribute('href', blobUrl);
+            image.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            image.style.pointerEvents = 'none';  // Don't block mouse events
+
+            g.appendChild(image);
+
+            // Add resize handles for selected image nodes
+            if (this.selectedTaskIds.has(task.id)) {
+                this.addResizeHandles(g, task, imageWidth, imageHeight);
+            }
+        } catch (error) {
+            console.error(`[render.js] Failed to render image for task ${task.id}:`, error);
+        }
+    },
+
+    /**
+     * Add resize handles to image node corners
+     * @param {SVGElement} g - Group element
+     * @param {Object} task - Task object
+     * @param {number} imageWidth - Current image width
+     * @param {number} imageHeight - Current image height
+     */
+    addResizeHandles(g, task, imageWidth, imageHeight) {
+        const handleSize = 12;
+        const handleOffset = 4;
+
+        // Corner positions
+        const corners = [
+            { x: imageWidth / 2 + handleOffset, y: imageHeight / 2 + handleOffset, cursor: 'nwse-resize', corner: 'se' },  // SE
+            { x: -imageWidth / 2 - handleOffset, y: imageHeight / 2 + handleOffset, cursor: 'nesw-resize', corner: 'sw' }, // SW
+            { x: imageWidth / 2 + handleOffset, y: -imageHeight / 2 - handleOffset, cursor: 'nesw-resize', corner: 'ne' }, // NE
+            { x: -imageWidth / 2 - handleOffset, y: -imageHeight / 2 - handleOffset, cursor: 'nwse-resize', corner: 'nw' }  // NW
+        ];
+
+        corners.forEach(({ x, y, cursor, corner }) => {
+            const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            handle.setAttribute('cx', x);
+            handle.setAttribute('cy', y);
+            handle.setAttribute('r', handleSize / 2);
+            handle.setAttribute('fill', '#2196f3');
+            handle.setAttribute('stroke', 'white');
+            handle.setAttribute('stroke-width', '2');
+            handle.style.cursor = cursor;
+            handle.style.pointerEvents = 'all';
+            handle.classList.add('resize-handle');
+            handle.dataset.taskId = task.id;
+            handle.dataset.corner = corner;
+
+            g.appendChild(handle);
+        });
     },
 };

@@ -26,10 +26,13 @@ Object.assign(app, {
      * 5. Update UI help text
      * 6. Initial render
      */
-    init() {
+    async init() {
         const data = localStorage.getItem('taskTree');
         const parsed = data ? JSON.parse(data) : null;
         const hasStoredViewBox = parsed && parsed.viewBoxX !== undefined && parsed.viewBoxY !== undefined;
+
+        // Initialize IndexedDB image store
+        await this.initImageStore();
 
         this.loadFromStorage();
 
@@ -65,7 +68,7 @@ Object.assign(app, {
 
         const helpElement = document.getElementById('shortcuts-help');
         if (helpElement) {
-            helpElement.textContent = `Double-click: edit | ${mod}+Dbl-click: create | ${shift}+Double-click: hide/show | ${mod}+Drag: reparent | Right-click: menu | ${mod}+Click: multi-select | Backspace: delete | Middle-click: cycle | ${mod}+K: link | P: priority | J: jump | ${shift}+Drag: subtree | ${mod}+C: copy | ${mod}+V: paste | ${mod}+Z: undo`;
+            helpElement.textContent = `Double-click: edit | ${mod}+Dbl-click: create | ${shift}+Double-click: hide/show | ${mod}+Drag: reparent | Right-click: menu | ${mod}+Click: multi-select | Backspace: delete | Middle-click: cycle | ${mod}+K: link | P: priority | J: jump | ${shift}+Drag: subtree | ${mod}+C: copy | ${mod}+V: paste (auto-detects image) | ${mod}+Z: undo`;
         }
 
         // Update tooltips with platform-specific text
@@ -108,11 +111,20 @@ Object.assign(app, {
                 const taskId = parseInt(e.target.getAttribute('data-task-id'));
                 const relatedId = parseInt(e.target.getAttribute('data-related-id'));
 
-                this.resetArrowPosition({
+                // For source dots: taskId is parent, relatedId is child
+                // For target dots: taskId is child, relatedId is parent
+                const dotInfo = {
                     type: dotType,
-                    taskId: taskId,
-                    parentId: relatedId
-                });
+                    taskId: taskId
+                };
+
+                if (dotType === 'source') {
+                    dotInfo.childId = relatedId;
+                } else {
+                    dotInfo.parentId = relatedId;
+                }
+
+                this.resetArrowPosition(dotInfo);
 
                 e.preventDefault();
                 e.stopPropagation();
@@ -239,22 +251,25 @@ Object.assign(app, {
                 }
             }
 
-            // Click on line: select it
-            if (e.target.tagName === 'line' && e.target.classList.contains('link')) {
-                const line = e.target;
-                if (line.dataset.type && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                    // Select the line
-                    if (line.dataset.type === 'parent') {
+            // Click on arrow: select it (arrows can be <path> or <line> elements)
+            if ((e.target.tagName === 'path' || e.target.tagName === 'line') && e.target.classList.contains('link')) {
+                const arrow = e.target;
+                if (arrow.dataset.type && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    // Select the arrow
+                    if (arrow.dataset.type === 'parent') {
                         this.selectedLine = {
                             type: 'parent',
-                            taskId: parseInt(line.dataset.taskId),
-                            parentId: parseInt(line.dataset.parentId)
+                            taskId: parseInt(arrow.dataset.taskId),
+                            parentId: parseInt(arrow.dataset.parentId)
                         };
-                    } else if (line.dataset.type === 'dependency') {
+
+                        // Update timestamp to prioritize this arrow's dots
+                        this.updateArrowTimestamp(parseInt(arrow.dataset.taskId), parseInt(arrow.dataset.parentId));
+                    } else if (arrow.dataset.type === 'dependency') {
                         this.selectedLine = {
                             type: 'dependency',
-                            from: parseInt(line.dataset.from),
-                            to: parseInt(line.dataset.to)
+                            from: parseInt(arrow.dataset.from),
+                            to: parseInt(arrow.dataset.to)
                         };
                     }
                     this.selectedTaskIds.clear(); // Clear node selection
@@ -548,15 +563,11 @@ Object.assign(app, {
                 }
             }
 
-            // Ctrl/Cmd + V = paste subtree at cursor position
+            // Ctrl/Cmd + V = smart paste (auto-detect image vs subtree)
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
                 e.preventDefault();
-                if (!this.copiedSubtree) {
-                    this.showToast('❌ Clipboard empty - copy a subtree first (Ctrl+C)', 'error', 2000);
-                } else {
-                    // Paste at last known mouse position
-                    this.pasteSubtree(null, this.lastMousePosition.x, this.lastMousePosition.y);
-                }
+                // Smart paste: check clipboard for image first, then fall back to subtree
+                this.smartPaste();
             }
 
             // Ctrl/Cmd + K = attach link to selected node

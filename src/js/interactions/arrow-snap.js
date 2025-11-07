@@ -89,20 +89,22 @@ export const ArrowSnapMixin = {
 
     /**
      * Find arrow dot near mouse position
-     * Returns dot info or null
+     * If multiple dots overlap, prioritizes the most recently moved (highest timestamp)
      *
      * @param {number} mouseX - Mouse X in SVG coordinates
      * @param {number} mouseY - Mouse Y in SVG coordinates
-     * @returns {{type: string, taskId: number, parentId: number, x: number, y: number}|null}
+     * @returns {{type: string, taskId: number, parentId: number, childId: number, x: number, y: number}|null}
      */
     findArrowDotNearMouse(mouseX, mouseY) {
         // DEFENSIVE: Validate radius
         const radius = this.arrowDotRadius || 5;
-        const radiusSquared = radius * radius;
 
         // PERF: Only check tasks near mouse cursor (rough viewport culling)
         // This avoids checking 100+ tasks when mouse is far away
         const QUICK_CHECK_MARGIN = 500;
+
+        // Collect ALL dots near mouse, then prioritize by timestamp
+        const nearbyDots = [];
 
         // Check all arrows (main parent + other parents)
         for (const task of this.tasks) {
@@ -122,13 +124,15 @@ export const ArrowSnapMixin = {
                     const endPos = this.getArrowEndpoint(parent, task, 'target');
 
                     if (this.isPointNearPosition(mouseX, mouseY, endPos.x, endPos.y, radius)) {
-                        return {
+                        const customPoint = task.customAttachPoints?.[task.mainParent];
+                        nearbyDots.push({
                             type: 'target',
                             taskId: task.id,
                             parentId: task.mainParent,
                             x: endPos.x,
-                            y: endPos.y
-                        };
+                            y: endPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
                     }
                 }
             }
@@ -139,19 +143,69 @@ export const ArrowSnapMixin = {
                 if (parent && !parent.hidden) {
                     const endPos = this.getArrowEndpoint(parent, task, 'target');
                     if (this.isPointNearPosition(mouseX, mouseY, endPos.x, endPos.y, radius)) {
-                        return {
+                        const customPoint = task.customAttachPoints?.[parentId];
+                        nearbyDots.push({
                             type: 'target',
                             taskId: task.id,
                             parentId: parentId,
                             x: endPos.x,
-                            y: endPos.y
-                        };
+                            y: endPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
+                    }
+                }
+            }
+
+            // Check main parent arrow (SOURCE end - where arrow starts from parent)
+            if (task.mainParent !== null) {
+                const parent = this.tasks.find(t => t.id === task.mainParent);
+                if (parent && !parent.hidden) {
+                    const startPos = this.getArrowEndpoint(parent, task, 'source');
+
+                    if (this.isPointNearPosition(mouseX, mouseY, startPos.x, startPos.y, radius)) {
+                        const customPoint = parent.customSourcePoints?.[task.id];
+                        nearbyDots.push({
+                            type: 'source',
+                            taskId: parent.id,  // Source dot belongs to parent node
+                            childId: task.id,   // Related to this child
+                            x: startPos.x,
+                            y: startPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
+                    }
+                }
+            }
+
+            // Check other parents (SOURCE end - where arrow starts from parent)
+            for (const parentId of task.otherParents || []) {
+                const parent = this.tasks.find(t => t.id === parentId);
+                if (parent && !parent.hidden) {
+                    const startPos = this.getArrowEndpoint(parent, task, 'source');
+                    if (this.isPointNearPosition(mouseX, mouseY, startPos.x, startPos.y, radius)) {
+                        const customPoint = parent.customSourcePoints?.[task.id];
+                        nearbyDots.push({
+                            type: 'source',
+                            taskId: parent.id,  // Source dot belongs to parent node
+                            childId: task.id,   // Related to this child
+                            x: startPos.x,
+                            y: startPos.y,
+                            timestamp: customPoint?.timestamp || 0
+                        });
                     }
                 }
             }
         }
 
-        return null;
+        // If no dots found, return null
+        if (nearbyDots.length === 0) return null;
+
+        // If multiple dots overlap, return the one with highest timestamp (most recently moved)
+        nearbyDots.sort((a, b) => b.timestamp - a.timestamp);
+
+        // Remove timestamp before returning (not needed in result)
+        const result = nearbyDots[0];
+        delete result.timestamp;
+        return result;
     },
 
     /**
@@ -355,20 +409,32 @@ export const ArrowSnapMixin = {
             // Source end
             const sourceDims = this.calculateTaskDimensions(sourceTask);
 
-            // Check for custom source point (not implemented yet for dragging, but structure is here)
-            // const customPoint = sourceTask.customSourcePoints?.[targetTask.id];
+            // Check for custom source point
+            const customPoint = sourceTask.customSourcePoints?.[targetTask.id];
 
-            // Use default calculation based on setting
-            if (this.arrowOppositeEdge) {
-                // New behavior: start from edge center facing target
-                return this.getOppositeEdgeCenter(
-                    targetTask.x, targetTask.y,
-                    sourceTask.x, sourceTask.y,
-                    sourceDims.width, sourceDims.height
+            if (customPoint) {
+                // Use custom position
+                return this.denormalizeEdgePosition(
+                    customPoint.edge,
+                    customPoint.normalized,
+                    sourceTask.x,
+                    sourceTask.y,
+                    sourceDims.width,
+                    sourceDims.height
                 );
             } else {
-                // Original behavior: start from center of source
-                return { x: sourceTask.x, y: sourceTask.y };
+                // Use default calculation based on setting
+                if (this.arrowOppositeEdge) {
+                    // New behavior: start from edge center facing target
+                    return this.getOppositeEdgeCenter(
+                        targetTask.x, targetTask.y,
+                        sourceTask.x, sourceTask.y,
+                        sourceDims.width, sourceDims.height
+                    );
+                } else {
+                    // Original behavior: start from center of source
+                    return { x: sourceTask.x, y: sourceTask.y };
+                }
             }
         }
     },
@@ -377,7 +443,7 @@ export const ArrowSnapMixin = {
      * Start dragging arrow dot
      * Called from onCanvasMouseDown when clicking on hoveredArrowDot
      *
-     * @param {object} dotInfo - Dot information {type, taskId, parentId}
+     * @param {object} dotInfo - Dot information {type, taskId, parentId, childId}
      */
     startArrowDotDrag(dotInfo) {
         if (!dotInfo) return;
@@ -399,6 +465,7 @@ export const ArrowSnapMixin = {
         let currentEdge, currentNormalized;
 
         if (dotInfo.type === 'target') {
+            // Target dot: dragging arrowhead on child node
             const customPoint = task.customAttachPoints?.[dotInfo.parentId];
             if (customPoint) {
                 currentEdge = customPoint.edge;
@@ -423,6 +490,32 @@ export const ArrowSnapMixin = {
                 currentEdge = constrained.edge;
                 currentNormalized = constrained.normalized;
             }
+        } else if (dotInfo.type === 'source') {
+            // Source dot: dragging arrow start on parent node
+            const customPoint = task.customSourcePoints?.[dotInfo.childId];
+            if (customPoint) {
+                currentEdge = customPoint.edge;
+                currentNormalized = customPoint.normalized;
+            } else {
+                // Calculate current default position
+                const child = this.tasks.find(t => t.id === dotInfo.childId);
+                if (!child) return;
+
+                const startPos = this.getOppositeEdgeCenter(
+                    child.x, child.y,
+                    task.x, task.y,
+                    cachedDims.width, cachedDims.height
+                );
+
+                // Convert to edge + normalized
+                const constrained = this.constrainToRectEdge(
+                    startPos.x, startPos.y,
+                    task.x, task.y,
+                    cachedDims.width, cachedDims.height
+                );
+                currentEdge = constrained.edge;
+                currentNormalized = constrained.normalized;
+            }
         }
 
         // Set drag state with cached values
@@ -430,7 +523,7 @@ export const ArrowSnapMixin = {
             active: true,
             dotType: dotInfo.type,
             taskId: dotInfo.taskId,
-            relatedTaskId: dotInfo.parentId,
+            relatedTaskId: dotInfo.type === 'target' ? dotInfo.parentId : dotInfo.childId,
             edge: currentEdge,
             normalized: currentNormalized,
             lastRenderTime: 0,
@@ -441,7 +534,11 @@ export const ArrowSnapMixin = {
         };
 
         // GPU ACCEL: Add class to arrow link for GPU acceleration
-        const arrowSelector = `.parent-visible[data-task-id="${dotInfo.taskId}"][data-parent-id="${dotInfo.parentId}"]`;
+        // For source dots, the arrow is from taskId (parent) to childId
+        // For target dots, the arrow is from parentId to taskId (child)
+        const parentId = dotInfo.type === 'source' ? dotInfo.taskId : dotInfo.parentId;
+        const childId = dotInfo.type === 'source' ? dotInfo.childId : dotInfo.taskId;
+        const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
         const arrowLine = document.querySelector(arrowSelector);
         if (arrowLine) {
             arrowLine.classList.add('dragging-arrow');
@@ -517,8 +614,8 @@ export const ArrowSnapMixin = {
         const task = this.tasks.find(t => t.id === this.arrowDotDrag.taskId);
         if (!task) return;
 
-        const parent = this.tasks.find(t => t.id === this.arrowDotDrag.relatedTaskId);
-        if (!parent) return;
+        const relatedTask = this.tasks.find(t => t.id === this.arrowDotDrag.relatedTaskId);
+        if (!relatedTask) return;
 
         const dims = this.arrowDotDrag.cachedDims;
 
@@ -543,39 +640,59 @@ export const ArrowSnapMixin = {
         dotElement.setAttribute('cy', dotPos.y);
         dotElement.setAttribute('r', this.arrowDotDragSize || 7);
 
-        // Determine color based on whether position is custom
-        const hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[this.arrowDotDrag.relatedTaskId]);
+        // Determine color based on whether position is custom and dot type
+        let hasCustomPosition;
+        if (this.arrowDotDrag.dotType === 'source') {
+            hasCustomPosition = !!(task.customSourcePoints && task.customSourcePoints[this.arrowDotDrag.relatedTaskId]);
+        } else {
+            hasCustomPosition = !!(task.customAttachPoints && task.customAttachPoints[this.arrowDotDrag.relatedTaskId]);
+        }
         dotElement.setAttribute('fill', hasCustomPosition ? '#2196f3' : '#4caf50');
 
-        // Find and update arrow line endpoint
-        // Look for the specific arrow being dragged
-        const arrowSelector = `.parent-visible[data-task-id="${task.id}"][data-parent-id="${parent.id}"]`;
+        // Find and update arrow line
+        // For source dots: arrow is from taskId (parent) to relatedTaskId (child)
+        // For target dots: arrow is from relatedTaskId (parent) to taskId (child)
+        const parentId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.taskId : this.arrowDotDrag.relatedTaskId;
+        const childId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.relatedTaskId : this.arrowDotDrag.taskId;
+        const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
         const arrowLine = document.querySelector(arrowSelector);
 
         if (arrowLine) {
-            // Update arrow endpoint to match dot
+            // Update arrow to match dot
             // All arrows are <path> elements (created by createMultiSegmentCurvedLine)
             if (arrowLine.tagName === 'path') {
-                // Get arrow start point (source)
-                const arrowStart = this.getArrowEndpoint(parent, task, 'source');
+                // Get the OTHER end of the arrow (the one we're NOT dragging)
+                let arrowStart, arrowEnd;
+                const parentTask = this.tasks.find(t => t.id === parentId);
+                const childTask = this.tasks.find(t => t.id === childId);
 
-                // Get control points for this arrow
-                const controlPoints = task.curveControlPoints?.[parent.id];
+                if (this.arrowDotDrag.dotType === 'source') {
+                    // Dragging source dot - start is what we're dragging, end is fixed
+                    arrowStart = dotPos;
+                    arrowEnd = this.getArrowEndpoint(parentTask, childTask, 'target');
+                } else {
+                    // Dragging target dot - start is fixed, end is what we're dragging
+                    arrowStart = this.getArrowEndpoint(parentTask, childTask, 'source');
+                    arrowEnd = dotPos;
+                }
+
+                // Get control points for this arrow (stored on child task)
+                const controlPoints = childTask.curveControlPoints?.[parentId];
 
                 // Check if we're also dragging curve control points
                 const isDraggingThisCurve = this.curveDotDrag.active &&
-                                            this.curveDotDrag.taskId === task.id &&
-                                            this.curveDotDrag.parentId === parent.id;
+                                            this.curveDotDrag.taskId === childId &&
+                                            this.curveDotDrag.parentId === parentId;
                 const effectiveControlPoints = isDraggingThisCurve ?
                     this.curveDotDrag.controlPoints : controlPoints;
 
-                // Recreate the path with new endpoint
+                // Recreate the path with new endpoints
                 if (effectiveControlPoints && effectiveControlPoints.length > 0) {
                     // Multi-segment curve - use Catmull-Rom spline
                     const points = [
                         { x: arrowStart.x, y: arrowStart.y },
                         ...effectiveControlPoints,
-                        { x: dotPos.x, y: dotPos.y }
+                        { x: arrowEnd.x, y: arrowEnd.y }
                     ];
 
                     let pathData = `M ${points[0].x} ${points[0].y}`;
@@ -595,7 +712,7 @@ export const ArrowSnapMixin = {
                     arrowLine.setAttribute('d', pathData);
                 } else {
                     // Straight line - simple path
-                    arrowLine.setAttribute('d', `M ${arrowStart.x} ${arrowStart.y} L ${dotPos.x} ${dotPos.y}`);
+                    arrowLine.setAttribute('d', `M ${arrowStart.x} ${arrowStart.y} L ${arrowEnd.x} ${arrowEnd.y}`);
                 }
             }
         }
@@ -631,21 +748,35 @@ export const ArrowSnapMixin = {
             return;
         }
 
-        // Initialize customAttachPoints if needed
-        if (!task.customAttachPoints) {
-            task.customAttachPoints = {};
-        }
-
-        // Save custom position
+        // Save custom position based on dot type (with timestamp for prioritization)
         if (this.arrowDotDrag.dotType === 'target') {
+            // Target dot: save to customAttachPoints (arrow endpoint on child)
+            if (!task.customAttachPoints) {
+                task.customAttachPoints = {};
+            }
             task.customAttachPoints[this.arrowDotDrag.relatedTaskId] = {
                 edge: this.arrowDotDrag.edge,
-                normalized: this.arrowDotDrag.normalized
+                normalized: this.arrowDotDrag.normalized,
+                timestamp: Date.now()  // For prioritization when overlapping
+            };
+        } else if (this.arrowDotDrag.dotType === 'source') {
+            // Source dot: save to customSourcePoints (arrow start on parent)
+            if (!task.customSourcePoints) {
+                task.customSourcePoints = {};
+            }
+            task.customSourcePoints[this.arrowDotDrag.relatedTaskId] = {
+                edge: this.arrowDotDrag.edge,
+                normalized: this.arrowDotDrag.normalized,
+                timestamp: Date.now()  // For prioritization when overlapping
             };
         }
 
         // GPU ACCEL: Remove dragging-arrow class
-        const arrowSelector = `.parent-visible[data-task-id="${this.arrowDotDrag.taskId}"][data-parent-id="${this.arrowDotDrag.relatedTaskId}"]`;
+        // For source dots, the arrow is from taskId (parent) to relatedTaskId (child)
+        // For target dots, the arrow is from relatedTaskId (parent) to taskId (child)
+        const parentId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.taskId : this.arrowDotDrag.relatedTaskId;
+        const childId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.relatedTaskId : this.arrowDotDrag.taskId;
+        const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
         const arrowLine = document.querySelector(arrowSelector);
         if (arrowLine) {
             arrowLine.classList.remove('dragging-arrow');
@@ -679,7 +810,11 @@ export const ArrowSnapMixin = {
     cancelArrowDotDrag() {
         // GPU ACCEL: Remove dragging-arrow class if exists
         if (this.arrowDotDrag.taskId && this.arrowDotDrag.relatedTaskId) {
-            const arrowSelector = `.parent-visible[data-task-id="${this.arrowDotDrag.taskId}"][data-parent-id="${this.arrowDotDrag.relatedTaskId}"]`;
+            // For source dots: arrow is from taskId (parent) to relatedTaskId (child)
+            // For target dots: arrow is from relatedTaskId (parent) to taskId (child)
+            const parentId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.taskId : this.arrowDotDrag.relatedTaskId;
+            const childId = this.arrowDotDrag.dotType === 'source' ? this.arrowDotDrag.relatedTaskId : this.arrowDotDrag.taskId;
+            const arrowSelector = `.parent-visible[data-task-id="${childId}"][data-parent-id="${parentId}"]`;
             const arrowLine = document.querySelector(arrowSelector);
             if (arrowLine) {
                 arrowLine.classList.remove('dragging-arrow');
@@ -703,9 +838,81 @@ export const ArrowSnapMixin = {
     },
 
     /**
+     * Update timestamp for a specific arrow (both source and target endpoints)
+     * Used when selecting an arrow or moving a connected node
+     *
+     * @param {number} childId - Child task ID
+     * @param {number} parentId - Parent task ID
+     */
+    updateArrowTimestamp(childId, parentId) {
+        const child = this.tasks.find(t => t.id === childId);
+        const parent = this.tasks.find(t => t.id === parentId);
+
+        if (!child || !parent) return;
+
+        const timestamp = Date.now();
+
+        // Update target endpoint (arrow landing on child)
+        if (child.customAttachPoints && child.customAttachPoints[parentId]) {
+            child.customAttachPoints[parentId].timestamp = timestamp;
+        }
+
+        // Update source endpoint (arrow starting from parent)
+        if (parent.customSourcePoints && parent.customSourcePoints[childId]) {
+            parent.customSourcePoints[childId].timestamp = timestamp;
+        }
+    },
+
+    /**
+     * Update timestamps for all arrows connected to a node
+     * Used when moving a node to prioritize its arrows
+     *
+     * @param {number} taskId - Task ID that was moved
+     */
+    updateConnectedArrowsTimestamps(taskId) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const timestamp = Date.now();
+
+        // Update all parent arrows (arrows coming INTO this node)
+        const allParents = [task.mainParent, ...(task.otherParents || [])].filter(p => p !== null);
+        for (const parentId of allParents) {
+            const parent = this.tasks.find(t => t.id === parentId);
+            if (!parent) continue;
+
+            // Update target endpoint on child
+            if (task.customAttachPoints && task.customAttachPoints[parentId]) {
+                task.customAttachPoints[parentId].timestamp = timestamp;
+            }
+
+            // Update source endpoint on parent
+            if (parent.customSourcePoints && parent.customSourcePoints[taskId]) {
+                parent.customSourcePoints[taskId].timestamp = timestamp;
+            }
+        }
+
+        // Update all child arrows (arrows going OUT from this node)
+        for (const childId of task.children || []) {
+            const child = this.tasks.find(t => t.id === childId);
+            if (!child) continue;
+
+            // Update target endpoint on child
+            if (child.customAttachPoints && child.customAttachPoints[taskId]) {
+                child.customAttachPoints[taskId].timestamp = timestamp;
+            }
+
+            // Update source endpoint on this node
+            if (task.customSourcePoints && task.customSourcePoints[childId]) {
+                task.customSourcePoints[childId].timestamp = timestamp;
+            }
+        }
+    },
+
+    /**
      * Reset arrow to default position (double-click or context menu)
      *
-     * @param {object} dotInfo - Dot information {type, taskId, parentId}
+     * @param {object} dotInfo - Dot information {type, taskId, parentId, childId}
      */
     resetArrowPosition(dotInfo) {
         if (!dotInfo) return;
@@ -716,9 +923,19 @@ export const ArrowSnapMixin = {
         if (!task) return;
 
         if (dotInfo.type === 'target') {
-            // Remove custom attach point
+            // Remove custom attach point (child-side)
             if (task.customAttachPoints && task.customAttachPoints[dotInfo.parentId]) {
                 delete task.customAttachPoints[dotInfo.parentId];
+
+                this.saveToStorage();
+                this.render();
+
+                this.showToast('Arrow position reset', 'success', 2000);
+            }
+        } else if (dotInfo.type === 'source') {
+            // Remove custom source point (parent-side)
+            if (task.customSourcePoints && task.customSourcePoints[dotInfo.childId]) {
+                delete task.customSourcePoints[dotInfo.childId];
 
                 this.saveToStorage();
                 this.render();

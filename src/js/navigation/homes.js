@@ -99,7 +99,8 @@ export const HomesMixin = {
             centerY: centerY,
             zoomLevel: this.zoomLevel,
             timestamp: Date.now(),
-            keybind: null  // No keybind by default
+            keybind: null,  // No keybind by default
+            icon: '🏠'  // Default home icon
         };
 
         this.homes.push(newHome);
@@ -303,6 +304,33 @@ export const HomesMixin = {
         return true;
     },
 
+    setHomeIcon(homeId) {
+        // Set a custom emoji icon for a home
+        const home = this.homes.find(h => h.id === homeId);
+        if (!home) return;
+
+        // Show emoji picker to get emoji from user
+        const title = `Set Icon for "${home.name}"`;
+
+        this.showEmojiPicker(title, home.icon || '🏠', (newIcon) => {
+            if (!newIcon || newIcon.trim() === '') {
+                this.showToast('Icon cannot be empty', 'error');
+                return;
+            }
+
+            const trimmedIcon = newIcon.trim();
+
+            // Update the icon
+            home.icon = trimmedIcon;
+            home.timestamp = Date.now();
+
+            this.saveToStorage();
+            this.renderManageHomesModal();
+            this.render();  // Update indicators
+            this.showToast(`✓ Icon updated for "${home.name}"`, 'success');
+        });
+    },
+
     toggleHomesDropdown(event) {
         // Toggle the Homes dropdown menu
         event.stopPropagation();
@@ -347,9 +375,10 @@ export const HomesMixin = {
                     item.classList.add('special');
                 }
 
-                // Display home name with keybind if it exists
+                // Display home icon + name with keybind if it exists
+                const icon = home.icon || '🏠';
                 const nameText = home.keybind ? `${home.name} [${home.keybind}]` : home.name;
-                item.textContent = nameText;
+                item.textContent = `${icon} ${nameText}`;
 
                 item.onclick = (e) => {
                     e.stopPropagation();
@@ -458,7 +487,8 @@ export const HomesMixin = {
             infoDiv.style.cssText = 'flex: 1;';
 
             const nameSpan = document.createElement('div');
-            nameSpan.textContent = home.name;
+            const icon = home.icon || '🏠';
+            nameSpan.textContent = `${icon} ${home.name}`;
             // Use light colors in dark mode for visibility
             const isDarkMode = document.body.classList.contains('dark-mode');
             const nameColor = home.name === "Origin Home" ? '#9c27b0' : (isDarkMode ? '#e2e8f0' : '#333');
@@ -511,6 +541,16 @@ export const HomesMixin = {
                 this.setKeybindForHome(home.id);
             };
             actionsDiv.appendChild(keybindBtn);
+
+            // Set Icon button
+            const setIconBtn = document.createElement('button');
+            setIconBtn.className = 'secondary';
+            setIconBtn.textContent = `${home.icon || '🏠'} Icon`;
+            setIconBtn.style.cssText = 'padding: 6px 12px; font-size: 13px;';
+            setIconBtn.onclick = () => {
+                this.setHomeIcon(home.id);
+            };
+            actionsDiv.appendChild(setIconBtn);
 
             // Rename button
             const renameBtn = document.createElement('button');

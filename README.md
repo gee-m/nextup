@@ -949,6 +949,51 @@ Stored in localStorage as:
 3. **Duplication**: Duplicate complex subtrees instead of recreating manually
 4. **Reorganization**: Copy subtree → paste in new location → delete original
 
+### 🖼️ Image Support
+
+**Attach images directly to tasks** for visual references, mockups, screenshots, or diagrams.
+
+#### Features
+
+- **Paste from clipboard**: Copy image to clipboard → Press Ctrl+V (⌘+V) in Task Tree → Image appears as node
+- **Smart paste detection**: Automatically detects whether clipboard contains image or text subtree
+- **Original resolution**: Images keep their original dimensions (resizable with drag handles)
+- **Drag to resize**: Select image node → Drag corner handles to resize (maintains aspect ratio)
+- **IndexedDB storage**: Images stored in IndexedDB (~50MB+ capacity) separate from localStorage
+- **ZIP export/import**: Export creates `.zip` with `tasks.json` + `images/` folder
+- **Context menu**: Right-click → "Paste Image" or "Remove Image"
+- **5MB size limit**: Prevents excessive memory usage
+
+#### Performance Optimization
+
+**Smooth rendering** - Images load without flickering or "pop-in":
+- **Background loading**: Images load asynchronously without blocking render loop
+- **In-memory cache**: Blob URLs cached for instant re-use during panning/dragging
+- **Duplicate prevention**: Tracks loading state to avoid requesting same image multiple times
+- **Progressive rendering**: Tree renders immediately, images appear as they load
+- **No re-render loops**: Uses `requestAnimationFrame` to batch updates efficiently
+
+**Technical details** (`src/js/rendering/render.js:93-112`):
+```javascript
+// Trigger background loading for uncached images (non-blocking)
+visibleTasks.forEach(task => {
+    if (task.imageId && !this.imageCache.has(task.imageId) && !this._loadingImages.has(task.imageId)) {
+        this._loadingImages.add(task.imageId); // Prevent duplicates
+        this.getImage(task.imageId).then(() => {
+            this._loadingImages.delete(task.imageId);
+            requestAnimationFrame(() => this.render()); // Re-render once when loaded
+        });
+    }
+});
+```
+
+#### Use Cases
+
+- **UI mockups**: Attach design screenshots to implementation tasks
+- **Bug reports**: Paste error screenshots directly into bug tasks
+- **Architecture diagrams**: Visual system design references
+- **Reference images**: Inspiration, examples, or requirements
+
 ### 🎯 Advanced Features
 
 #### Smart Behaviors
@@ -7028,4 +7073,173 @@ Ctrl+double-click empty → Root appears at cursor → Editing immediately
 **Version**: 1.19.0 (Ctrl+Double-Click Create & Reparenting Restore)
 **Files Modified**: task-tree.html (107 insertions, 15 deletions), README.md
 **Implementation Time**: ~2 hours
+
+---
+
+### Session N+3: Arrow Attachment Customization & Hover Copy
+
+**Date**: 2025-11-06
+
+#### 🎯 Overview
+
+Implemented comprehensive arrow customization system with draggable attachment points for both parent and child sides of arrows, plus hover-based copying of arrow configurations.
+
+#### ✨ Feature 1: Parent-Side Arrow Endpoint Dragging
+
+**Problem**: Previously, only child-side arrow endpoints (where arrows land) were draggable. Users couldn't customize where arrows start from parent nodes.
+
+**Solution**: Implemented full support for dragging source endpoints (parent-side) with the same UX as target endpoints.
+
+**Implementation Details**:
+- **Source dot detection** in `findArrowDotNearMouse()` (arrow-snap.js:153-186)
+  - Detects hover on arrow start points (parent nodes)
+  - Returns `{type: 'source', taskId: parentId, childId: childId}`
+- **Source dot rendering** in `render()` (render.js:998-1081)
+  - Renders draggable dots at arrow start positions
+  - Uses same visual styling as target dots (green/blue based on customization)
+- **Drag handling** in `startArrowDotDrag()` (arrow-snap.js:462-488)
+  - Handles both source and target dot types
+  - Calculates default positions with `getOppositeEdgeCenter()`
+- **Save to customSourcePoints** in `finishArrowDotDrag()` (arrow-snap.js:710-719)
+  - Stores source positions in `task.customSourcePoints[childId]`
+  - Parallel to existing `customAttachPoints[parentId]` structure
+- **Apply custom positions** in `getArrowEndpoint()` (arrow-snap.js:393-406)
+  - Checks `sourceTask.customSourcePoints?.[targetTask.id]`
+  - Uses custom position if exists, otherwise calculates default
+
+**Data Structure**:
+```javascript
+task.customSourcePoints = {
+  [childId]: { edge: 'top'|'bottom'|'left'|'right', normalized: 0-1 }
+}
+```
+
+**User Experience**:
+- Hover near arrow start → green/blue dot appears
+- Drag dot → arrow smoothly follows
+- Release → position saved
+- Works identically to child-side dragging
+
+#### ✨ Feature 2: Arrow Attachment Hover Copy
+
+**Problem**: When repositioning multiple similar nodes, users had to manually drag arrow endpoints for each one, even if they wanted the same configuration.
+
+**Solution**: Implemented hover-based copying that transfers arrow attachment points from one node to another by hovering during drag.
+
+**How It Works**:
+1. **Start dragging node B** (normal node drag)
+2. **Hover over node A for 750ms** → Copies A's arrow configurations to B
+3. **Move to empty space** → Commits the copy (allows copying from multiple nodes)
+4. **Hover over node C for 750ms** → Copies C's configurations to B (additive)
+5. **Hover over same node again** → Reverts that specific copy (toggle behavior)
+
+**Implementation Details**:
+- **Hover detection** in `onCanvasMouseMove()` (mouse.js:336-348)
+  - Uses `elementFromPoint()` with temporary `pointer-events: none` trick
+  - Dragged node hidden from detection so hover target is found correctly
+- **750ms timer** with toggle logic (mouse.js:365-378)
+  - Starts timer on new hover target
+  - `shouldRevert` flag determines copy vs revert
+- **Copy logic** in `handleArrowAttachmentHoverCopy()` (mouse.js:869-994)
+  - Finds shared parents (arrows coming INTO both nodes)
+  - Finds shared children (arrows going OUT from both nodes)
+  - Copies both TARGET points (where arrows land) and SOURCE points (where arrows start)
+  - Calculates default positions if custom positions don't exist
+- **Save/revert system** (mouse.js:834-861)
+  - `saveOriginalArrowAttachments()` - Deep clones original state
+  - `revertArrowAttachments()` - Restores from saved state
+- **Multiple copies per drag** (mouse.js:391-401)
+  - Moving to empty space commits current copy
+  - Updates saved original to current state
+  - Resets `_attachmentCopyApplied` flag to allow next copy
+
+**Visual Feedback**:
+- **Blue pulsing glow** on nodes with custom attachments while dragging (task-nodes.css:59-73)
+  - `.task-node.tied` class with pulse animation
+  - Makes it clear which nodes have custom arrow points
+- **Large success toast** (3 second duration) when copy occurs (mouse.js:991)
+  - Shows count of attachments copied
+  - "✨ Copied N arrow attachments from hover target!"
+- **Green flash animation** on dragged node when copy occurs (task-nodes.css:75-92)
+  - `.attachment-copied-flash` class
+  - 600ms green glow animation for immediate visual confirmation
+
+**Smart Copying**:
+- Only copies matching relationships (shared parents/children)
+- Copies both custom positions AND calculated default positions
+- Works with `mainParent`, `otherParents`, and all children
+- Handles cases where hover target has no custom positions (calculates and copies defaults)
+
+**Data Copied**:
+```javascript
+// For each shared parent relationship:
+task.customAttachPoints[parentId] = hoveredTask's target point
+parent.customSourcePoints[task.id] = parent's source point for hoveredTask
+
+// For each shared child relationship:
+child.customAttachPoints[task.id] = child's target point for hoveredTask
+task.customSourcePoints[childId] = hoveredTask's source point for child
+```
+
+#### 🎨 UX Enhancements
+
+**Visual Indicators**:
+- **Blue pulsing border** (`pulse-tied` animation) on dragged nodes with custom attachments
+- **Flash animation** (`flash-copy` keyframes) on successful copy - green glow at 0%, bright green at 50%, fade at 100%
+- **Prominent toast messages** with longer duration (3000ms success, 2000ms warning)
+
+**Interaction Design**:
+- **750ms hover delay** prevents accidental copies
+- **Once per hover** prevents spam (must move away and back to re-trigger)
+- **Toggle behavior** allows reverting mistakes by hovering same node again
+- **Multiple copies** enabled by moving to empty space between copies
+
+#### 📁 Files Modified
+
+**Core Implementation**:
+- `src/js/rendering/render.js` - Source dot rendering logic
+- `src/js/interactions/arrow-snap.js` - Source dot dragging and `getArrowEndpoint()` updates
+- `src/js/interactions/mouse.js` - Hover copy detection and logic
+- `src/styles/task-nodes.css` - Visual feedback animations
+
+**Changes Summary**:
+- arrow-snap.js: ~80 lines modified (source dot support)
+- mouse.js: ~170 lines added (hover copy feature)
+- render.js: ~40 lines modified (source dot rendering)
+- task-nodes.css: ~20 lines added (animations)
+
+#### 🐛 Bug Fixes
+
+**Hover Detection Issue**:
+- **Problem**: `elementFromPoint()` always detected dragged node (cursor follows it)
+- **Solution**: Temporarily set `pointer-events: none` on dragged node during detection
+- **Impact**: Hover copy now works reliably
+
+**Arrow Endpoint Calculation**:
+- **Problem**: Source points weren't being used in arrow rendering
+- **Solution**: Uncommented and implemented `customSourcePoints` check in `getArrowEndpoint()`
+- **Impact**: Both source and target customization now render correctly
+
+#### 🎯 User Impact
+
+**New Workflows Enabled**:
+- ✅ **Full arrow customization**: Control both ends of every arrow
+- ✅ **Efficient repositioning**: Copy arrow configs instead of redoing manually
+- ✅ **Batch styling**: Hover over template node to copy its arrow style to multiple nodes
+- ✅ **Visual consistency**: Easily maintain consistent arrow positions across similar nodes
+
+**Use Cases**:
+1. **Organizational charts**: Align all arrows from managers to reports consistently
+2. **Process flows**: Make parallel branches have matching arrow positions
+3. **Mind maps**: Copy radial arrow positions from one hub to another
+4. **Hierarchies**: Ensure consistent arrow styling across same-level nodes
+
+**Performance**:
+- Hover detection uses `elementFromPoint()` (O(1) DOM query)
+- Copy operation is O(relationships) - only processes shared edges
+- No performance impact on normal dragging (only activates on hover)
+
+**Version**: 1.20.0 (Arrow Attachment Customization & Hover Copy)
+**Files Modified**: 4 files, ~310 lines changed
+**Implementation Time**: ~3 hours
 

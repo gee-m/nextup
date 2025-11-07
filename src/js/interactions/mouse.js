@@ -11,7 +11,17 @@ export const MouseMixin = {
         // Don't start drag if we're editing
         if (this.editingTaskId !== null) return;
 
-        // Check if clicking on arrow dot (highest priority)
+        // Check if clicking on resize handle (highest priority)
+        if (e.target.classList && e.target.classList.contains('resize-handle')) {
+            const taskId = parseInt(e.target.dataset.taskId);
+            const corner = e.target.dataset.corner;
+            this.startImageResize(taskId, corner, e);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        // Check if clicking on arrow dot (high priority)
         if (e.target.classList && e.target.classList.contains('arrow-dot')) {
             const dotType = e.target.getAttribute('data-dot-type');
             const taskId = parseInt(e.target.getAttribute('data-task-id'));
@@ -39,11 +49,20 @@ export const MouseMixin = {
             setTimeout(() => {
                 // Only start drag if not double-clicked in the meantime
                 if (this.arrowDotDrag.lastClickedDotId === dotId) {
-                    this.startArrowDotDrag({
+                    // For source dots: taskId is parent, relatedId is child
+                    // For target dots: taskId is child, relatedId is parent
+                    const dotInfo = {
                         type: dotType,
-                        taskId: taskId,
-                        parentId: relatedId
-                    });
+                        taskId: taskId
+                    };
+
+                    if (dotType === 'source') {
+                        dotInfo.childId = relatedId;
+                    } else {
+                        dotInfo.parentId = relatedId;
+                    }
+
+                    this.startArrowDotDrag(dotInfo);
                 }
             }, 250);
 
@@ -174,6 +193,51 @@ export const MouseMixin = {
         const pt = this.getSVGPoint(e);
         this.lastMousePosition = { x: pt.x, y: pt.y };
 
+        // Handle image resizing
+        if (this.imageResizing) {
+            const task = this.tasks.find(t => t.id === this.imageResizing.taskId);
+            if (!task) return;
+
+            const dx = pt.x - this.imageResizing.startPoint.x;
+            const dy = pt.y - this.imageResizing.startPoint.y;
+
+            // Calculate new dimensions based on corner
+            let newWidth = this.imageResizing.originalWidth;
+            let newHeight = this.imageResizing.originalHeight;
+
+            switch (this.imageResizing.corner) {
+                case 'se': // Southeast - drag right/down
+                    newWidth = this.imageResizing.originalWidth + dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+                case 'sw': // Southwest - drag left/down
+                    newWidth = this.imageResizing.originalWidth - dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+                case 'ne': // Northeast - drag right/up
+                    newWidth = this.imageResizing.originalWidth + dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+                case 'nw': // Northwest - drag left/up
+                    newWidth = this.imageResizing.originalWidth - dx;
+                    newHeight = newWidth / this.imageResizing.aspectRatio;
+                    break;
+            }
+
+            // Enforce minimum size
+            const MIN_SIZE = 50;
+            newWidth = Math.max(MIN_SIZE, newWidth);
+            newHeight = Math.max(MIN_SIZE, newHeight);
+
+            // Update task dimensions
+            task.imageWidth = Math.round(newWidth);
+            task.imageHeight = Math.round(newHeight);
+
+            this.render();
+            e.preventDefault();
+            return;
+        }
+
         // Update arrow dot hover detection (even when not dragging)
         if (!this.arrowDotDrag.active && !this.curveDotDrag.active) {
             this.updateArrowDotHover(pt.x, pt.y);
@@ -275,6 +339,73 @@ export const MouseMixin = {
                     task.vx = 0;
                     task.vy = 0;
                 }
+
+                // Check for hover copy of arrow attachments (with 750ms delay)
+                // Temporarily hide dragged node from elementFromPoint to see what's underneath
+                const draggedNodeElement = document.querySelector(`.task-node[data-id="${task.id}"]`);
+                const originalPointerEvents = draggedNodeElement ? draggedNodeElement.style.pointerEvents : null;
+                if (draggedNodeElement) {
+                    draggedNodeElement.style.pointerEvents = 'none';
+                }
+
+                const elementUnderCursor = document.elementFromPoint(e.clientX, e.clientY);
+                const hoveredNode = elementUnderCursor ? elementUnderCursor.closest('.task-node') : null;
+
+                // Restore pointer events
+                if (draggedNodeElement) {
+                    draggedNodeElement.style.pointerEvents = originalPointerEvents || '';
+                }
+
+                if (hoveredNode) {
+                    const hoveredId = parseInt(hoveredNode.dataset.id);
+                    if (hoveredId !== task.id && !isNaN(hoveredId)) {
+                        // Start hover timer if this is a new hover target OR revert if same target
+                        if (this._attachmentCopyHoverTarget !== hoveredId || this._attachmentCopyApplied) {
+                            // Clear any existing timer
+                            if (this._attachmentCopyHoverTimer) {
+                                clearTimeout(this._attachmentCopyHoverTimer);
+                            }
+
+                            // Capture IDs for closure
+                            const draggedId = task.id;
+                            const targetId = hoveredId;
+                            const shouldRevert = this._attachmentCopyHoverTarget === hoveredId && this._attachmentCopyApplied;
+
+                            // Set new timer for 750ms
+                            this._attachmentCopyHoverTimer = setTimeout(() => {
+                                if (shouldRevert) {
+                                    // Revert to original
+                                    this.revertArrowAttachments(draggedId);
+                                    this._attachmentCopyApplied = false;
+                                } else {
+                                    // Apply copy
+                                    this.handleArrowAttachmentHoverCopy(draggedId, targetId);
+                                    this._attachmentCopyApplied = true;
+                                }
+                            }, 750);
+
+                            this._attachmentCopyHoverTarget = hoveredId;
+                        }
+                    }
+                } else {
+                    // No longer hovering - moved to empty space
+                    // Clear timer and reset state to allow multiple copies per drag
+                    if (this._attachmentCopyHoverTimer) {
+                        clearTimeout(this._attachmentCopyHoverTimer);
+                        this._attachmentCopyHoverTimer = null;
+                    }
+
+                    // If we've copied attachments, commit them by updating the original state
+                    // This allows multiple copies per drag session (reset after moving to empty space)
+                    if (this._attachmentCopyApplied && this._attachmentCopyOriginal) {
+                        // Update the "original" to current state so next revert doesn't undo this copy
+                        this.saveOriginalArrowAttachments(task.id);
+                        this._attachmentCopyApplied = false; // Allow copying again
+                    }
+
+                    this._attachmentCopyHoverTarget = null;
+                }
+
                 this.render();
             }
         } else if (this.dragMode === 'subtree-pending' && this.selectedNode !== null) {
@@ -477,6 +608,14 @@ export const MouseMixin = {
     },
 
     onCanvasMouseUp(e) {
+        // End image resizing
+        if (this.imageResizing) {
+            this.imageResizing = null;
+            this.saveToStorage();
+            e.preventDefault();
+            return;
+        }
+
         // Handle arrow dot drag finish
         if (this.arrowDotDrag.active) {
             this.finishArrowDotDrag();
@@ -571,6 +710,11 @@ export const MouseMixin = {
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
                 if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
+                    // Update timestamps for all moved nodes in the subtree
+                    this.draggedSubtree.forEach(nodeId => {
+                        this.updateConnectedArrowsTimestamps(nodeId);
+                    });
+
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -593,6 +737,16 @@ export const MouseMixin = {
 
                 // Save to storage if we actually moved (snapshot was saved in mousedown)
                 if (movedDistance >= this.INTERACTION.DRAG_THRESHOLD_PX) {
+                    // Update timestamps for all connected arrows to prioritize them
+                    // If multi-select, update all selected nodes; otherwise just the moved node
+                    if (this.selectedTaskIds.has(this.selectedNode) && this.selectedTaskIds.size > 1) {
+                        this.selectedTaskIds.forEach(taskId => {
+                            this.updateConnectedArrowsTimestamps(taskId);
+                        });
+                    } else {
+                        this.updateConnectedArrowsTimestamps(this.selectedNode);
+                    }
+
                     this.saveToStorage();
                 } else {
                     // Didn't move enough - remove the snapshot we created in mousedown
@@ -647,6 +801,15 @@ export const MouseMixin = {
         this.isBoxSelecting = false;
         this.boxSelectStart = null;
 
+        // Clear arrow attachment copy state
+        if (this._attachmentCopyHoverTimer) {
+            clearTimeout(this._attachmentCopyHoverTimer);
+            this._attachmentCopyHoverTimer = null;
+        }
+        this._attachmentCopyHoverTarget = null;
+        this._attachmentCopyApplied = false;
+        this._attachmentCopyOriginal = null;
+
         if (wasCanvasDrag) {
             // Only clear selection if we didn't actually pan (click without movement)
             const pt = this.getSVGPoint(e);
@@ -663,7 +826,199 @@ export const MouseMixin = {
             }
         }
         document.getElementById('canvas-container').classList.remove('dragging');
-    }
-};
+    },
 
-console.log('[mouse.js] Mouse event handlers loaded');
+    /**
+     * Start resizing an image node
+     * @param {number} taskId - Task ID
+     * @param {string} corner - Corner being dragged ('se', 'sw', 'ne', 'nw')
+     * @param {MouseEvent} e - Mouse event
+     */
+    startImageResize(taskId, corner, e) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (!task || !task.imageId) return;
+
+        this.imageResizing = {
+            taskId: taskId,
+            corner: corner,
+            startPoint: this.getSVGPoint(e),
+            originalWidth: task.imageWidth,
+            originalHeight: task.imageHeight,
+            aspectRatio: task.imageWidth / task.imageHeight
+        };
+
+        // Save snapshot for undo
+        this.saveSnapshot(`Resize image`);
+    },
+
+    /**
+     * Save original arrow attachments before copying (for revert)
+     * @param {number} draggedId - ID of node being dragged
+     */
+    saveOriginalArrowAttachments(draggedId) {
+        const draggedTask = this.tasks.find(t => t.id === draggedId);
+        if (!draggedTask) return;
+
+        this._attachmentCopyOriginal = {
+            taskId: draggedId,
+            customAttachPoints: JSON.parse(JSON.stringify(draggedTask.customAttachPoints || {})),
+            customSourcePoints: JSON.parse(JSON.stringify(draggedTask.customSourcePoints || {}))
+        };
+    },
+
+    /**
+     * Revert arrow attachments to original state
+     * @param {number} draggedId - ID of node being dragged
+     */
+    revertArrowAttachments(draggedId) {
+        if (!this._attachmentCopyOriginal || this._attachmentCopyOriginal.taskId !== draggedId) {
+            return;
+        }
+
+        const draggedTask = this.tasks.find(t => t.id === draggedId);
+        if (!draggedTask) return;
+
+        draggedTask.customAttachPoints = JSON.parse(JSON.stringify(this._attachmentCopyOriginal.customAttachPoints));
+        draggedTask.customSourcePoints = JSON.parse(JSON.stringify(this._attachmentCopyOriginal.customSourcePoints));
+
+        this.showToast('↩️ Reverted arrow attachments', 'info', 1500);
+    },
+
+    /**
+     * Handle arrow attachment copying when hovering dragged node over another node
+     * Copies both target points (where arrows land) and source points (where arrows start)
+     * @param {number} draggedId - ID of node being dragged
+     * @param {number} hoveredId - ID of node being hovered over
+     */
+    handleArrowAttachmentHoverCopy(draggedId, hoveredId) {
+        const draggedTask = this.tasks.find(t => t.id === draggedId);
+        const hoveredTask = this.tasks.find(t => t.id === hoveredId);
+
+        if (!draggedTask || !hoveredTask) {
+            return;
+        }
+
+        // Save original state before first copy
+        if (!this._attachmentCopyOriginal) {
+            this.saveOriginalArrowAttachments(draggedId);
+        }
+
+        let copiedCount = 0;
+
+        // Process matching parent relationships (arrows coming INTO both nodes)
+        const draggedParents = [draggedTask.mainParent, ...draggedTask.otherParents].filter(p => p !== null);
+        const hoveredParents = [hoveredTask.mainParent, ...hoveredTask.otherParents].filter(p => p !== null);
+        const sharedParents = draggedParents.filter(p => hoveredParents.includes(p));
+
+        sharedParents.forEach(parentId => {
+            const parent = this.tasks.find(t => t.id === parentId);
+            if (!parent) return;
+
+            // Copy TARGET point (where arrow lands on child)
+            let targetPoint;
+            if (hoveredTask.customAttachPoints && hoveredTask.customAttachPoints[parentId]) {
+                targetPoint = hoveredTask.customAttachPoints[parentId];
+            } else {
+                const hoveredEndpoint = this.getArrowEndpoint(parent, hoveredTask, 'target');
+                const hoveredDims = this.calculateTaskDimensions(hoveredTask);
+                targetPoint = this.constrainToRectEdge(
+                    hoveredEndpoint.x, hoveredEndpoint.y,
+                    hoveredTask.x, hoveredTask.y,
+                    hoveredDims.width, hoveredDims.height
+                );
+            }
+
+            if (!draggedTask.customAttachPoints) {
+                draggedTask.customAttachPoints = {};
+            }
+            draggedTask.customAttachPoints[parentId] = JSON.parse(JSON.stringify(targetPoint));
+            copiedCount++;
+
+            // Copy SOURCE point (where arrow starts from parent)
+            let sourcePoint;
+            if (parent.customSourcePoints && parent.customSourcePoints[hoveredId]) {
+                sourcePoint = parent.customSourcePoints[hoveredId];
+            } else {
+                const parentStartpoint = this.getArrowEndpoint(parent, hoveredTask, 'source');
+                const parentDims = this.calculateTaskDimensions(parent);
+                sourcePoint = this.constrainToRectEdge(
+                    parentStartpoint.x, parentStartpoint.y,
+                    parent.x, parent.y,
+                    parentDims.width, parentDims.height
+                );
+            }
+
+            if (!parent.customSourcePoints) {
+                parent.customSourcePoints = {};
+            }
+            parent.customSourcePoints[draggedId] = JSON.parse(JSON.stringify(sourcePoint));
+            copiedCount++;
+        });
+
+        // Process matching child relationships (arrows going OUT from both nodes)
+        const sharedChildren = draggedTask.children.filter(c => hoveredTask.children.includes(c));
+
+        sharedChildren.forEach(childId => {
+            const child = this.tasks.find(t => t.id === childId);
+            if (!child) return;
+
+            // Copy TARGET point (where arrow lands on child)
+            let targetPoint;
+            if (child.customAttachPoints && child.customAttachPoints[hoveredId]) {
+                targetPoint = child.customAttachPoints[hoveredId];
+            } else {
+                const childTargetEndpoint = this.getArrowEndpoint(hoveredTask, child, 'target');
+                const childDims = this.calculateTaskDimensions(child);
+                targetPoint = this.constrainToRectEdge(
+                    childTargetEndpoint.x, childTargetEndpoint.y,
+                    child.x, child.y,
+                    childDims.width, childDims.height
+                );
+            }
+
+            if (!child.customAttachPoints) {
+                child.customAttachPoints = {};
+            }
+            child.customAttachPoints[draggedId] = JSON.parse(JSON.stringify(targetPoint));
+            copiedCount++;
+
+            // Copy SOURCE point (where arrow starts from parent)
+            let sourcePoint;
+            if (hoveredTask.customSourcePoints && hoveredTask.customSourcePoints[childId]) {
+                sourcePoint = hoveredTask.customSourcePoints[childId];
+            } else {
+                const draggedStartpoint = this.getArrowEndpoint(hoveredTask, child, 'source');
+                const hoveredDims = this.calculateTaskDimensions(hoveredTask);
+                sourcePoint = this.constrainToRectEdge(
+                    draggedStartpoint.x, draggedStartpoint.y,
+                    hoveredTask.x, hoveredTask.y,
+                    hoveredDims.width, hoveredDims.height
+                );
+            }
+
+            if (!draggedTask.customSourcePoints) {
+                draggedTask.customSourcePoints = {};
+            }
+            draggedTask.customSourcePoints[childId] = JSON.parse(JSON.stringify(sourcePoint));
+            copiedCount++;
+        });
+
+        // Show feedback with prominent toast and visual flash effect
+        if (copiedCount > 0) {
+            // Bigger, longer toast for better visibility
+            this.showToast(`✨ Copied ${copiedCount} arrow attachment${copiedCount > 1 ? 's' : ''} from hover target!`, 'success', 3000);
+
+            // Add flash effect to dragged node
+            const draggedNodeElement = document.querySelector(`.task-node[data-id="${draggedId}"]`);
+            if (draggedNodeElement) {
+                draggedNodeElement.classList.add('attachment-copied-flash');
+                setTimeout(() => {
+                    draggedNodeElement.classList.remove('attachment-copied-flash');
+                }, 600); // Remove after animation completes
+            }
+        } else {
+            this.showToast('⚠️ No matching relationships to copy', 'warning', 2000);
+        }
+    },
+
+};

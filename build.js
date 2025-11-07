@@ -390,7 +390,7 @@ function build() {
     }
 
     const cssBlock = `<style>\n${css}</style>`;
-    const jsBlock = `<script>\n${js}\n\n// Initialize app on load\ndocument.addEventListener('DOMContentLoaded', () => {\n    if (typeof app !== 'undefined' && typeof app.init === 'function') {\n        app.init();\n    } else {\n        console.error('App initialization failed: app.init() not found');\n    }\n});\n</script>`;
+    const jsBlock = `<script>\n${js}\n\n// Initialize app on load\ndocument.addEventListener('DOMContentLoaded', async () => {\n    if (typeof app !== 'undefined' && typeof app.init === 'function') {\n        await app.init();\n    } else {\n        console.error('App initialization failed: app.init() not found');\n    }\n});\n</script>`;
 
     let output = template
         .replace(CONFIG.CSS_MARKER, cssBlock)

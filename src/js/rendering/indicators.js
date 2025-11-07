@@ -46,7 +46,14 @@ export const IndicatorsMixin = {
         const screenWidth = canvasContainer.clientWidth;
         const screenHeight = canvasContainer.clientHeight;
         const margin = 20; // Pixels from edge
-        const topMargin = 75; // Extra margin from top to avoid header overlap (includes button text + extra clearance)
+
+        // Calculate top margin to avoid controls bar overlap
+        // Controls bar is position:fixed, canvas-container has top:65px, but controls might be taller
+        const controlsBar = document.getElementById('controls');
+        const controlsBottom = controlsBar ? controlsBar.getBoundingClientRect().bottom : 65; // Actual bottom position
+        const canvasTop = canvasContainer.getBoundingClientRect().top; // Actual canvas top position
+        const overlap = Math.max(0, controlsBottom - canvasTop); // How much controls extends into canvas
+        const topMargin = overlap + 20; // Overlap + 20px buffer (increased for safety)
 
         // Render indicators for each off-screen working task
         offscreenTasks.forEach(task => {
@@ -80,12 +87,13 @@ export const IndicatorsMixin = {
                 topMargin,
                 type: 'home',
                 title: home.name,
+                icon: home.icon || '🏠',  // Use custom icon or default
                 onClick: () => this.jumpToHome(home.id)
             });
         });
     },
 
-    createDirectionalIndicator({ container, targetX, targetY, viewportCenterX, viewportCenterY, screenWidth, screenHeight, margin, topMargin, type, title, onClick }) {
+    createDirectionalIndicator({ container, targetX, targetY, viewportCenterX, viewportCenterY, screenWidth, screenHeight, margin, topMargin, type, title, icon, onClick }) {
         // Calculate angle from viewport center to target
         const dx = targetX - viewportCenterX;
         const dy = targetY - viewportCenterY;
@@ -128,13 +136,13 @@ export const IndicatorsMixin = {
         // Rotate arrows and homes to point toward target
         indicator.style.transform = `translate(-50%, -50%) rotate(${finalRotation}deg)`;
 
-        // Use different emojis: arrow for tasks, house for homes
-        indicator.innerHTML = type === 'home' ? '🏠' : '➤';
+        // Use different emojis: arrow for tasks, custom icon for homes
+        indicator.innerHTML = type === 'home' ? (icon || '🏠') : '➤';
 
         // Create separate tooltip element (won't rotate with indicator)
         const tooltip = document.createElement('div');
         tooltip.className = 'indicator-tooltip';
-        const prefix = type === 'home' ? '🏠 Home: ' : '🎯 Task: ';
+        const prefix = type === 'home' ? `${icon || '🏠'} Home: ` : '🎯 Task: ';
         tooltip.textContent = prefix + title;
 
         // Position tooltip on opposite side (visible side) based on angle
@@ -176,6 +184,19 @@ export const IndicatorsMixin = {
 
         indicator.title = title; // Fallback for browsers without CSS support
         indicator.onclick = onClick;
+
+        // Add right-click support for home indicators to set icon
+        if (type === 'home') {
+            indicator.oncontextmenu = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Find the home by name to get its ID
+                const home = this.homes.find(h => h.name === title);
+                if (home) {
+                    this.setHomeIcon(home.id);
+                }
+            };
+        }
 
         container.appendChild(indicator);
         container.appendChild(tooltip);
