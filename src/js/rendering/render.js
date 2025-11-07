@@ -1472,24 +1472,6 @@ export const RenderMixin = {
                 image.style.zIndex = '1000';
             }
 
-            // Add hover event listeners
-            image.addEventListener('mouseenter', () => {
-                this.hoveredImageTaskId = task.id;
-                this.render();
-            });
-
-            image.addEventListener('mouseleave', () => {
-                this.hoveredImageTaskId = null;
-                this.render();
-            });
-
-            // Add double-click to open modal
-            image.addEventListener('dblclick', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                this.openImageModal(task, blobUrl);
-            });
-
             g.appendChild(image);
 
             // Add resize handles for selected image nodes (not during hover preview)

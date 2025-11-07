@@ -8969,24 +8969,6 @@ Object.assign(app, {
                 image.style.zIndex = '1000';
             }
 
-            // Add hover event listeners
-            image.addEventListener('mouseenter', () => {
-                this.hoveredImageTaskId = task.id;
-                this.render();
-            });
-
-            image.addEventListener('mouseleave', () => {
-                this.hoveredImageTaskId = null;
-                this.render();
-            });
-
-            // Add double-click to open modal
-            image.addEventListener('dblclick', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                this.openImageModal(task, blobUrl);
-            });
-
             g.appendChild(image);
 
             // Add resize handles for selected image nodes (not during hover preview)
@@ -9379,6 +9361,21 @@ Object.assign(app, {
         // Always track mouse position for Ctrl+V paste at cursor
         const pt = this.getSVGPoint(e);
         this.lastMousePosition = { x: pt.x, y: pt.y };
+
+        // Check if hovering over an image (for preview)
+        // Only check when not dragging or resizing
+        if (!this.dragMode && !this.imageResizing) {
+            if (e.target.classList && e.target.classList.contains('task-image')) {
+                const taskId = parseInt(e.target.dataset.taskId);
+                if (this.hoveredImageTaskId !== taskId) {
+                    this.hoveredImageTaskId = taskId;
+                    this.render();
+                }
+            } else if (this.hoveredImageTaskId !== null) {
+                this.hoveredImageTaskId = null;
+                this.render();
+            }
+        }
 
         // Handle image resizing
         if (this.imageResizing) {
@@ -16222,6 +16219,21 @@ Object.assign(app, {
                 e.preventDefault();
                 e.stopPropagation();
                 return;
+            }
+
+            // Check if double-clicking on an image (open modal viewer)
+            if (e.target.classList && e.target.classList.contains('task-image')) {
+                const taskId = parseInt(e.target.dataset.taskId);
+                const task = this.tasks.find(t => t.id === taskId);
+                if (task && task.imageId) {
+                    const blobUrl = this.imageCache.get(task.imageId);
+                    if (blobUrl) {
+                        this.openImageModal(task, blobUrl);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                }
             }
 
             // Try to find task-node by traversing up DOM

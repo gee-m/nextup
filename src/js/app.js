@@ -151,6 +151,21 @@ Object.assign(app, {
                 return;
             }
 
+            // Check if double-clicking on an image (open modal viewer)
+            if (e.target.classList && e.target.classList.contains('task-image')) {
+                const taskId = parseInt(e.target.dataset.taskId);
+                const task = this.tasks.find(t => t.id === taskId);
+                if (task && task.imageId) {
+                    const blobUrl = this.imageCache.get(task.imageId);
+                    if (blobUrl) {
+                        this.openImageModal(task, blobUrl);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                }
+            }
+
             // Try to find task-node by traversing up DOM
             let element = e.target;
             while (element && element !== svg) {

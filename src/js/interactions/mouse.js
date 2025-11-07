@@ -193,6 +193,21 @@ export const MouseMixin = {
         const pt = this.getSVGPoint(e);
         this.lastMousePosition = { x: pt.x, y: pt.y };
 
+        // Check if hovering over an image (for preview)
+        // Only check when not dragging or resizing
+        if (!this.dragMode && !this.imageResizing) {
+            if (e.target.classList && e.target.classList.contains('task-image')) {
+                const taskId = parseInt(e.target.dataset.taskId);
+                if (this.hoveredImageTaskId !== taskId) {
+                    this.hoveredImageTaskId = taskId;
+                    this.render();
+                }
+            } else if (this.hoveredImageTaskId !== null) {
+                this.hoveredImageTaskId = null;
+                this.render();
+            }
+        }
+
         // Handle image resizing
         if (this.imageResizing) {
             const task = this.tasks.find(t => t.id === this.imageResizing.taskId);
